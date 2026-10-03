@@ -26,7 +26,7 @@ export function SiteHeader() {
           </div>
           <nav aria-label="Main" className="hidden items-center gap-6 lg:flex">
             {primaryNav.map((link) => (
-              <Link key={link.href} href={link.href} className="eyebrow link-quiet">
+              <Link key={link.href} href={link.href} className="eyebrow whitespace-nowrap link-quiet">
                 {link.label}
               </Link>
             ))}

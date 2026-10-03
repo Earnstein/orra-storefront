@@ -5,10 +5,12 @@ import type { ProductDetail, ProductImage } from "@/db/schema/catalog";
 
 export type CatalogImage = ProductImage;
 
+export type Category = { slug: string; name: string };
+
 export type Product = {
   slug: string;
   name: string;
-  category: { slug: string; name: string };
+  category: Category;
   /** Integer cents. */
   price: number;
   colour: string;

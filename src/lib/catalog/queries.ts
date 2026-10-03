@@ -5,7 +5,7 @@ import { desc, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, products } from "@/db/schema";
 import { NEW_ARRIVALS_LIMIT, spotlightSlug } from "./merchandising";
-import type { Product } from "./types";
+import type { Category, Product } from "./types";
 
 // Catalogue reads. Components depend on these signatures and the Product type, not on the
 // table layout.
@@ -37,10 +37,15 @@ export async function getAllProductSlugs(): Promise<string[]> {
   return rows.map((row) => row.slug);
 }
 
-/** Newest products first. */
-export async function getNewArrivals(limit = NEW_ARRIVALS_LIMIT): Promise<Product[]> {
+/** Newest products first. Cached per request, so a page and its metadata share one query. */
+export const getNewArrivals = cache(async (limit: number = NEW_ARRIVALS_LIMIT): Promise<Product[]> => {
   return selectProducts().orderBy(desc(products.createdAt), products.id).limit(limit);
-}
+});
+
+/** All categories, in the order they were created. */
+export const getCategories = cache(async (): Promise<Category[]> => {
+  return db.select({ slug: categories.slug, name: categories.name }).from(categories).orderBy(categories.id);
+});
 
 export async function getSpotlightProduct(): Promise<Product> {
   const product = await getProduct(spotlightSlug);

@@ -2,8 +2,6 @@ import { Container, Grid, Section } from "@/components/primitives";
 import type { Product } from "@/lib/catalog/types";
 import { ProductCard } from "./product-card";
 
-const tileSizes = "(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 50vw";
-
 export function RelatedProducts({ products }: { products: Product[] }) {
   if (products.length === 0) return null;
   return (
@@ -15,7 +13,7 @@ export function RelatedProducts({ products }: { products: Product[] }) {
       </Container>
       <Grid layout="products" className="px-tile">
         {products.map((product) => (
-          <ProductCard key={product.slug} product={product} sizes={tileSizes} />
+          <ProductCard key={product.slug} product={product} />
         ))}
       </Grid>
     </Section>

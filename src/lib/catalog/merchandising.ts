@@ -5,3 +5,6 @@ export const spotlightSlug = "leather-tote-tan";
 
 /** Size of the homepage "New this season" grid (newest products first). */
 export const NEW_ARRIVALS_LIMIT = 8;
+
+/** How many of the newest products the New arrivals page (/collections/new) shows. */
+export const NEW_ARRIVALS_PAGE_LIMIT = 24;

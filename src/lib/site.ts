@@ -9,6 +9,7 @@ export const site = {
 export type NavLink = { label: string; href: string };
 
 export const primaryNav: NavLink[] = [
+  { label: "New in", href: "/collections/new" },
   { label: "Women", href: "/collections/women" },
   { label: "Men", href: "/collections/men" },
   { label: "Bags", href: "/collections/bags" },
