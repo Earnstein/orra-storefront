@@ -54,6 +54,10 @@ After `auth:generate`, add `export * from "./auth";` to `src/db/schema/index.ts`
 - Primitives in `src/components/primitives/`: `Section` (full-width band, `tone`), `Container`, `Stack`/`Cluster`, `Grid` (`products` 2→3→4 cols, `editorial`, `cards`, `columns`), `Media` (fixed-ratio image frame), `TextLink`.
 - Buttons (`src/components/ui/button.tsx`): uppercase, square, `h-12` default; variants include `inverse` for use over imagery.
 
+**Storefront** — `src/app/layout.tsx` renders `SiteHeader` / `SiteFooter` (`src/components/site/`) around every page; the homepage composes sections from `src/components/home/`. Store name, nav and footer links live in `src/lib/site.ts` (the name is a placeholder). Until the catalogue is in the database, homepage content comes from `src/lib/catalog/sample-data.ts` (prices in integer cents, formatted by `formatPrice` in `src/lib/format.ts`). Collection, product and help routes linked from the homepage don't exist yet.
+
+**Images** — `next.config.ts` uses a custom loader (`src/lib/image-loader.ts`): `images.unsplash.com` URLs are resized by Unsplash's CDN (width/quality/`auto=format` params), everything else goes through Next's optimiser. Store bare Unsplash URLs (`https://images.unsplash.com/photo-<id>`) with no size params. Next's optimiser has a hard 7s upstream timeout, which large remote originals hit under concurrent load — keep that in mind before routing a new image host through it.
+
 **`cn`** — `src/lib/utils.ts` builds `cn` with `createCn` and registers the custom `text-*`, spacing and container names; otherwise class merging drops e.g. `text-caption` next to a text colour. tsconfig aliases the bare `"cn"` import to that file, so shadcn components (which `import { cn } from "cn"`) get it too. When adding a theme token in `globals.css`, add it to `utils.ts` as well.
 
 ## Gotchas

@@ -60,6 +60,10 @@
   --breakpoint-3xl: 120rem; /* 1920px */
 
   --ease-luxe: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Text and scrims over photography: fixed in both themes, because the image doesn't change. */
+  --color-on-image: oklch(1 0 0);
+  --color-scrim: oklch(0 0 0);
 }
 
 /* Theme values resolved from runtime CSS variables (light/dark) */
