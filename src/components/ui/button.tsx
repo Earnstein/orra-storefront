@@ -4,7 +4,7 @@ import { cn } from "cn"
 
 const buttonVariants = cva(
   // Square, uppercase, tracked label; colour-only transitions (no movement).
-  "group/button eyebrow inline-flex shrink-0 items-center justify-center rounded-none border border-transparent bg-clip-padding whitespace-nowrap transition-colors duration-200 ease-luxe outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-40 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button eyebrow inline-flex shrink-0 items-center justify-center rounded-none border border-transparent bg-clip-padding whitespace-nowrap transition-colors duration-200 ease-luxe outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid disabled:pointer-events-none disabled:opacity-40 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
@@ -17,6 +17,8 @@ const buttonVariants = cva(
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
         // Light button for use over photography and inverse bands.
         inverse: "bg-background text-foreground hover:bg-background/85",
+        // Transparent control over photography (carousel pause, indicators).
+        overlay: "text-on-image hover:bg-on-image/15 focus-visible:outline-on-image",
         destructive:
           "bg-destructive text-white hover:bg-destructive/85 focus-visible:outline-destructive",
         link: "underline decoration-current decoration-1 underline-offset-4 hover:decoration-transparent",

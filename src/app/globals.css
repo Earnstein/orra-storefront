@@ -60,6 +60,19 @@
   --breakpoint-3xl: 120rem; /* 1920px */
 
   --ease-luxe: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1); /* entrances */
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1); /* on-screen crossfades */
+
+  /* Linear fill for timed indicators; set the duration inline (animation-duration). */
+  --animate-progress: progress 1s linear forwards;
+  @keyframes progress {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
 
   /* Text and scrims over photography: fixed in both themes, because the image doesn't change. */
   --color-on-image: oklch(1 0 0);

@@ -25,24 +25,44 @@ function unsplash(id: string) {
   return `https://images.unsplash.com/photo-${id}`;
 }
 
-export const hero = {
-  title: "Dressed for the city",
-  body: "Long coats, sharp tailoring and leather that softens with wear.",
-  images: [
-    {
-      src: unsplash("1485968579580-b6d095142e6e"),
-      alt: "Woman in a dark plaid coat walking down a city street",
-    },
-    {
-      src: unsplash("1617137968427-85924c800a22"),
-      alt: "Man in a navy suit and brown shoes outside a glass building",
-    },
-  ] satisfies CatalogImage[],
-  actions: [
-    { label: "Shop women", href: "/collections/women" },
-    { label: "Shop men", href: "/collections/men" },
-  ],
+export type HeroSlide = {
+  id: string;
+  /** Short name for the slide picker, e.g. "Women". */
+  label: string;
+  title: string;
+  body: string;
+  action: { label: string; href: string };
+  image: CatalogImage;
+  /** object-position focal points: portrait crop on phones, wide crop from md up. */
+  focal: { mobile: string; desktop: string };
 };
+
+export const heroSlides: HeroSlide[] = [
+  {
+    id: "women",
+    label: "Women",
+    title: "Coats for the long walk home",
+    body: "Soft wool coats and silk scarves, cut to layer through the season.",
+    action: { label: "Shop women", href: "/collections/women" },
+    image: {
+      src: unsplash("1485462537746-965f33f7f6a7"),
+      alt: "Woman in a pink wool coat and patterned scarf beneath a stone arcade",
+    },
+    focal: { mobile: "50% 40%", desktop: "50% 28%" },
+  },
+  {
+    id: "men",
+    label: "Men",
+    title: "Tailoring, softened",
+    body: "Unstructured camel jackets over plain tees. Sharp enough for work, easy enough for the weekend.",
+    action: { label: "Shop men", href: "/collections/men" },
+    image: {
+      src: unsplash("1552374196-1ab2a1c593e8"),
+      alt: "Man in a camel jacket and white tee seated on a wooden stool",
+    },
+    focal: { mobile: "60% 30%", desktop: "60% 18%" },
+  },
+];
 
 export const featuredCollections: Collection[] = [
   {

@@ -52,7 +52,8 @@ After `auth:generate`, add `export * from "./auth";` to `src/db/schema/index.ts`
 - Spacing/containers: `px-gutter`, `py-section`, `gap-block`, `gap-tile`, `h-header`; `max-w-page|content|prose`, utilities `container-page` / `container-content`.
 - Links: `link` (underlined) and `link-quiet` (underline on hover); bare `<a>` is unstyled.
 - Primitives in `src/components/primitives/`: `Section` (full-width band, `tone`), `Container`, `Stack`/`Cluster`, `Grid` (`products` 2→3→4 cols, `editorial`, `cards`, `columns`), `Media` (fixed-ratio image frame), `TextLink`.
-- Buttons (`src/components/ui/button.tsx`): uppercase, square, `h-12` default; variants include `inverse` for use over imagery.
+- Buttons (`src/components/ui/button.tsx`): uppercase, square, `h-12` default; `inverse` (solid light) and `overlay` (transparent control) variants for use over imagery. Over photos use `text-on-image` and `scrim` gradients, not raw white/black.
+- Motion: `ease-out-strong` for entrances, `ease-in-out-strong` for on-screen transitions, `animate-progress` (set `animation-duration` inline) for timed indicators. Animate transform/opacity/clip-path only; respect `prefers-reduced-motion`. The homepage hero (`src/components/home/hero-carousel.tsx`) is the reference: clip-path wipe via WAAPI, progress bar as the autoplay timer, pause on hover/focus/hidden tab/reduced motion.
 
 **Storefront** — `src/app/layout.tsx` renders `SiteHeader` / `SiteFooter` (`src/components/site/`) around every page; the homepage composes sections from `src/components/home/`. Store name, nav and footer links live in `src/lib/site.ts` (the name is a placeholder). Until the catalogue is in the database, homepage content comes from `src/lib/catalog/sample-data.ts` (prices in integer cents, formatted by `formatPrice` in `src/lib/format.ts`). Collection, product and help routes linked from the homepage don't exist yet.
 
