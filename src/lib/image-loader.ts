@@ -13,7 +13,8 @@ export default function imageLoader({ src, width, quality }: LoaderProps) {
     url.searchParams.set("w", String(width));
     url.searchParams.set("q", String(quality ?? 75));
     url.searchParams.set("auto", "format"); // AVIF/WebP where supported
-    url.searchParams.set("fit", "max");
+    // Keep crops baked into the source URL (e.g. product close-ups); otherwise never upscale.
+    if (!url.searchParams.has("fit")) url.searchParams.set("fit", "max");
     return url.toString();
   }
   return `/_next/image?url=${encodeURIComponent(src)}&w=${width}&q=${quality ?? 75}`;

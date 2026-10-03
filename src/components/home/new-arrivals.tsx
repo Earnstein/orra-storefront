@@ -1,6 +1,6 @@
 import { Container, Grid, Section, TextLink } from "@/components/primitives";
 import { ProductCard } from "@/components/product/product-card";
-import { newArrivals } from "@/lib/catalog/sample-data";
+import { getNewArrivals } from "@/lib/catalog/queries";
 
 // Matches Grid layout="products": 2 → 3 (md) → 4 (xl) columns.
 const tileSizes = "(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 50vw";
@@ -18,7 +18,7 @@ export function NewArrivals() {
       </Container>
 
       <Grid layout="products" className="px-tile">
-        {newArrivals.map((product) => (
+        {getNewArrivals().map((product) => (
           <ProductCard key={product.slug} product={product} sizes={tileSizes} />
         ))}
       </Grid>

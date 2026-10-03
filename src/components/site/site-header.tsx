@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { SearchIcon, ShoppingBagIcon, UserIcon } from "lucide-react";
+import { SearchIcon, UserIcon } from "lucide-react";
 
 import { Container } from "@/components/primitives";
 import { buttonVariants } from "@/components/ui/button";
 import { primaryNav, site } from "@/lib/site";
 import { cn } from "@/lib/utils";
+import { BagLink } from "./bag-link";
 import { MobileNav } from "./mobile-nav";
 
 const iconLink = buttonVariants({ variant: "ghost", size: "icon" });
@@ -43,9 +44,7 @@ export function SiteHeader() {
           <Link href="/account" className={cn(iconLink, "max-sm:hidden")} aria-label="Account">
             <UserIcon />
           </Link>
-          <Link href="/bag" className={iconLink} aria-label="Shopping bag, 0 items">
-            <ShoppingBagIcon />
-          </Link>
+          <BagLink />
         </div>
       </Container>
     </header>

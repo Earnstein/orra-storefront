@@ -4,16 +4,19 @@ import Link from "next/link";
 import { Container, Media, Section, Stack } from "@/components/primitives";
 import { buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { spotlight } from "@/lib/catalog/sample-data";
+import { getSpotlightProduct } from "@/lib/catalog/queries";
 import { formatPrice } from "@/lib/format";
 
 /** One product, given room: large image and the details that matter to buy it. */
 export function ProductSpotlight() {
+  const spotlight = getSpotlightProduct();
+  const [image] = spotlight.images;
+
   return (
     <Section aria-labelledby="spotlight-heading">
       <Container className="grid items-center gap-block md:grid-cols-2">
         <Media ratio="square">
-          <Image src={spotlight.image.src} alt={spotlight.image.alt} fill sizes="(min-width: 768px) 50vw, 100vw" className="object-cover" />
+          <Image src={image.src} alt={image.alt} fill sizes="(min-width: 768px) 50vw, 100vw" className="object-cover" />
         </Media>
 
         <Stack gap="lg" className="md:px-block">
