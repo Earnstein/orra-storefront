@@ -44,7 +44,17 @@ After `auth:generate`, add `export * from "./auth";` to `src/db/schema/index.ts`
 
 **Data fetching** — TanStack Query: `src/lib/query-client.ts` returns a fresh `QueryClient` per request on the server and a singleton in the browser (60s `staleTime`; pending queries are dehydrated so RSC prefetches can stream). `src/components/providers.tsx` wraps the root layout with the provider + devtools.
 
-**UI** — shadcn/ui with the `base-nova` style on **Base UI** (`@base-ui/react`), lucide icons, Tailwind v4 (CSS-first config in `src/app/globals.css`, no `tailwind.config`). `cn` comes from shadcn's `cn` package (re-exported by `src/lib/utils.ts`), not clsx/tailwind-merge.
+**UI** — shadcn/ui with the `base-nova` style on **Base UI** (`@base-ui/react`), lucide icons, Tailwind v4 (CSS-first config in `src/app/globals.css`, no `tailwind.config`).
+
+**Design system** (all tokens in `src/app/globals.css`) — monochrome, imagery-first, square corners (`--radius: 0`), 1px hairlines, one sans family (Geist).
+- Type roles: `text-display` / `text-headline` / `text-title` (fluid), `text-body` (14px default), `text-caption` (13px, product name/price), `eyebrow` (11px uppercase tracked: nav, buttons, kickers). Hierarchy via size/case/tracking, not bold weights.
+- Colours: use semantic tokens only — `background`/`foreground`, `surface` (image wells, light bands), `inverse` (black bands/footer), `muted-foreground`, `border` (hairline) vs `border-strong`, `sale` (reduced prices only). No brand hue.
+- Spacing/containers: `px-gutter`, `py-section`, `gap-block`, `gap-tile`, `h-header`; `max-w-page|content|prose`, utilities `container-page` / `container-content`.
+- Links: `link` (underlined) and `link-quiet` (underline on hover); bare `<a>` is unstyled.
+- Primitives in `src/components/primitives/`: `Section` (full-width band, `tone`), `Container`, `Stack`/`Cluster`, `Grid` (`products` 2→3→4 cols, `editorial`, `cards`, `columns`), `Media` (fixed-ratio image frame), `TextLink`.
+- Buttons (`src/components/ui/button.tsx`): uppercase, square, `h-12` default; variants include `inverse` for use over imagery.
+
+**`cn`** — `src/lib/utils.ts` builds `cn` with `createCn` and registers the custom `text-*`, spacing and container names; otherwise class merging drops e.g. `text-caption` next to a text colour. tsconfig aliases the bare `"cn"` import to that file, so shadcn components (which `import { cn } from "cn"`) get it too. When adding a theme token in `globals.css`, add it to `utils.ts` as well.
 
 ## Gotchas
 
