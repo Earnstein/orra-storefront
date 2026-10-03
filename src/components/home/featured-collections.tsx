@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { Container, Media, Section } from "@/components/primitives";
-import { featuredCollections } from "@/lib/catalog/sample-data";
+import { featuredCollections } from "@/lib/content";
 import { cn } from "@/lib/utils";
 
 /** Asymmetric collection grid: one tall image beside two stacked wide ones from md up. */

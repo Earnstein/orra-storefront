@@ -1,14 +1,14 @@
 import Image from "next/image";
 
 import { Media, Section, Stack, TextLink } from "@/components/primitives";
-import { story } from "@/lib/catalog/sample-data";
+import { story } from "@/lib/content";
 
 /** Editorial split on the surface band: image 7/12, copy 5/12 from lg up. */
 export function StoryBand() {
   return (
     <Section tone="surface" spacing="none" aria-labelledby="story-heading">
       <div className="grid lg:grid-cols-12">
-        <Media ratio="landscape" className="lg:col-span-7 lg:aspect-auto lg:min-h-[36rem]">
+        <Media ratio="landscape" className="lg:col-span-7 lg:aspect-auto lg:min-h-144">
           <Image src={story.image.src} alt={story.image.alt} fill sizes="(min-width: 1024px) 58vw, 100vw" className="object-cover" />
         </Media>
         <Stack gap="lg" className="justify-center px-gutter py-section lg:col-span-5 lg:px-section">

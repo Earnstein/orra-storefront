@@ -8,15 +8,18 @@ import { getAllProductSlugs, getProduct, getRelatedProducts } from "@/lib/catalo
 import { stockStatus } from "@/lib/catalog/stock";
 import { site } from "@/lib/site";
 
-// Every product page is generated at build time; unknown slugs 404.
-export const dynamicParams = false;
+// Product pages are generated at build time and regenerated at most every 5 minutes, so
+// stock and price edits show up without a deploy. Products added after the build render
+// on first request; unknown slugs 404.
+export const revalidate = 300;
+export const dynamicParams = true;
 
-export function generateStaticParams() {
-  return getAllProductSlugs().map((slug) => ({ slug }));
+export async function generateStaticParams() {
+  return (await getAllProductSlugs()).map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: PageProps<"/products/[slug]">): Promise<Metadata> {
-  const product = getProduct((await params).slug);
+  const product = await getProduct((await params).slug);
   if (!product) return {};
   return {
     title: product.name,
@@ -26,7 +29,7 @@ export async function generateMetadata({ params }: PageProps<"/products/[slug]">
 }
 
 export default async function ProductPage({ params }: PageProps<"/products/[slug]">) {
-  const product = getProduct((await params).slug);
+  const product = await getProduct((await params).slug);
   if (!product) notFound();
 
   const availability = {
@@ -71,7 +74,7 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
           </div>
         </div>
       </div>
-      <RelatedProducts products={getRelatedProducts(product)} />
+      <RelatedProducts products={await getRelatedProducts(product)} />
     </>
   );
 }

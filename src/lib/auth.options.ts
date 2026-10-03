@@ -1,3 +1,4 @@
+import { dash } from "@better-auth/infra";
 import type { BetterAuthOptions } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 
@@ -7,7 +8,11 @@ import { nextCookies } from "better-auth/next-js";
  * won't see the tables they need.
  */
 export const authOptions = {
-  // Enable auth methods (emailAndPassword, socialProviders, ...) when building auth flows.
-  // nextCookies must stay last so Server Actions can set cookies.
-  plugins: [nextCookies()],
+  emailAndPassword: { enabled: true },
+  plugins: [
+    // Better Auth Infra dashboard; reads BETTER_AUTH_API_KEY from the environment.
+    dash(),
+    // nextCookies must stay last so Server Actions can set cookies.
+    nextCookies(),
+  ],
 } satisfies Omit<BetterAuthOptions, "database" | "secret" | "baseURL">;

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 
-import type { CatalogImage } from "@/lib/catalog/sample-data";
+import type { CatalogImage } from "@/lib/catalog/types";
 import { cn } from "@/lib/utils";
 
 /**

@@ -8,8 +8,8 @@ import { getSpotlightProduct } from "@/lib/catalog/queries";
 import { formatPrice } from "@/lib/format";
 
 /** One product, given room: large image and the details that matter to buy it. */
-export function ProductSpotlight() {
-  const spotlight = getSpotlightProduct();
+export async function ProductSpotlight() {
+  const spotlight = await getSpotlightProduct();
   const [image] = spotlight.images;
 
   return (

@@ -1,34 +1,59 @@
-import { newArrivalSlugs, products, spotlightSlug, type Product } from "./sample-data";
+import "server-only";
+import { cache } from "react";
+import { desc, eq, ne, sql } from "drizzle-orm";
 
-// Read functions over the sample catalogue. Swap the bodies for database queries later;
-// callers only depend on these signatures.
+import { db } from "@/db";
+import { categories, products } from "@/db/schema";
+import { NEW_ARRIVALS_LIMIT, spotlightSlug } from "./merchandising";
+import type { Product } from "./types";
 
-export function getProduct(slug: string): Product | undefined {
-  return products.find((product) => product.slug === slug);
+// Catalogue reads. Components depend on these signatures and the Product type, not on the
+// table layout.
+
+const productColumns = {
+  slug: products.slug,
+  name: products.name,
+  price: products.price,
+  colour: products.colour,
+  description: products.description,
+  details: products.details,
+  stock: products.stock,
+  images: products.images,
+  category: { slug: categories.slug, name: categories.name },
+};
+
+function selectProducts() {
+  return db.select(productColumns).from(products).innerJoin(categories, eq(products.categoryId, categories.id));
 }
 
-export function getAllProductSlugs(): string[] {
-  return products.map((product) => product.slug);
+/** Cached per request, so generateMetadata and the page share one query. */
+export const getProduct = cache(async (slug: string): Promise<Product | undefined> => {
+  const [product] = await selectProducts().where(eq(products.slug, slug)).limit(1);
+  return product;
+});
+
+export async function getAllProductSlugs(): Promise<string[]> {
+  const rows = await db.select({ slug: products.slug }).from(products);
+  return rows.map((row) => row.slug);
 }
 
-function bySlugs(slugs: string[]): Product[] {
-  return slugs.map(getProduct).filter((product): product is Product => product !== undefined);
+/** Newest products first. */
+export async function getNewArrivals(limit = NEW_ARRIVALS_LIMIT): Promise<Product[]> {
+  return selectProducts().orderBy(desc(products.createdAt), products.id).limit(limit);
 }
 
-export function getNewArrivals(): Product[] {
-  return bySlugs(newArrivalSlugs);
-}
-
-export function getSpotlightProduct(): Product {
-  const product = getProduct(spotlightSlug);
+export async function getSpotlightProduct(): Promise<Product> {
+  const product = await getProduct(spotlightSlug);
   if (!product) throw new Error(`Spotlight product "${spotlightSlug}" is missing from the catalogue`);
   return product;
 }
 
-/** Same category first, then everything else; never the product itself. */
-export function getRelatedProducts(product: Product, limit = 4): Product[] {
-  const others = products.filter((p) => p.slug !== product.slug);
-  const sameCategory = others.filter((p) => p.category.slug === product.category.slug);
-  const rest = others.filter((p) => p.category.slug !== product.category.slug);
-  return [...sameCategory, ...rest].slice(0, limit);
+/** Same category first, then everything else (newest first); never the product itself. */
+export async function getRelatedProducts(product: Product, limit = 4): Promise<Product[]> {
+  const sameCategory = sql`${categories.slug} = ${product.category.slug}`;
+  return selectProducts()
+    .where(ne(products.slug, product.slug))
+    .orderBy(desc(sameCategory), desc(products.createdAt), products.id)
+    .limit(limit);
 }
+

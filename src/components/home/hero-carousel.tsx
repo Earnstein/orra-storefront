@@ -7,7 +7,7 @@ import { PauseIcon, PlayIcon } from "lucide-react";
 
 import { Container } from "@/components/primitives";
 import { Button, buttonVariants } from "@/components/ui/button";
-import type { HeroSlide } from "@/lib/catalog/sample-data";
+import type { HeroSlide } from "@/lib/content";
 import { cn } from "@/lib/utils";
 
 const SLIDE_MS = 7000; // time on each slide

@@ -1,29 +1,25 @@
+import type { ProductDetail, ProductImage } from "../../src/db/schema/catalog";
+
 /**
- * Sample catalogue until products come from the database.
- * Photos are from Unsplash (free to use under the Unsplash License); each was checked
- * for visible third-party logos. Prices are integer cents.
+ * Initial catalogue, loaded by `npm run db:seed`. After the first load the database is the
+ * source of truth; edit products there, not here.
+ * Photos are from Unsplash (free to use under the Unsplash License); each was checked at
+ * full resolution for visible third-party logos. Prices are integer cents.
  */
 
-export type CatalogImage = { src: string; alt: string };
+export type SeedCategory = { slug: string; name: string };
 
-export type Product = {
+export type SeedProduct = {
   slug: string;
   name: string;
-  category: { slug: string; name: string };
+  /** Category slug. */
+  category: string;
   price: number;
   colour: string;
   description: string;
-  details: { term: string; value: string }[];
-  /** Units available to sell. Status (in stock / low / sold out) is derived in stock.ts. */
+  details: ProductDetail[];
   stock: number;
-  /** First image is the primary shot used on product cards. */
-  images: CatalogImage[];
-};
-
-export type Collection = {
-  slug: string;
-  name: string;
-  image: CatalogImage;
+  images: ProductImage[];
 };
 
 /** Unsplash CDN URL; src/lib/image-loader.ts adds the size and format per request. */
@@ -44,85 +40,23 @@ function gallery(id: string, alt: string, closeUps: { x: number; y: number; zoom
   ];
 }
 
-const categories = {
-  bags: { slug: "bags", name: "Bags" },
-  shoes: { slug: "shoes", name: "Shoes" },
-  accessories: { slug: "accessories", name: "Accessories" },
-  jewellery: { slug: "jewellery", name: "Jewellery" },
-  readyToWear: { slug: "ready-to-wear", name: "Ready-to-wear" },
-} as const;
-
-export type HeroSlide = {
-  id: string;
-  /** Short name for the slide picker, e.g. "Women". */
-  label: string;
-  title: string;
-  body: string;
-  action: { label: string; href: string };
-  image: CatalogImage;
-  /** object-position focal points: portrait crop on phones, wide crop from md up. */
-  focal: { mobile: string; desktop: string };
-};
-
-export const heroSlides: HeroSlide[] = [
-  {
-    id: "women",
-    label: "Women",
-    title: "Coats for the long walk home",
-    body: "Soft wool coats and silk scarves, cut to layer through the season.",
-    action: { label: "Shop women", href: "/collections/women" },
-    image: {
-      src: unsplash("1485462537746-965f33f7f6a7"),
-      alt: "Woman in a pink wool coat and patterned scarf beneath a stone arcade",
-    },
-    focal: { mobile: "50% 40%", desktop: "50% 28%" },
-  },
-  {
-    id: "men",
-    label: "Men",
-    title: "Tailoring, softened",
-    body: "Unstructured camel jackets over plain tees. Sharp enough for work, easy enough for the weekend.",
-    action: { label: "Shop men", href: "/collections/men" },
-    image: {
-      src: unsplash("1552374196-1ab2a1c593e8"),
-      alt: "Man in a camel jacket and white tee seated on a wooden stool",
-    },
-    focal: { mobile: "60% 30%", desktop: "60% 18%" },
-  },
+export const categories: SeedCategory[] = [
+  { slug: "bags", name: "Bags" },
+  { slug: "shoes", name: "Shoes" },
+  { slug: "accessories", name: "Accessories" },
+  { slug: "jewellery", name: "Jewellery" },
+  { slug: "ready-to-wear", name: "Ready-to-wear" },
 ];
 
-export const featuredCollections: Collection[] = [
-  {
-    slug: "women",
-    name: "Women's outerwear",
-    image: {
-      src: unsplash("1539109136881-3be0616acf4b"),
-      alt: "Woman in a pale blue wool coat in a stone piazza",
-    },
-  },
-  {
-    slug: "men",
-    name: "Tailoring",
-    image: {
-      src: unsplash("1507679799987-c73779587ccf"),
-      alt: "Close-up of a man buttoning a navy suit jacket",
-    },
-  },
-  {
-    slug: "shoes",
-    name: "Leather shoes",
-    image: {
-      src: unsplash("1614252235316-8c857d38b5f4"),
-      alt: "Close-up of a brown leather lace-up shoe",
-    },
-  },
-];
-
-export const products: Product[] = [
+/**
+ * Newest first: the seed gives each product a created_at one minute older than the one
+ * before it, so the homepage "New this season" grid (newest 8) keeps this order.
+ */
+export const products: SeedProduct[] = [
   {
     slug: "top-handle-bag-teal",
     name: "Top-handle bag",
-    category: categories.bags,
+    category: "bags",
     price: 189000,
     colour: "Teal",
     description:
@@ -142,7 +76,7 @@ export const products: Product[] = [
   {
     slug: "double-monk-shoe",
     name: "Double-monk shoe",
-    category: categories.shoes,
+    category: "shoes",
     price: 79000,
     colour: "Tan",
     description: "Goodyear-welted double-monk straps in burnished calf, on a leather sole with a stacked heel.",
@@ -159,7 +93,7 @@ export const products: Product[] = [
   {
     slug: "round-sunglasses",
     name: "Round metal sunglasses",
-    category: categories.accessories,
+    category: "accessories",
     price: 42000,
     colour: "Gold / green",
     description: "Thin gold-tone frames with round green lenses and adjustable nose pads. Supplied with a leather case.",
@@ -176,7 +110,7 @@ export const products: Product[] = [
   {
     slug: "gold-hoop-earrings",
     name: "Twisted hoop earrings",
-    category: categories.jewellery,
+    category: "jewellery",
     price: 56000,
     colour: "Gold",
     description: "Medium hoops in a twisted rope profile, cast in recycled sterling silver with 18k gold vermeil.",
@@ -193,7 +127,7 @@ export const products: Product[] = [
   {
     slug: "leather-biker-jacket",
     name: "Leather biker jacket",
-    category: categories.readyToWear,
+    category: "ready-to-wear",
     price: 345000,
     colour: "Black",
     description:
@@ -213,7 +147,7 @@ export const products: Product[] = [
   {
     slug: "bomber-jacket-rust",
     name: "Bomber jacket",
-    category: categories.readyToWear,
+    category: "ready-to-wear",
     price: 128000,
     colour: "Rust",
     description: "A lightweight bomber in washed nylon twill with ribbed trims and a two-way zip.",
@@ -230,7 +164,7 @@ export const products: Product[] = [
   {
     slug: "floral-pump",
     name: "Floral satin pump",
-    category: categories.shoes,
+    category: "shoes",
     price: 89000,
     colour: "Blue floral",
     description: "A pointed pump in printed duchess satin on a slim 10 cm heel, with a leather sole.",
@@ -247,7 +181,7 @@ export const products: Product[] = [
   {
     slug: "fringed-knit-poncho",
     name: "Fringed knit poncho",
-    category: categories.readyToWear,
+    category: "ready-to-wear",
     price: 98000,
     colour: "Ecru",
     description: "An open-knit poncho in undyed cotton and linen, finished with a hand-knotted fringe.",
@@ -264,7 +198,7 @@ export const products: Product[] = [
   {
     slug: "leather-tote-tan",
     name: "Leather tote",
-    category: categories.bags,
+    category: "bags",
     price: 98000,
     colour: "Tan",
     description:
@@ -282,35 +216,3 @@ export const products: Product[] = [
     ]),
   },
 ];
-
-/** Homepage "New this season" grid, in display order. */
-export const newArrivalSlugs = [
-  "top-handle-bag-teal",
-  "double-monk-shoe",
-  "round-sunglasses",
-  "gold-hoop-earrings",
-  "leather-biker-jacket",
-  "bomber-jacket-rust",
-  "floral-pump",
-  "fringed-knit-poncho",
-];
-
-export const story = {
-  title: "Knitwear, made slowly",
-  body: "Each piece is knitted from undyed merino and finished by hand, then left to rest before it is pressed. It takes longer. It also keeps its shape for years.",
-  href: "/stories/knitwear",
-  linkLabel: "Read the story",
-  image: {
-    src: unsplash("1558769132-cb1aea458c5e"),
-    alt: "Rail of neutral-toned knitwear beside dried pampas grass",
-  },
-};
-
-/** Homepage product spotlight; the product itself comes from `products`. */
-export const spotlightSlug = "leather-tote-tan";
-
-export const services = [
-  { icon: "truck", title: "Complimentary delivery", body: "On every order, tracked from dispatch to your door." },
-  { icon: "returns", title: "30-day returns", body: "Send it back unworn within 30 days for a full refund." },
-  { icon: "gift", title: "Gift wrapping", body: "Add wrapping and a handwritten note at checkout." },
-] as const;

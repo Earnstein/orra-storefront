@@ -1,5 +1,5 @@
 import { Container, Grid, Section } from "@/components/primitives";
-import type { Product } from "@/lib/catalog/sample-data";
+import type { Product } from "@/lib/catalog/types";
 import { ProductCard } from "./product-card";
 
 const tileSizes = "(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 50vw";

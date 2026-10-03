@@ -6,6 +6,9 @@ import { ProductSpotlight } from "@/components/home/product-spotlight";
 import { ServicesStrip } from "@/components/home/services-strip";
 import { StoryBand } from "@/components/home/story-band";
 
+// New arrivals and the spotlight come from the database; refresh at most every 5 minutes.
+export const revalidate = 300;
+
 export default function HomePage() {
   return (
     <>

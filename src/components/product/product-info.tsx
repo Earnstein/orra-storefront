@@ -10,8 +10,8 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import type { Product } from "@/lib/catalog/sample-data";
-import { services } from "@/lib/catalog/sample-data";
+import type { Product } from "@/lib/catalog/types";
+import { services } from "@/lib/content";
 import { formatPrice } from "@/lib/format";
 import { PurchaseActions } from "./purchase-actions";
 import { StockStatus } from "./stock-status";

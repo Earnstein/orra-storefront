@@ -1,4 +1,4 @@
-import { heroSlides } from "@/lib/catalog/sample-data";
+import { heroSlides } from "@/lib/content";
 import { site } from "@/lib/site";
 import { HeroCarousel } from "./hero-carousel";
 

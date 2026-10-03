@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { bagActions, useBag } from "@/lib/bag/store";
 import { isSaved, quantityInBag } from "@/lib/bag/rules";
 import { deliveryWindow } from "@/lib/catalog/delivery";
-import type { CatalogImage } from "@/lib/catalog/sample-data";
+import type { CatalogImage } from "@/lib/catalog/types";
 import { formatPrice } from "@/lib/format";
 import { site } from "@/lib/site";
 import { cn } from "@/lib/utils";

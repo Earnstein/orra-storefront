@@ -1,7 +1,7 @@
 import { GiftIcon, RotateCcwIcon, TruckIcon, type LucideIcon } from "lucide-react";
 
 import { Container, Grid, Section, Stack } from "@/components/primitives";
-import { services } from "@/lib/catalog/sample-data";
+import { services } from "@/lib/content";
 
 const icons: Record<(typeof services)[number]["icon"], LucideIcon> = {
   truck: TruckIcon,

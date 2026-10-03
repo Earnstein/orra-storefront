@@ -5,7 +5,8 @@ import { getNewArrivals } from "@/lib/catalog/queries";
 // Matches Grid layout="products": 2 → 3 (md) → 4 (xl) columns.
 const tileSizes = "(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 50vw";
 
-export function NewArrivals() {
+export async function NewArrivals() {
+  const products = await getNewArrivals();
   return (
     <Section aria-labelledby="new-arrivals-heading">
       <Container className="flex items-end justify-between gap-4 pb-block">
@@ -18,7 +19,7 @@ export function NewArrivals() {
       </Container>
 
       <Grid layout="products" className="px-tile">
-        {getNewArrivals().map((product) => (
+        {products.map((product) => (
           <ProductCard key={product.slug} product={product} sizes={tileSizes} />
         ))}
       </Grid>

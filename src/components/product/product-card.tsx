@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { Media } from "@/components/primitives";
 import { formatPrice } from "@/lib/format";
-import type { Product } from "@/lib/catalog/sample-data";
+import type { Product } from "@/lib/catalog/types";
 import { stockStatus } from "@/lib/catalog/stock";
 
 /** Product tile: image first, then name and price. The whole tile is one link. */
