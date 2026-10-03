@@ -29,6 +29,14 @@ npx shadcn@latest add <component>
 
 There is no test runner configured yet.
 
+## How we ship
+
+Roadmap and process: `docs/superpowers/specs/2026-10-04-roadmap-to-live-design.md`. Each milestone gets its own plan in `docs/superpowers/plans/` (M2–M6 also get their own spec), approved before any code is written.
+- One module = one branch (`feat/…`, `fix/…`, `docs/…`, `chore/…`) = one PR, assigned to its GitHub Milestone; the PR template's checklist must be complete.
+- The user approves by **squash-merging**; never merge PRs yourself. Every `git push` needs the user's approval.
+- When a milestone's last PR merges: tag `vX.Y.0`, publish a GitHub Release, add an entry to `docs/milestones.md`.
+- Stage files by path (never `git add -A`); the user installs things in the working tree in parallel.
+
 ## Architecture
 
 **Env** — `src/lib/env.ts` validates with Zod. `serverEnv()` is a function that parses on call (throws if invalid); `clientEnv` holds `NEXT_PUBLIC_*` and is parsed at import. Because `src/lib/auth.ts` calls `serverEnv()` at module load, `next build` fails without server env vars — this is intentional. Copy `.env.example` → `.env.local`.
