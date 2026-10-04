@@ -39,6 +39,7 @@ Roadmap and process: `docs/superpowers/specs/2026-10-04-roadmap-to-live-design.m
 - The user approves by **squash-merging**; never merge PRs yourself. Every `git push` needs the user's approval.
 - When a milestone's last PR merges: tag `vX.Y.0`, publish a GitHub Release, add an entry to `docs/milestones.md`.
 - Stage files by path (never `git add -A`); the user installs things in the working tree in parallel.
+- Environments: CI (`.github/workflows/ci.yml`) builds and tests on a throwaway, expiring `ci-*` Neon branch with credentials masked. Vercel previews get their own Neon branch via the Neon integration and are migrated **and seeded**; production is migrated but **never seeded** (`vercel.json` → `scripts/vercel-build.ts`, steps in `vercel-build-steps.ts`). A preview build stops before touching any database unless `DATABASE_URL`'s host differs from `PRODUCTION_DB_HOST`, so it can never migrate or seed production.
 
 ## Architecture
 
