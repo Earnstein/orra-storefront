@@ -1,3 +1,5 @@
+import { endpointHost, hostOf } from "./db-target";
+
 /**
  * The npm scripts a Vercel build runs, by VERCEL_ENV:
  * - preview: its own Neon branch (Neon–Vercel integration) is migrated and seeded, so every
@@ -9,35 +11,6 @@ export function buildSteps(vercelEnv: string | undefined): string[] {
   if (vercelEnv === "preview") return ["db:migrate", "db:seed", "build"];
   if (vercelEnv === "production") return ["db:migrate", "build"];
   return ["build"];
-}
-
-/**
- * One spelling per Neon endpoint, so the guard can't be bypassed by formatting: trims and
- * lowercases, takes the hostname from a pasted URL, drops a port and terminal dots (URL.hostname
- * keeps "host."), and folds the pooled hostname ("ep-x-pooler.…") into the direct one ("ep-x.…").
- */
-function endpointHost(value: string): string {
-  let host = value.trim().toLowerCase();
-  if (host.includes("://")) {
-    try {
-      host = new URL(host).hostname;
-    } catch {
-      // Not a URL after all; compare it as typed.
-    }
-  }
-  return host
-    .replace(/:\d+$/, "")
-    .replace(/\.+$/, "")
-    .replace(/^([^.]+)-pooler\./, "$1.");
-}
-
-function hostOf(databaseUrl: string | undefined): string | undefined {
-  if (!databaseUrl) return undefined;
-  try {
-    return new URL(databaseUrl).hostname || undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 /**

@@ -22,7 +22,8 @@ npm run test:e2e         # Playwright smoke tests (desktop + mobile); needs `npm
 npm run auth:generate    # Better Auth tables → src/db/schema/auth.ts
 npm run db:generate      # drizzle-kit migration from schema
 npm run db:migrate | db:push | db:studio
-npm run db:seed          # upsert the initial catalogue (src/db/seed/catalog.ts) by slug
+npm run db:seed          # upsert the initial catalogue (src/db/seed/catalog.ts) by slug; refuses production unless `-- --production`
+npm run db:seed -- --check   # print whether DATABASE_URL points at production (doesn't connect)
 
 npx intent list                              # TanStack agent skills
 npx intent load <package>#<skill>
@@ -40,6 +41,7 @@ Roadmap and process: `docs/superpowers/specs/2026-10-04-roadmap-to-live-design.m
 - When a milestone's last PR merges: tag `vX.Y.0`, publish a GitHub Release, add an entry to `docs/milestones.md`.
 - Stage files by path (never `git add -A`); the user installs things in the working tree in parallel.
 - Environments: CI (`.github/workflows/ci.yml`) builds and tests on a throwaway, expiring `ci-*` Neon branch with credentials masked. Vercel previews get their own Neon branch via the Neon integration and are migrated **and seeded**; production is migrated but **never seeded** (`vercel.json` → `scripts/vercel-build.ts`, steps in `vercel-build-steps.ts`). A preview build stops before touching any database unless `DATABASE_URL`'s host differs from `PRODUCTION_DB_HOST`, so it can never migrate or seed production.
+- Local development uses the Neon `dev` branch. `.env.local` sets `DATABASE_URL` to it, and Next, drizzle-kit and the seed script read `.env.local` before `.env`. `.env` keeps production's URL plus `PRODUCTION_DB_HOST`, which `db:seed` checks (`scripts/db-target.ts`). Before any local `db:migrate`, run `npm run db:seed -- --check`; it must print `not production`. Worktrees symlink both files; never read them.
 
 ## Architecture
 
