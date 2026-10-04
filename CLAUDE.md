@@ -17,6 +17,7 @@ npm run lint             # ESLint (next + TanStack Query rules)
 npm run typecheck        # next typegen && tsc --noEmit (typegen is required for LayoutProps/PageProps)
 npm test                 # Vitest, once (src/**/*.test.ts, scripts/**/*.test.ts)
 npm run test:watch       # Vitest in watch mode
+npm run test:e2e         # Playwright smoke tests (desktop + mobile); needs `npm run build` and a seeded DB, serves on :3100 (or set E2E_BASE_URL)
 
 npm run auth:generate    # Better Auth tables → src/db/schema/auth.ts
 npm run db:generate      # drizzle-kit migration from schema
