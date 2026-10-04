@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Superseded PR runs are cancelled; runs on main always finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # Lint, types and unit tests: no database needed (query tests use in-memory PGlite).
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  # Production build + Playwright, on a throwaway Neon branch that is deleted at the end
+  # (and expires after 2 hours if a run dies before cleanup).
+  e2e:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BETTER_AUTH_URL: http://localhost:3100
+      NEXT_PUBLIC_APP_URL: http://localhost:3100
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Generate auth secret and branch expiry
+        id: prep
+        run: |
+          secret=$(openssl rand -base64 32)
+          echo "::add-mask::$secret"
+          echo "BETTER_AUTH_SECRET=$secret" >> "$GITHUB_ENV"
+          echo "expires=$(date -u -d '+2 hours' +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Create Neon branch
+        id: neon
+        uses: neondatabase/create-branch-action@v6
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch_name: ci-${{ github.run_id }}-${{ github.run_attempt }}
+          expires_at: ${{ steps.prep.outputs.expires }}
+
+      # The action's db_url output isn't masked, and GitHub prints step env values in the log,
+      # so fetch the connection string here, mask it (and its password) and pass it via
+      # GITHUB_ENV. A branch shares its parent's role passwords, so this protects production too.
+      - name: Get masked connection string
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+          BRANCH_ID: ${{ steps.neon.outputs.branch_id }}
+          DATABASE_NAME: ${{ vars.NEON_DATABASE_NAME || 'neondb' }}
+          ROLE_NAME: ${{ vars.NEON_ROLE_NAME || 'neondb_owner' }}
+        run: |
+          uri=$(curl -fsS -H "Authorization: Bearer $NEON_API_KEY" \
+            "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/connection_uri?branch_id=$BRANCH_ID&database_name=$DATABASE_NAME&role_name=$ROLE_NAME&pooled=true" \
+            | jq -r .uri)
+          echo "::add-mask::$uri"
+          echo "::add-mask::$(node -p 'new URL(process.argv[1]).password' "$uri")"
+          echo "DATABASE_URL=$uri" >> "$GITHUB_ENV"
+
+      - name: Migrate, seed and build
+        run: npm run db:migrate && npm run db:seed && npm run build
+
+      - run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7
+
+      # By name, so a branch is removed even if creation failed after making it.
+      - name: Delete Neon branch
+        if: always() && steps.neon.outcome != 'skipped'
+        continue-on-error: true
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch: ci-${{ github.run_id }}-${{ github.run_attempt }}
