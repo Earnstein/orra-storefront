@@ -1,7 +1,10 @@
 # Orra: roadmap to live (design)
 
 - **Date:** 2026-10-04
-- **Status:** awaiting review
+- **Status:** approved 2026-10-04. Amended by the [M2 spec](2026-10-04-m2-browse-and-find-design.md):
+  - listings render per request from cached data;
+  - products get a colour family;
+  - the search document is kept current by a trigger.
 - **Scope of this spec:** the milestones from today's baseline to a public `v1.0.0`, and the delivery process every module follows. Each milestone gets its own spec and plan (see [Specs and plans per milestone](#specs-and-plans-per-milestone)); this document fixes their scope, order and exit criteria, and the cross-cutting decisions they share.
 
 ## Intent
@@ -93,10 +96,10 @@ Homepage with hero carousel. Product detail pages with gallery, Add to bag and S
 
 | Module | Delivers |
 |---|---|
-| Catalogue expansion | Around 48 products across the five categories, each photo checked at full resolution for logos and brand marks. A women/men/unisex audience field on `products` (migration + seed). |
-| Category pages | `/collections/[slug]` for each category and for `women` / `men` (audience, including unisex), built on `ProductListing`. Nav and footer links that point at these resolve. |
+| Catalogue expansion | Around 48 products across the five categories, each photo checked at full resolution for logos and brand marks. A colour family on `products` for the colour filter (migration + seed). After it merges, the seed runs once against production (production builds never seed). |
+| Category pages | `/collections/[slug]` for each category and for `women` / `men` (audience, including unisex), built on `ProductListing`. A women/men/unisex audience field on `products` (migration + seed). Nav and footer links that point at these resolve. |
 | Filter and sort | Filters: category (on audience pages), colour, price band, in stock only. Sort: newest, price low→high, price high→low. All state in URL search params, shareable and back-button safe. Works on `/collections/new` too. |
-| Search | Postgres full-text search (generated `tsvector` + GIN index) over name, description, colour and category. `/search?q=` results page on `ProductListing`, header search field, empty and no-results states. |
+| Search | Postgres full-text search over name, description, colour and category, using a `tsvector` that a trigger keeps current, with a GIN index. `/search?q=` results page on `ProductListing`, header search field, empty and no-results states. |
 | Error pages | Styled `not-found.tsx` and `error.tsx` for the storefront. |
 
 **Exit:** every primary-nav link leads to a working listing; search finds products by name, colour and category.
@@ -130,7 +133,7 @@ Homepage with hero carousel. Product detail pages with gallery, Add to bag and S
 | Module | Delivers |
 |---|---|
 | Roles | Better Auth `admin` plugin, regenerated auth schema. Roles: `admin` (owner) and `demo-admin`. Every admin route and server action checks the role on the server. |
-| Products | `/admin/products`: TanStack Table v9 list with search and sort. Create and edit with TanStack Form: fields, category, audience, price, stock, details, images uploaded to Vercel Blob with alt text. Edits refresh the affected storefront pages immediately. |
+| Products | `/admin/products`: TanStack Table v9 list with search and sort. Create and edit with TanStack Form: fields, category, audience, colour family, price, stock, details, images uploaded to Vercel Blob with alt text. Edits refresh the affected storefront pages immediately. |
 | Orders | `/admin/orders`: list, detail, status changes (paid → fulfilled, cancel). |
 | Demo admin | A "Try the admin" button signs into the shared `demo-admin` account. It's rate-limited and can't manage users, roles or the owner account. |
 | Demo reset | A nightly Vercel Cron job hits a secret-protected route. It restores the catalogue and stock to the seed, deletes products that aren't in the seed, and clears orders and carts older than the reset window. On the demo, the seed is the catalogue's source of truth: catalogue changes meant to last (including the owner's) go into the seed. Users, roles and the owner's account are never reset. |
@@ -160,7 +163,7 @@ Homepage with hero carousel. Product detail pages with gallery, Add to bag and S
 
 | Milestone | New data |
 |---|---|
-| M2 | `products.audience` (`women` / `men` / `unisex`), `products.search` (generated `tsvector`, GIN index). |
+| M2 | `products.audience` (`women` / `men` / `unisex`), `products.colour_family` (the colour filter's values), `products.search` (`tsvector` kept current by a trigger, GIN index). |
 | M3 | `saved_items(user_id, product_id, created_at)`, PK on both ids, cascading deletes. |
 | M4 | `carts(id, user_id unique nullable, …)`, `cart_items(cart_id, product_id, quantity > 0)`, `orders(id, number, user_id nullable, email, status, subtotal, currency, stripe_session_id unique, created_at)`, `order_items(order_id, product_id, name, unit_price, quantity)`. |
 | M5 | Better Auth admin fields (`role`, …) via `auth:generate`. |
@@ -169,7 +172,9 @@ Homepage with hero carousel. Product detail pages with gallery, Add to bag and S
 - Pages are server components that read through `src/lib/**/queries.ts`; components never import `@/db`.
 - Mutations are server actions, with Zod-validated input and server-side auth and role checks.
 - TanStack Query only where client-side refetching is needed (admin tables).
-- Listings and product pages stay ISR (`revalidate = 300`); writes call `revalidatePath` / `revalidateTag` so changes show immediately.
+- Product pages and the homepage stay ISR (`revalidate = 300`).
+- Listings and search render per request, because their filters are in the URL. Their query results are cached for 5 minutes under the `catalog` tag (decided in M2).
+- Writes call `revalidatePath` / `revalidateTag` so changes show immediately.
 
 **Transactions.** The webhook and stock decrement need a transaction whose later statements depend on earlier results. The neon-http driver can't do that, so this path uses Neon's WebSocket driver (`drizzle-orm/neon-serverless` with a `Pool`). The decrement is `UPDATE … SET stock = stock - $q WHERE id = $id AND stock >= $q`; zero rows updated means out of stock, so the order is cancelled and refunded.
 
@@ -205,7 +210,10 @@ Tests are written first (red → green) for every behaviour a plan task introduc
 ## Open items (settled in the named milestone's spec)
 
 - **Email sending domain (M3).** Resend only sends to arbitrary addresses from a verified domain. If no domain is available by M3, password reset and order emails send only on previews to the owner's address, and the domain is added in M6.
-- **Product photography (M2).** The source and licence for about 40 new photos (Unsplash, checked for brand marks, as today).
+- **Product photography (M2): settled** in the [M2 spec](2026-10-04-m2-browse-and-find-design.md):
+  - free Unsplash photos, with plain backgrounds first;
+  - each photo checked for brand marks;
+  - approved on a contact sheet.
 - **Demo reset window (M5).** How long demo orders and carts live before the nightly reset clears them.
 - **Monitoring vendor (M6).** Which error-monitoring service; free tier only.
 
