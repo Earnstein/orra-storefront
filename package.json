@@ -15,7 +15,9 @@
     "db:seed": "tsx scripts/seed-catalog.ts",
     "auth:generate": "npx auth@1.7.7 generate --config src/lib/auth.cli.ts --output src/db/schema/auth.ts",
     "skills:update": "npx skills@latest update -p -y",
-    "postinstall": "node scripts/fix-intent-bin.mjs"
+    "postinstall": "node scripts/fix-intent-bin.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -42,7 +44,7 @@
     "@tanstack/eslint-plugin-query": "^5.104.1",
     "@tanstack/intent": "^0.5.2",
     "@tanstack/react-query-devtools": "^5.104.1",
-    "@types/node": "^20.19.43",
+    "@types/node": "^24.19.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^18.0.5",
@@ -51,7 +53,8 @@
     "eslint-config-next": "16.3.8",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^5.0.3"
   },
   "intent": {
     "skills": [

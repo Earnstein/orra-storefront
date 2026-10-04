@@ -15,6 +15,8 @@ npm run dev              # Next dev server (Turbopack)
 npm run build            # production build — needs DATABASE_URL + BETTER_AUTH_* set and a migrated, seeded database (see below)
 npm run lint             # ESLint (next + TanStack Query rules)
 npm run typecheck        # next typegen && tsc --noEmit (typegen is required for LayoutProps/PageProps)
+npm test                 # Vitest, once (src/**/*.test.ts, scripts/**/*.test.ts)
+npm run test:watch       # Vitest in watch mode
 
 npm run auth:generate    # Better Auth tables → src/db/schema/auth.ts
 npm run db:generate      # drizzle-kit migration from schema
@@ -27,7 +29,7 @@ npm run skills:update                        # update the shadcn skill (skills C
 npx shadcn@latest add <component>
 ```
 
-There is no test runner configured yet.
+Tests: Vitest (`vitest.config.mts`, Node environment, no React plugin). `@/…` resolves to `src/`, and `server-only` is aliased to `src/test/server-only.ts` so server modules can be imported in tests.
 
 ## How we ship
 
@@ -82,4 +84,4 @@ Roadmap and process: `docs/superpowers/specs/2026-10-04-roadmap-to-live-design.m
 
 - `scripts/fix-intent-bin.mjs` (root `postinstall`) re-points `node_modules/.bin/intent` at `@tanstack/intent`: TanStack Form's `@tanstack/devtools-event-client` ships a broken `intent` bin that npm links over it. If `npx intent` crashes with `ERR_PACKAGE_PATH_NOT_EXPORTED … intent-library`, run `npm install`. Delete the script once that package fixes its bin.
 - npm 11 blocks dependency install scripts by default; warnings about `esbuild`/`unrs-resolver` postinstalls during `npm install` are expected.
-- `@vitejs/plugin-react` currently fails to install (its optional Babel 8 peers conflict with shadcn's Babel 7). If adding Vitest, it isn't needed — Vite 8 compiles JSX natively.
+- `@vitejs/plugin-react` currently fails to install (its optional Babel 8 peers conflict with shadcn's Babel 7); Vitest doesn't need it.
