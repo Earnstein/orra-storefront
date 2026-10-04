@@ -1,4 +1,4 @@
-import type { ProductDetail, ProductImage } from "../../src/db/schema/catalog";
+import type { ProductDetail, ProductImage } from "../schema/catalog";
 
 /**
  * Initial catalogue, loaded by `npm run db:seed`. After the first load the database is the
