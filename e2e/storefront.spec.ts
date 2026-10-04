@@ -37,9 +37,21 @@ test("unknown pages return 404", async ({ page }) => {
   expect((await page.goto("/collections/new/does-not-exist"))?.status()).toBe(404);
 });
 
+test("unknown pages show the styled 404", async ({ page }) => {
+  for (const path of ["/does-not-exist", "/products/does-not-exist"]) {
+    expect((await page.goto(path))?.status(), path).toBe(404);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Page not found");
+    const main = page.getByRole("main");
+    await expect(main.getByRole("link", { name: "New in" })).toHaveAttribute("href", "/collections/new");
+    await expect(main.getByRole("link", { name: "Women" })).toBeVisible();
+  }
+});
+
 test("no horizontal overflow", async ({ page }) => {
-  for (const path of ["/", "/products/double-monk-shoe", "/collections/new"]) {
+  for (const path of ["/", "/products/double-monk-shoe", "/collections/new", "/does-not-exist"]) {
     await page.goto(path);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), path).toBe(0);
+    // clientWidth excludes a vertical scrollbar, unlike innerWidth, so a scrollbar can't hide an overflow.
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, path).toBe(0);
   }
 });
