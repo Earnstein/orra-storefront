@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-Next.js 16 (App Router, `src/`, `@/*` → `src/*`) e-commerce app. Storefront UI (homepage, product pages) is built on a Postgres catalogue (products, categories, stock); Better Auth has email + password enabled (no sign-in UI yet); there is no cart/order backend or tests yet. Package manager is **npm**.
+Next.js 16 (App Router, `src/`, `@/*` → `src/*`) e-commerce app. Storefront UI (homepage, product pages) is built on a Postgres catalogue (products, categories, stock); Better Auth has email + password enabled (no sign-in UI yet); there is no cart/order backend yet. Tests: Vitest unit tests and catalogue query tests against PGlite. Package manager is **npm**.
 
 ## Commands
 
@@ -15,11 +15,13 @@ npm run dev              # Next dev server (Turbopack)
 npm run build            # production build — needs DATABASE_URL + BETTER_AUTH_* set and a migrated, seeded database (see below)
 npm run lint             # ESLint (next + TanStack Query rules)
 npm run typecheck        # next typegen && tsc --noEmit (typegen is required for LayoutProps/PageProps)
+npm test                 # Vitest, once (src/**/*.test.ts, scripts/**/*.test.ts)
+npm run test:watch       # Vitest in watch mode
 
 npm run auth:generate    # Better Auth tables → src/db/schema/auth.ts
 npm run db:generate      # drizzle-kit migration from schema
 npm run db:migrate | db:push | db:studio
-npm run db:seed          # upsert the initial catalogue (scripts/seed-data/catalog.ts) by slug
+npm run db:seed          # upsert the initial catalogue (src/db/seed/catalog.ts) by slug
 
 npx intent list                              # TanStack agent skills
 npx intent load <package>#<skill>
@@ -27,7 +29,7 @@ npm run skills:update                        # update the shadcn skill (skills C
 npx shadcn@latest add <component>
 ```
 
-There is no test runner configured yet.
+Tests: Vitest (`vitest.config.mts`, Node environment, no React plugin). `@/…` resolves to `src/`, and `server-only` is aliased to `src/test/server-only.ts` so server modules can be imported in tests.
 
 ## How we ship
 
@@ -68,7 +70,7 @@ Roadmap and process: `docs/superpowers/specs/2026-10-04-roadmap-to-live-design.m
 
 **Storefront** — `src/app/layout.tsx` renders `SiteHeader` / `SiteFooter` (`src/components/site/`) around every page; the homepage composes sections from `src/components/home/`. Store name, nav and footer links live in `src/lib/site.ts` (the name is a placeholder). `/collections/new` (New arrivals: newest `NEW_ARRIVALS_PAGE_LIMIT` products, with per-category tabs at `/collections/new/[category]`) is built on the shared `ProductListing` (`src/components/product/product-listing.tsx`: breadcrumb, heading, sticky `ListingTabs`, count, product grid) — reuse it for future collection pages. Other collection, help, account and bag routes don't exist yet, so Next's link prefetching logs 404s for them in the console.
 
-**Catalogue** — products and categories live in Postgres (`src/db/schema/catalog.ts`, relations in `relations.ts`): `categories 1──< products`, with stock as a units column on `products` (no variants or warehouses), and images/details as ordered JSONB. The storefront reads them only through `src/lib/catalog/queries.ts` (`getProduct` — React-`cache`d, `getNewArrivals` = newest 8 by `created_at`, `getSpotlightProduct`, `getRelatedProducts`, …), which return the `Product` shape in `src/lib/catalog/types.ts`; components never import `@/db`. The spotlight slug is in `merchandising.ts`. Prices are integer cents (`formatPrice` in `src/lib/format.ts`). `stockStatus()` in `src/lib/catalog/stock.ts` derives in stock / "Only N left" (≤3) / sold out. Product pages (`src/app/products/[slug]/page.tsx`) and the homepage are prerendered and revalidate every 5 minutes (`revalidate = 300`), so stock shown can lag the database by that much; products added after a build render on first request, unknown slugs 404, and product pages emit schema.org Product JSON-LD. `npm run db:seed` loads `scripts/seed-data/catalog.ts` (first load only — after that the database is the source of truth; re-seeding resets those products). Seed gallery views are Unsplash focal-point crops built by `gallery()`. When adding product photos, check them at full resolution for logos, labels and engraved hardware — several Unsplash fashion photos carry brand marks only visible when enlarged.
+**Catalogue** — products and categories live in Postgres (`src/db/schema/catalog.ts`, relations in `relations.ts`): `categories 1──< products`, with stock as a units column on `products` (no variants or warehouses), and images/details as ordered JSONB. The storefront reads them only through `src/lib/catalog/queries.ts` (`getProduct` — React-`cache`d, `getNewArrivals` = newest 8 by `created_at`, `getSpotlightProduct`, `getRelatedProducts`, …), which return the `Product` shape in `src/lib/catalog/types.ts`; components never import `@/db`. The spotlight slug is in `merchandising.ts`. Prices are integer cents (`formatPrice` in `src/lib/format.ts`). `stockStatus()` in `src/lib/catalog/stock.ts` derives in stock / "Only N left" (≤3) / sold out. Product pages (`src/app/products/[slug]/page.tsx`) and the homepage are prerendered and revalidate every 5 minutes (`revalidate = 300`), so stock shown can lag the database by that much; products added after a build render on first request, unknown slugs 404, and product pages emit schema.org Product JSON-LD. `npm run db:seed` loads `src/db/seed/catalog.ts` via `seedCatalog()` in `src/db/seed/index.ts` (first load only — after that the database is the source of truth; re-seeding resets those products). Tests reuse the same seed on an in-memory PGlite with the real migrations (`createTestDb()` in `src/test/db.ts`). Seed gallery views are Unsplash focal-point crops built by `gallery()`. When adding product photos, check them at full resolution for logos, labels and engraved hardware — several Unsplash fashion photos carry brand marks only visible when enlarged.
 
 **Editorial content** — hero slides, featured collections, the story band and services live in code in `src/lib/content.ts`; they aren't catalogue data.
 
@@ -82,4 +84,4 @@ Roadmap and process: `docs/superpowers/specs/2026-10-04-roadmap-to-live-design.m
 
 - `scripts/fix-intent-bin.mjs` (root `postinstall`) re-points `node_modules/.bin/intent` at `@tanstack/intent`: TanStack Form's `@tanstack/devtools-event-client` ships a broken `intent` bin that npm links over it. If `npx intent` crashes with `ERR_PACKAGE_PATH_NOT_EXPORTED … intent-library`, run `npm install`. Delete the script once that package fixes its bin.
 - npm 11 blocks dependency install scripts by default; warnings about `esbuild`/`unrs-resolver` postinstalls during `npm install` are expected.
-- `@vitejs/plugin-react` currently fails to install (its optional Babel 8 peers conflict with shadcn's Babel 7). If adding Vitest, it isn't needed — Vite 8 compiles JSX natively.
+- `@vitejs/plugin-react` currently fails to install (its optional Babel 8 peers conflict with shadcn's Babel 7); Vitest doesn't need it.
