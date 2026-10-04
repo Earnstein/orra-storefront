@@ -4,7 +4,8 @@ import { footerNav, site } from "@/lib/site";
 
 export function SiteFooter() {
   return (
-    <footer className="bg-inverse text-inverse-foreground">
+    // --ring (focus outline) flips with the text, as on Section tone="inverse".
+    <footer className="bg-inverse text-inverse-foreground [--ring:var(--inverse-foreground)]">
       <Container className="flex flex-col gap-block py-section">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <p className="max-w-prose text-title">
