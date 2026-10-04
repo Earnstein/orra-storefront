@@ -11,9 +11,24 @@ export function buildSteps(vercelEnv: string | undefined): string[] {
   return ["build"];
 }
 
-/** Neon's pooled and direct hostnames differ only by "-pooler" on the endpoint label. */
-function endpointHost(host: string): string {
-  return host.toLowerCase().replace(/^([^.]+)-pooler\./, "$1.");
+/**
+ * One spelling per Neon endpoint, so the guard can't be bypassed by formatting: trims and
+ * lowercases, takes the hostname from a pasted URL, drops a port and terminal dots (URL.hostname
+ * keeps "host."), and folds the pooled hostname ("ep-x-pooler.…") into the direct one ("ep-x.…").
+ */
+function endpointHost(value: string): string {
+  let host = value.trim().toLowerCase();
+  if (host.includes("://")) {
+    try {
+      host = new URL(host).hostname;
+    } catch {
+      // Not a URL after all; compare it as typed.
+    }
+  }
+  return host
+    .replace(/:\d+$/, "")
+    .replace(/\.+$/, "")
+    .replace(/^([^.]+)-pooler\./, "$1.");
 }
 
 function hostOf(databaseUrl: string | undefined): string | undefined {
@@ -33,8 +48,9 @@ function hostOf(databaseUrl: string | undefined): string | undefined {
 export function previewGuardError(env: { databaseUrl: string | undefined; productionDbHost: string | undefined }): string | undefined {
   const host = hostOf(env.databaseUrl);
   if (!host) return "DATABASE_URL is missing or not a valid URL; a preview needs its own Neon branch.";
-  if (!env.productionDbHost) return "PRODUCTION_DB_HOST is not set, so this preview can't prove it isn't using the production database.";
-  if (endpointHost(host) === endpointHost(env.productionDbHost)) {
+  const productionHost = env.productionDbHost ? endpointHost(env.productionDbHost) : "";
+  if (!productionHost) return "PRODUCTION_DB_HOST is not set, so this preview can't prove it isn't using the production database.";
+  if (endpointHost(host) === productionHost) {
     return "This preview is pointed at the production database. Refusing to migrate or seed it; check the Neon integration's preview branch.";
   }
   return undefined;

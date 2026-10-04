@@ -33,8 +33,21 @@ describe("previewGuardError", () => {
     expect(previewGuardError({ databaseUrl: url(production), productionDbHost: "ep-cool-name-123-pooler.us-east-2.aws.neon.tech" })).toMatch(/production database/);
   });
 
+  it("treats different spellings of the production host as production", () => {
+    const blocked = /production database/;
+    // A terminal dot is the same host (URL.hostname keeps it).
+    expect(previewGuardError({ databaseUrl: url(`${production}.`), productionDbHost: production })).toMatch(blocked);
+    expect(previewGuardError({ databaseUrl: url(production), productionDbHost: `${production}.` })).toMatch(blocked);
+    // Case, surrounding whitespace, a port, or a whole connection string pasted as PRODUCTION_DB_HOST.
+    expect(previewGuardError({ databaseUrl: url(production.toUpperCase()), productionDbHost: production })).toMatch(blocked);
+    expect(previewGuardError({ databaseUrl: url(production), productionDbHost: `  ${production}\n` })).toMatch(blocked);
+    expect(previewGuardError({ databaseUrl: url(production), productionDbHost: `${production}:5432` })).toMatch(blocked);
+    expect(previewGuardError({ databaseUrl: url(production), productionDbHost: url("ep-cool-name-123-pooler.us-east-2.aws.neon.tech.") })).toMatch(blocked);
+  });
+
   it("refuses when it can't tell", () => {
     expect(previewGuardError({ databaseUrl: url("ep-other-name-456.us-east-2.aws.neon.tech"), productionDbHost: undefined })).toMatch(/PRODUCTION_DB_HOST/);
+    expect(previewGuardError({ databaseUrl: url("ep-other-name-456.us-east-2.aws.neon.tech"), productionDbHost: "  " })).toMatch(/PRODUCTION_DB_HOST/);
     expect(previewGuardError({ databaseUrl: undefined, productionDbHost: production })).toMatch(/DATABASE_URL/);
     expect(previewGuardError({ databaseUrl: "not a url", productionDbHost: production })).toMatch(/DATABASE_URL/);
   });
