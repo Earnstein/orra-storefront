@@ -1,4 +1,4 @@
-import type { Audience, ProductDetail, ProductImage } from "../schema/catalog";
+import type { Audience, ColourFamily, Material, ProductDetail, ProductImage } from "../schema/catalog";
 
 /**
  * Initial catalogue, loaded by `npm run db:seed`. After the first load the database is the
@@ -17,6 +17,8 @@ export type SeedProduct = {
   audience: Audience;
   price: number;
   colour: string;
+  colourFamily: ColourFamily;
+  material: Material;
   description: string;
   details: ProductDetail[];
   stock: number;
@@ -61,6 +63,8 @@ export const products: SeedProduct[] = [
     audience: "women",
     price: 189000,
     colour: "Teal",
+    colourFamily: "green",
+    material: "leather",
     description:
       "A compact top-handle bag in pebbled calf leather, with a polished push-lock and a detachable shoulder strap.",
     details: [
@@ -82,6 +86,8 @@ export const products: SeedProduct[] = [
     audience: "men",
     price: 79000,
     colour: "Tan",
+    colourFamily: "brown",
+    material: "leather",
     description: "Goodyear-welted double-monk straps in burnished calf, on a leather sole with a stacked heel.",
     details: [
       { term: "Upper", value: "Burnished calf leather" },
@@ -100,6 +106,8 @@ export const products: SeedProduct[] = [
     audience: "unisex",
     price: 42000,
     colour: "Gold / green",
+    colourFamily: "gold",
+    material: "metal",
     description: "Thin gold-tone frames with round green lenses and adjustable nose pads. Supplied with a leather case.",
     details: [
       { term: "Frame", value: "Gold-tone metal" },
@@ -118,6 +126,8 @@ export const products: SeedProduct[] = [
     audience: "women",
     price: 56000,
     colour: "Gold",
+    colourFamily: "gold",
+    material: "gold",
     description: "Medium hoops in a twisted rope profile, cast in recycled sterling silver with 18k gold vermeil.",
     details: [
       { term: "Material", value: "18k gold vermeil on recycled silver" },
@@ -136,6 +146,8 @@ export const products: SeedProduct[] = [
     audience: "unisex",
     price: 345000,
     colour: "Black",
+    colourFamily: "black",
+    material: "leather",
     description:
       "An asymmetric biker in supple lambskin, with an off-centre zip, snap-down lapels and a belted hem.",
     details: [
@@ -157,6 +169,8 @@ export const products: SeedProduct[] = [
     audience: "men",
     price: 128000,
     colour: "Rust",
+    colourFamily: "orange",
+    material: "nylon",
     description: "A lightweight bomber in washed nylon twill with ribbed trims and a two-way zip.",
     details: [
       { term: "Material", value: "Washed nylon twill" },
@@ -175,6 +189,8 @@ export const products: SeedProduct[] = [
     audience: "women",
     price: 89000,
     colour: "Blue floral",
+    colourFamily: "blue",
+    material: "satin",
     description: "A pointed pump in printed duchess satin on a slim 10 cm heel, with a leather sole.",
     details: [
       { term: "Upper", value: "Printed duchess satin" },
@@ -193,6 +209,8 @@ export const products: SeedProduct[] = [
     audience: "women",
     price: 98000,
     colour: "Ecru",
+    colourFamily: "beige",
+    material: "cotton",
     description: "An open-knit poncho in undyed cotton and linen, finished with a hand-knotted fringe.",
     details: [
       { term: "Material", value: "Cotton and linen" },
@@ -211,6 +229,8 @@ export const products: SeedProduct[] = [
     audience: "unisex",
     price: 98000,
     colour: "Tan",
+    colourFamily: "brown",
+    material: "leather",
     description:
       "An unlined tote in waxed, vegetable-tanned leather that darkens and softens with wear, with saddle-stitched handles and brass rivets.",
     details: [

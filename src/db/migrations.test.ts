@@ -17,19 +17,25 @@ describe("M2 migrations on a database that predates them", () => {
     await insertLegacyCatalogue(client, ["legacy-product"]);
     await applyMigrations(client, tags.slice(firstM2));
 
-    const { rows } = await client.query<{ slug: string; audience: string }>("select slug, audience from products");
-    expect(Object.fromEntries(rows.map((row) => [row.slug, row.audience]))).toEqual({
-      "top-handle-bag-teal": "women",
-      "double-monk-shoe": "men",
-      "round-sunglasses": "unisex",
-      "gold-hoop-earrings": "women",
-      "leather-biker-jacket": "unisex",
-      "bomber-jacket-rust": "men",
-      "floral-pump": "women",
-      "fringed-knit-poncho": "women",
-      "leather-tote-tan": "unisex",
-      "legacy-product": "unisex",
+    const { rows } = await client.query<{ slug: string; audience: string; colour_family: string; material: string }>(
+      "select slug, audience, colour_family, material from products",
+    );
+    expect(
+      Object.fromEntries(rows.map((row) => [row.slug, [row.audience, row.colour_family, row.material].join(" / ")])),
+    ).toEqual({
+      "top-handle-bag-teal": "women / green / leather",
+      "double-monk-shoe": "men / brown / leather",
+      "round-sunglasses": "unisex / gold / metal",
+      "gold-hoop-earrings": "women / gold / gold",
+      "leather-biker-jacket": "unisex / black / leather",
+      "bomber-jacket-rust": "men / orange / nylon",
+      "floral-pump": "women / blue / satin",
+      "fringed-knit-poncho": "women / beige / cotton",
+      "leather-tote-tan": "unisex / brown / leather",
+      "legacy-product": "unisex / multicolour / mixed",
     });
-    await expect(client.query("update products set audience = null")).rejects.toThrow();
+    for (const column of ["audience", "colour_family", "material"]) {
+      await expect(client.query(`update products set ${column} = null`)).rejects.toThrow();
+    }
   });
 });
