@@ -48,6 +48,18 @@ test("unknown collection paths 404", async ({ page }) => {
   }
 });
 
+test("collection pages don't scroll sideways", async ({ page }) => {
+  // The project's own viewport, then the narrowest phone we support (the mobile project is 412 wide).
+  for (const width of [page.viewportSize()!.width, 375]) {
+    await page.setViewportSize({ width, height: 812 });
+    for (const path of ["/collections/women", "/collections/women/bags", "/collections/bags", "/collections/men/jewellery"]) {
+      await page.goto(path);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow, `${path} at ${width}px`).toBe(0);
+    }
+  }
+});
+
 test("homepage featured collections resolve", async ({ page, request }) => {
   await page.goto("/");
   const section = page.locator("section", { has: page.getByRole("heading", { name: "Shop the collections" }) });
