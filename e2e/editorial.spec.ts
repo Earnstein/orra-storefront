@@ -36,3 +36,30 @@ test("the homepage story band and the footer link to working story pages", async
   expect(await stories.getAttribute("href")).toBe("/stories");
   expect((await request.get("/stories")).status()).toBe(200);
 });
+
+for (const audience of ["women", "men"] as const) {
+  test(`the ${audience} landing links into its collection`, async ({ page }) => {
+    expect((await page.goto(`/${audience}`))?.status()).toBe(200);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    const main = page.getByRole("main");
+
+    const tiles = main.locator(`a[href^="/collections/${audience}/"]`);
+    expect(await tiles.count()).toBeGreaterThanOrEqual(4);
+
+    const edit = page.locator("section", { has: page.getByRole("heading", { name: "The edit" }) });
+    await expect(edit.locator('a[href^="/products/"]')).toHaveCount(8);
+
+    // In the hero and the closing block.
+    const shopAll = main.getByRole("link", { name: `Shop all ${audience}` });
+    await expect(shopAll).toHaveCount(2);
+    for (const link of await shopAll.all()) await expect(link).toHaveAttribute("href", `/collections/${audience}`);
+  });
+}
+
+test("the primary nav's Women and Men open the landings", async ({ page }) => {
+  await page.goto("/");
+  // The Main nav is in the DOM at every width (hidden below lg, where the menu sheet takes over).
+  const nav = page.getByRole("banner").locator('nav[aria-label="Main"]');
+  await expect(nav.locator("a", { hasText: /^Women$/ })).toHaveAttribute("href", "/women");
+  await expect(nav.locator("a", { hasText: /^Men$/ })).toHaveAttribute("href", "/men");
+});

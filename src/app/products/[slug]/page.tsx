@@ -6,6 +6,7 @@ import { ProductInfo } from "@/components/product/product-info";
 import { RelatedProducts } from "@/components/product/related-products";
 import { getAllProductSlugs, getProduct, getRelatedProducts } from "@/lib/catalog/queries";
 import { stockStatus } from "@/lib/catalog/stock";
+import { ogImage } from "@/lib/metadata";
 import { site } from "@/lib/site";
 
 // Product pages are generated at build time and regenerated at most every 5 minutes, so
@@ -24,7 +25,7 @@ export async function generateMetadata({ params }: PageProps<"/products/[slug]">
   return {
     title: product.name,
     description: product.description,
-    openGraph: { images: [`${product.images[0].src}&w=1200`] },
+    openGraph: { images: [ogImage(product.images[0])] },
   };
 }
 

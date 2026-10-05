@@ -10,8 +10,8 @@ export type NavLink = { label: string; href: string };
 
 export const primaryNav: NavLink[] = [
   { label: "New in", href: "/collections/new" },
-  { label: "Women", href: "/collections/women" },
-  { label: "Men", href: "/collections/men" },
+  { label: "Women", href: "/women" },
+  { label: "Men", href: "/men" },
   { label: "Bags", href: "/collections/bags" },
   { label: "Shoes", href: "/collections/shoes" },
   { label: "Accessories", href: "/collections/accessories" },
