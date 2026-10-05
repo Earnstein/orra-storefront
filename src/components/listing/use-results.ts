@@ -18,12 +18,12 @@ async function fetchResults(query: ResultsQuery, signal: AbortSignal): Promise<R
 
 /**
  * Results for a query. While a new query loads, the previous results stay as placeholder data
- * (`isPlaceholderData`); a superseded request is aborted.
+ * (`isPlaceholderData`), or `fallback` before there are any; a superseded request is aborted.
  */
-export function useResults(query: ResultsQuery) {
+export function useResults(query: ResultsQuery, fallback?: Results) {
   return useQuery({
     queryKey: resultsQueryKey(query),
     queryFn: ({ signal }) => fetchResults(query, signal),
-    placeholderData: keepPreviousData,
+    placeholderData: fallback ? (previous) => previous ?? fallback : keepPreviousData,
   });
 }

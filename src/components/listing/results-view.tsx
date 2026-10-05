@@ -6,11 +6,21 @@ import { useMemo, useState } from "react";
 import { Container, Grid } from "@/components/primitives";
 import { ProductCard } from "@/components/product/product-card";
 import { Button } from "@/components/ui/button";
-import { activeFilterCount, SORT_LABELS, type ResultsScope } from "@/lib/catalog/filters";
+import {
+  activeFilterCount,
+  normaliseQuery,
+  SORT_LABELS,
+  withoutFilter,
+  type ActiveFilter,
+  type ResultsQuery,
+  type ResultsScope,
+} from "@/lib/catalog/filters";
 import type { Results } from "@/lib/catalog/results";
-import { resultsApiPath, resultsParsers, toResultsQuery } from "@/lib/catalog/search-params";
+import { resultsApiPath, resultsParamsFor, resultsParsers, toResultsQuery } from "@/lib/catalog/search-params";
 import { cn } from "@/lib/utils";
-import { ListingToolbar } from "./listing-toolbar";
+import { FilterChips } from "./filter-chips";
+import { FilterSheet } from "./filter-sheet";
+import { ListingToolbar, type SheetSection } from "./listing-toolbar";
 import { LoadMore } from "./load-more";
 import { useResults } from "./use-results";
 
@@ -21,7 +31,9 @@ const FIRST_ROW = 4;
 const CLEARED_FILTERS = { category: null, audience: null, colour: null, material: null, price: null, stock: null, new: null, page: null };
 
 /**
- * A listing's results, driven by the URL: toolbar, grid and Load more. The first results come
+ * A listing's results, driven by the URL: toolbar, chips, filter sheet, grid and Load more.
+ * Applying the sheet and removing a chip push a history entry (Back undoes them); Load more
+ * replaces the current one. The first results come
  * hydrated from the server; later ones from /api/products. While new results load, the current
  * ones stay on screen, dimmed (but not for Load more, which shows on its button instead).
  */
@@ -29,6 +41,7 @@ export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: 
   const [params, setParams] = useQueryStates(resultsParsers);
   const query = useMemo(() => toResultsQuery(params, scope, tab), [params, scope, tab]);
   const { data, isPlaceholderData, isError, isFetching, refetch } = useResults(query);
+  const [sheet, setSheet] = useState<SheetSection | null>(null);
 
   // The last results shown stay on screen if a later request fails.
   const [lastData, setLastData] = useState<Results | undefined>(data);
@@ -47,9 +60,36 @@ export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: 
   const filtersActive = activeFilterCount(query.filters) > 0;
   const updating = (isPlaceholderData && !loadingMore) || (isError && !data);
 
+  // Filter changes start from page 1 and add a history entry. Chip removals read the latest URL
+  // state, so quick successive removals all apply.
+  const push = { history: "push", scroll: false } as const;
+  const apply = (next: ResultsQuery) => setParams(resultsParamsFor(normaliseQuery({ ...next, page: 1 })), push);
+  const remove = (filter: ActiveFilter) =>
+    setParams((latest) => {
+      const current = toResultsQuery(latest, scope, tab);
+      return resultsParamsFor({ ...current, filters: withoutFilter(current.filters, filter), page: 1 });
+    }, push);
+  const clear = () => setParams(CLEARED_FILTERS, push);
+
   return (
     <>
-      <ListingToolbar total={results.total} sortLabel={SORT_LABELS[query.sort]} activeCount={activeFilterCount(query.filters)} />
+      <ListingToolbar
+        total={results.total}
+        sortLabel={SORT_LABELS[query.sort]}
+        activeCount={activeFilterCount(query.filters)}
+        onOpen={setSheet}
+      />
+      <FilterChips filters={query.filters} facets={results.facets} onRemove={remove} onClear={clear} />
+      <FilterSheet
+        section={sheet}
+        query={query}
+        results={results}
+        onClose={() => setSheet(null)}
+        onApply={(draft) => {
+          setSheet(null);
+          void apply(draft);
+        }}
+      />
 
       {isError && !isFetching && (
         <Container className="flex items-center gap-4 pb-4 caption" role="alert">
@@ -64,7 +104,7 @@ export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: 
         <Container className="flex flex-col items-start gap-6 pt-block pb-section">
           {empty}
           {filtersActive && (
-            <Button variant="outline" onClick={() => setParams(CLEARED_FILTERS, { history: "push" })}>
+            <Button variant="outline" onClick={clear}>
               Clear all filters
             </Button>
           )}

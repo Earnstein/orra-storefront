@@ -143,6 +143,26 @@ export function activeFilterCount(filters: Filters): number {
   );
 }
 
+/** One selected filter value; switches use their URL value ("in", "1"). */
+export type ActiveFilter = { key: FacetKey; value: string };
+
+const LIST_KEYS = ["category", "audience", "colour", "material", "price"] as const;
+
+/** Every selected value, in filter order with the switches last: one chip each. */
+export function activeFilters(filters: Filters): ActiveFilter[] {
+  return [
+    ...LIST_KEYS.flatMap((key) => filters[key].map((value) => ({ key, value }))),
+    ...(filters.stock ? [{ key: "stock" as const, value: "in" }] : []),
+    ...(filters.newIn ? [{ key: "newIn" as const, value: "1" }] : []),
+  ];
+}
+
+/** The filters with one value removed (or one switch turned off). */
+export function withoutFilter(filters: Filters, { key, value }: ActiveFilter): Filters {
+  if (key === "stock" || key === "newIn") return { ...filters, [key]: false };
+  return { ...filters, [key]: (filters[key] as string[]).filter((selected) => selected !== value) };
+}
+
 /** A filter option with no results is disabled, unless it's selected (so it can be removed). */
 export function optionState(count: number, selected: boolean): "enabled" | "disabled" {
   return count > 0 || selected ? "enabled" : "disabled";

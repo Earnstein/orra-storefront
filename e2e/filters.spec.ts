@@ -58,3 +58,77 @@ test("a hand-edited page past the end shows everything", async ({ page }) => {
   expect((await page.goto("/collections/bags?page=9&sort=nope&colour=nope"))?.status()).toBe(200);
   await expect(productLinks(page)).toHaveCount(bags.length);
 });
+
+const sheet = (page: Page) => page.getByRole("dialog", { name: "Filter and sort" });
+const blackWomen = women.filter((product) => product.colourFamily === "black").length;
+const brownWomen = women.filter((product) => product.colourFamily === "brown").length;
+
+test("filter, back and reload", async ({ page }) => {
+  expect(blackWomen).toBeGreaterThan(0);
+  await page.goto("/collections/women");
+  await page.getByRole("button", { name: /^Filter and sort/ }).click();
+  await sheet(page).getByRole("button", { name: "Colour" }).click();
+  await sheet(page).getByRole("checkbox", { name: `Black (${blackWomen})` }).check();
+  await expect(sheet(page).getByRole("button", { name: `Show ${blackWomen} items` })).toBeVisible();
+  await sheet(page).getByRole("button", { name: /^Show \d+ items?$/ }).click();
+
+  await expect(sheet(page)).toHaveCount(0);
+  await expect(page).toHaveURL(/colour=black/);
+  await expect(page.getByRole("button", { name: "Remove filter: Black" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Filter and sort (1)" })).toBeVisible();
+  await expect(page.getByText(`${blackWomen} items sorted by Newest`)).toBeVisible();
+  await expect(productLinks(page)).toHaveCount(Math.min(blackWomen, 24));
+
+  await page.goBack();
+  await expect(page).not.toHaveURL(/colour=/);
+  await expect(page.getByText(`${women.length} items sorted by Newest`)).toBeVisible();
+  await page.goForward();
+  await expect(page).toHaveURL(/colour=black/);
+  await page.reload();
+  await expect(page.getByText(`${blackWomen} items sorted by Newest`)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove filter: Black" })).toBeVisible();
+});
+
+test("the sort name opens the sheet at Sort", async ({ page }) => {
+  await page.goto("/collections/bags");
+  await page.getByRole("button", { name: "Newest", exact: true }).click();
+  await sheet(page).getByRole("radio", { name: "Price: high to low" }).check();
+  await sheet(page).getByRole("button", { name: `Show ${bags.length} items` }).click();
+  await expect(page).toHaveURL(/sort=price-desc/);
+  await expect(page.getByText(`${bags.length} items sorted by Price: high to low`)).toBeVisible();
+});
+
+test("closing the sheet discards the draft", async ({ page }) => {
+  await page.goto("/collections/women");
+  await page.getByRole("button", { name: /^Filter and sort/ }).click();
+  await sheet(page).getByRole("button", { name: "Colour" }).click();
+  await sheet(page).getByRole("checkbox", { name: `Black (${blackWomen})` }).check();
+  await page.keyboard.press("Escape");
+  await expect(sheet(page)).toHaveCount(0);
+  await expect(page).not.toHaveURL(/colour=/);
+
+  await page.getByRole("button", { name: /^Filter and sort/ }).click();
+  await sheet(page).getByRole("button", { name: "Colour" }).click();
+  await expect(sheet(page).getByRole("checkbox", { name: `Black (${blackWomen})` })).not.toBeChecked();
+});
+
+test("two quick filter changes: the latest wins", async ({ page }) => {
+  expect(brownWomen).toBeGreaterThan(0);
+  await page.goto("/collections/women?colour=black&colour=brown&stock=in");
+  await expect(page.getByRole("button", { name: "Remove filter: Black" })).toBeVisible();
+  await page.getByRole("button", { name: "Remove filter: Black" }).click();
+  await page.getByRole("button", { name: "Remove filter: Brown" }).click();
+
+  const inStock = women.filter((product) => product.stock > 0);
+  await expect(page).toHaveURL(/\/collections\/women\?stock=in$/);
+  await expect(page.getByText(`${inStock.length} items sorted by Newest`)).toBeVisible();
+  await expect(productLinks(page)).toHaveCount(Math.min(inStock.length, 24));
+  await expect(page.locator("main [aria-busy=true]")).toHaveCount(0);
+});
+
+test("Clear all removes every filter", async ({ page }) => {
+  await page.goto("/collections/women?colour=black&material=leather&sort=price-asc");
+  await page.getByRole("button", { name: "Clear all" }).click();
+  await expect(page).toHaveURL(/\/collections\/women\?sort=price-asc$/);
+  await expect(page.getByText(`${women.length} items sorted by Price: low to high`)).toBeVisible();
+});

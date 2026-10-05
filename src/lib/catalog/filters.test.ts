@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   activeFilterCount,
+  activeFilters,
   defaultSort,
   emptyFilters,
   hiddenFacets,
@@ -13,6 +14,7 @@ import {
   type Filters,
   type ResultsQuery,
   type ResultsScope,
+  withoutFilter,
 } from "./filters";
 
 const bags: ResultsScope = { kind: "category", categorySlug: "bags" };
@@ -129,5 +131,26 @@ describe("filter helpers", () => {
     expect(optionState(3, false)).toBe("enabled");
     expect(optionState(0, false)).toBe("disabled");
     expect(optionState(0, true)).toBe("enabled");
+  });
+});
+
+describe("activeFilters and withoutFilter", () => {
+  const filters: Filters = { ...emptyFilters(), colour: ["black", "brown"], price: ["under-500"], stock: true, newIn: true };
+
+  it("lists every active value, switches last", () => {
+    expect(activeFilters(filters)).toEqual([
+      { key: "colour", value: "black" },
+      { key: "colour", value: "brown" },
+      { key: "price", value: "under-500" },
+      { key: "stock", value: "in" },
+      { key: "newIn", value: "1" },
+    ]);
+    expect(activeFilters(filters)).toHaveLength(activeFilterCount(filters));
+  });
+
+  it("removes one value, or turns a switch off", () => {
+    expect(withoutFilter(filters, { key: "colour", value: "black" })).toEqual({ ...filters, colour: ["brown"] });
+    expect(withoutFilter(filters, { key: "stock", value: "in" })).toEqual({ ...filters, stock: false });
+    expect(withoutFilter(filters, { key: "newIn", value: "1" })).toEqual({ ...filters, newIn: false });
   });
 });

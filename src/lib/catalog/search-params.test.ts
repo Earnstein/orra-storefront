@@ -1,7 +1,8 @@
+import { createSerializer } from "nuqs/server";
 import { describe, expect, it } from "vitest";
 
 import type { ResultsScope } from "./filters";
-import { loadResultsParams, resultsApiPath, toResultsQuery } from "./search-params";
+import { loadResultsParams, resultsApiPath, resultsParamsFor, resultsParsers, toResultsQuery } from "./search-params";
 
 const bags: ResultsScope = { kind: "category", categorySlug: "bags" };
 const women: ResultsScope = { kind: "audience", audience: "women" };
@@ -77,5 +78,28 @@ describe("resultsApiPath", () => {
 
   it("is the same for equal queries written differently", () => {
     expect(path("?colour=red&colour=black&colour=red", bags)).toBe(path("?colour=black&colour=red", bags));
+  });
+});
+
+describe("resultsParamsFor", () => {
+  const serialize = createSerializer(resultsParsers);
+
+  it("round-trips a query through the URL", () => {
+    const query = toResultsQuery(
+      loadResultsParams("?colour=red&colour=black&material=wool&price=under-500&stock=in&sort=price-asc&page=2"),
+      women,
+      "bags",
+    );
+    const url = serialize(resultsParamsFor(query));
+    expect(url).toBe("?sort=price-asc&colour=black&colour=red&material=wool&price=under-500&stock=in&page=2");
+    expect(toResultsQuery(loadResultsParams(url), women, "bags")).toEqual(query);
+  });
+
+  it("clears defaults and empty filters", () => {
+    expect(serialize(resultsParamsFor(toResultsQuery(loadResultsParams("?sort=newest&page=1"), bags)))).toBe("");
+  });
+
+  it("leaves q to the page", () => {
+    expect(resultsParamsFor(toResultsQuery(loadResultsParams("?q=tote"), search("tote")))).not.toHaveProperty("q");
   });
 });

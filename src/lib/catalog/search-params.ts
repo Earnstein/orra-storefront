@@ -5,6 +5,7 @@ import {
   parseAsString,
   parseAsStringLiteral,
   type inferParserType,
+  type Nullable,
 } from "nuqs/server";
 
 import { defaultSort, normaliseQuery, PRICE_BANDS, SORTS, type ResultsQuery, type ResultsScope } from "./filters";
@@ -80,4 +81,24 @@ export function resultsApiPath(query: ResultsQuery): string {
   if (filters.newIn) params.set("new", "1");
   if (page !== 1) params.set("page", String(page));
   return `/api/products?${params}`;
+}
+
+/**
+ * The URL params for a query (the inverse of toResultsQuery), for writing a draft or a change
+ * back with setParams. Defaults and empty filters are null, so they leave the URL. `q` belongs to
+ * the page, so it isn't touched.
+ */
+export function resultsParamsFor({ scope, filters, sort, page }: ResultsQuery): Partial<Nullable<ResultsParams>> {
+  const list = <T>(values: T[]) => (values.length > 0 ? values : null);
+  return {
+    sort: sort === defaultSort(scope) ? null : sort,
+    category: list(filters.category),
+    audience: list(filters.audience),
+    colour: list(filters.colour),
+    material: list(filters.material),
+    price: list(filters.price),
+    stock: filters.stock ? "in" : null,
+    new: filters.newIn ? "1" : null,
+    page: page === 1 ? null : page,
+  };
 }
