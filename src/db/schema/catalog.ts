@@ -1,51 +1,21 @@
 import { sql } from "drizzle-orm";
 import { check, customType, index, integer, jsonb, pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
+import { AUDIENCES, COLOUR_FAMILIES, MATERIALS } from "../../lib/catalog/vocabulary";
+
 // Catalogue: categories and products. Stock is a column on products (no variants or
 // warehouses yet, so a product has exactly one stock figure).
 
 /** Who a product is for. The Women and Men collections list their audience plus unisex. */
-export const audience = pgEnum("audience", ["women", "men", "unisex"]);
+export const audience = pgEnum("audience", AUDIENCES);
 export type Audience = (typeof audience.enumValues)[number];
 
 /** Broad colour group for filtering; `colour` keeps the exact shade shown to shoppers. */
-export const colourFamily = pgEnum("colour_family", [
-  "black",
-  "white",
-  "grey",
-  "beige",
-  "brown",
-  "red",
-  "pink",
-  "orange",
-  "yellow",
-  "green",
-  "blue",
-  "purple",
-  "gold",
-  "silver",
-  "multicolour",
-]);
+export const colourFamily = pgEnum("colour_family", COLOUR_FAMILIES);
 export type ColourFamily = (typeof colourFamily.enumValues)[number];
 
 /** Main material for filtering; the product details carry the full composition. */
-export const material = pgEnum("material", [
-  "leather",
-  "suede",
-  "canvas",
-  "nylon",
-  "cotton",
-  "linen",
-  "wool",
-  "cashmere",
-  "silk",
-  "satin",
-  "gold",
-  "silver",
-  "metal",
-  "acetate",
-  "mixed",
-]);
+export const material = pgEnum("material", MATERIALS);
 export type Material = (typeof material.enumValues)[number];
 
 export const categories = pgTable("categories", {

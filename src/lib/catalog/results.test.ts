@@ -36,16 +36,36 @@ describe("getResults", () => {
     }
   });
 
-  it("filters by price band, audience (with unisex), stock and new in", async () => {
-    const cheap = await getResults(q({ scope: bags, filters: { price: ["under-500", "2000-plus"] } }));
-    for (const product of cheap.products) expect(product.price < 50_000 || product.price >= 200_000).toBe(true);
-    const men = await getResults(q({ scope: { kind: "search", q: "leather" }, filters: { audience: ["men"] } }));
-    for (const slug of slugs(men)) expect(["men", "unisex"]).toContain(seed(slug).audience);
-    const inStock = await getResults(q({ filters: { stock: true } }));
-    expect(inStock.products.every((product) => product.stock > 0)).toBe(true);
+  it("filters by price band, audience (with unisex), stock and new in, exactly", async () => {
+    const all = seedProducts.filter((p) => p.category !== "__none__");
+    const priced = await getResults(q({ scope: { kind: "audience", audience: "women" }, filters: { price: ["500-1000", "2000-plus"] }, page: 2 }));
+    const inBand = (p: (typeof all)[number]) => (p.price >= 50_000 && p.price <= 99_999) || p.price >= 200_000;
+    expect(slugs(priced).toSorted()).toEqual(all.filter((p) => p.audience !== "men" && inBand(p)).map((p) => p.slug).toSorted());
+    expect(priced.total).toBeGreaterThan(0);
+
+    const boundary = await getResults(q({ scope: bags, filters: { price: ["under-500"] } }));
+    expect(slugs(boundary).toSorted()).toEqual(all.filter((p) => p.category === "bags" && p.price <= 49_999).map((p) => p.slug).toSorted());
+
+    const men = await getResults(q({ scope: { kind: "category", categorySlug: "shoes" }, filters: { audience: ["men"] } }));
+    expect(slugs(men).toSorted()).toEqual(all.filter((p) => p.category === "shoes" && p.audience !== "women").map((p) => p.slug).toSorted());
+
+    const inStock = await getResults(q({ scope: bags, filters: { stock: true } }));
+    expect(slugs(inStock).toSorted()).toEqual(all.filter((p) => p.category === "bags" && p.stock > 0).map((p) => p.slug).toSorted());
+
     const fresh = await getResults(q({ scope: bags, filters: { newIn: true } }));
-    const newest = new Set(seedProducts.slice(0, 24).map((p) => p.slug));
-    expect(slugs(fresh).every((slug) => newest.has(slug))).toBe(true);
+    expect(slugs(fresh)).toEqual(all.slice(0, 24).filter((p) => p.category === "bags").map((p) => p.slug));
+  });
+
+  it("counts every facet option as the total that option would give", async () => {
+    const base = q({ scope: { kind: "search", q: "leather" }, sort: "relevance", filters: { stock: true } });
+    const results = await getResults(base);
+    for (const facet of ["audience", "colour", "material", "price", "newIn"] as const) {
+      for (const option of results.facets[facet]) {
+        const value = facet === "newIn" ? { newIn: true } : { [facet]: [option.value] };
+        const narrowed = await getResults({ ...base, filters: { ...base.filters, ...value } });
+        expect(narrowed.total, `${facet}=${option.value}`).toBe(option.count);
+      }
+    }
   });
 
   it("counts each facet without its own selection, but with the others", async () => {
@@ -84,6 +104,20 @@ describe("getResults", () => {
     expect((await getResults(q({ scope: women, page: 99 }))).page).toBe(Math.ceil(total / RESULTS_PAGE_SIZE));
   });
 
+  it("requires every word to match, each by full text or by a typo of it", async () => {
+    expect(slugs(await getResults(search("leather tote")))).toEqual(["leather-tote-tan"]);
+    expect(slugs(await getResults(search("lether tote")))).toEqual(["leather-tote-tan"]);
+    const boots = slugs(await getResults(search("black boot")));
+    expect(boots.length).toBeGreaterThan(0);
+    for (const slug of boots) expect(seed(slug).category).toBe("shoes");
+    expect(slugs(await getResults(search("gold ring")))).not.toContain("steel-band-ring");
+  });
+
+  it("ignores stop words instead of matching inside other words", async () => {
+    expect((await getResults(search("and"))).total).toBe(0);
+    expect(slugs(await getResults(search("the leather tote")))).toEqual(["leather-tote-tan"]);
+  });
+
   it("searches names first, mid-word, with typos and word endings", async () => {
     expect(slugs(await getResults(search("tote")))[0]).toBe("leather-tote-tan");
     expect(slugs(await getResults(search("lea")))).toContain("leather-tote-tan");
@@ -96,5 +130,13 @@ describe("getResults", () => {
     expect((await getResults(search("zzqxv"))).total).toBe(0);
     expect((await getResults(search("&|!:*()"))).total).toBe(0);
     expect((await getResults(search(""))).total).toBe(0);
+    for (const text of ["the", "👜", "'; drop table products; --", '"quoted"', "x".repeat(500), "a", "½ ²"]) {
+      await expect(getResults(search(text)), text).resolves.toMatchObject({ page: 1 });
+    }
+  });
+
+  it("never errors on an out-of-range page", async () => {
+    await expect(getResults(q({ page: 1e20 }))).resolves.toMatchObject({ page: 1 });
+    await expect(getResults(q({ page: Infinity }))).resolves.toMatchObject({ page: 1 });
   });
 });

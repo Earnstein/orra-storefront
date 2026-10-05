@@ -67,7 +67,7 @@ async function cachedResults(query: ResultsQuery): Promise<Results> {
   };
 }
 
-type SearchQuery = { tsquery: string; text: string };
+type SearchQuery = { tsquery: string; text: string; words: string[] };
 
 /** Drops the window-count column a results row carries. */
 function toProduct(row: Product & { total: number }): Product {
@@ -80,16 +80,33 @@ const newest = (limit: number) =>
   sql`${products.id} in (select ${products.id} from ${products} order by ${products.createdAt} desc, ${products.id} limit ${limit})`;
 
 /**
- * Typo tolerance: the search text's trigram word similarity to a product's search_text must reach
- * this. pg_trgm's default (0.6, used by the `<%` operator) misses one-letter slips in common words
+ * Typo tolerance: a word's trigram word similarity to a product's search_text must reach this. pg_trgm's default (0.6, used by the `<%` operator) misses one-letter slips in common words
  * ("lether" scores 0.5 against "leather"). An explicit threshold can't use the trigram index (the
  * operator reads a session setting, and the Neon HTTP driver has no sessions); at this catalogue's
  * size that costs nothing measurable.
  */
 export const TYPO_THRESHOLD = 0.45;
 
-const matches = (search: SearchQuery) =>
-  sql`(${products.search} @@ to_tsquery('english', ${search.tsquery}) or word_similarity(${search.text}, ${products.searchText}) >= ${TYPO_THRESHOLD})`;
+/** Words shorter than this only match exactly: "and" would otherwise match inside "band". */
+const MIN_TYPO_LENGTH = 4;
+
+/**
+ * Every word must match, by full text (the last word as a prefix) or, for longer words, by a
+ * near spelling. A stop word ("the") can't be searched for, so it doesn't constrain the match,
+ * but a query of stop words only matches nothing.
+ */
+function matches(search: SearchQuery): SQL {
+  const last = search.words.length - 1;
+  const perWord = search.words.map((word, index) => {
+    const term = index === last ? `${word}:*` : word;
+    const typo =
+      word.length >= MIN_TYPO_LENGTH
+        ? sql` or word_similarity(${word}, ${products.searchText}) >= ${TYPO_THRESHOLD}`
+        : sql``;
+    return sql`(numnode(to_tsquery('english', ${term})) = 0 or ${products.search} @@ to_tsquery('english', ${term})${typo})`;
+  });
+  return sql`(numnode(to_tsquery('english', ${search.tsquery})) > 0 and ${and(...perWord)})`;
+}
 
 /** Every condition for the query, optionally leaving one facet's own selection out (for its counts). */
 function conditions(query: ResultsQuery, search: SearchQuery | undefined, without?: FacetKey): SQL[] {

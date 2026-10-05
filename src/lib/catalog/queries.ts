@@ -15,7 +15,6 @@ import type { Category, Product } from "./types";
 // refresh has run, or at once after updateTag("catalog") in a Server Action.
 // queries-cache.test.ts checks that every exported read keeps its three cache lines.
 
-
 function selectProducts() {
   return db.select(productColumns).from(products).innerJoin(categories, eq(products.categoryId, categories.id));
 }

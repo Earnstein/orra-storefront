@@ -4,7 +4,11 @@ import { buildSearchQuery, MAX_QUERY_LENGTH } from "./search";
 
 describe("buildSearchQuery", () => {
   it("joins words with AND and matches the last word as a prefix", () => {
-    expect(buildSearchQuery("leather tote")).toEqual({ tsquery: "leather & tote:*", text: "leather tote" });
+    expect(buildSearchQuery("leather tote")).toEqual({
+      tsquery: "leather & tote:*",
+      text: "leather tote",
+      words: ["leather", "tote"],
+    });
     expect(buildSearchQuery("  Lea ")?.tsquery).toBe("lea:*");
   });
 

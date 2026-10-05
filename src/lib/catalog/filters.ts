@@ -1,6 +1,10 @@
 import type { ColourFamily, Material } from "@/db/schema/catalog";
 import type { CollectionScope } from "./collections";
-import { MAX_QUERY_LENGTH } from "./search";
+import { buildSearchQuery } from "./search";
+import { COLOUR_FAMILIES, MATERIALS } from "./vocabulary";
+
+/** Highest page a request can ask for (2,400 products); keeps a hand-edited URL from fetching everything. */
+export const MAX_PAGE = 100;
 
 // What a results request can ask for, and the rules that keep equal requests equal (so they share
 // one cache entry) and drop what a page doesn't offer.
@@ -73,26 +77,48 @@ const PRICE_ORDER = PRICE_BANDS.map((band) => band.value);
 const sorted = <T extends string>(values: T[], order?: readonly T[]) =>
   [...new Set(values)].sort((a, b) => (order ? order.indexOf(a) - order.indexOf(b) : a.localeCompare(b)));
 
-/** The canonical form of a query: what getResults caches on. Idempotent. */
+const within = <T extends string>(values: readonly string[], vocabulary: readonly T[]) =>
+  values.filter((value): value is T => (vocabulary as readonly string[]).includes(value));
+
+/** The scope rebuilt from its own fields only, so callers' key order and extras don't matter. */
+function canonicalScope(scope: ResultsScope): ResultsScope {
+  switch (scope.kind) {
+    case "search":
+      return { kind: "search", q: buildSearchQuery(scope.q)?.text ?? "" };
+    case "new":
+      return { kind: "new", limit: scope.limit };
+    case "audience":
+      return { kind: "audience", audience: scope.audience };
+    case "category":
+      return { kind: "category", categorySlug: scope.categorySlug };
+  }
+}
+
+/**
+ * The canonical form of a query: what getResults caches on. Drops values outside each filter's
+ * vocabulary and filters the page hides, reduces search text to its words, keeps a tab only where
+ * tabs exist (New, Women, Men), and clamps the page to 1…MAX_PAGE. Idempotent.
+ */
 export function normaliseQuery(query: ResultsQuery): ResultsQuery {
-  const hidden = new Set(hiddenFacets(query.scope));
+  const scope = canonicalScope(query.scope);
+  const hidden = new Set(hiddenFacets(scope));
   const { filters } = query;
-  const scope =
-    query.scope.kind === "search" ? { kind: "search" as const, q: query.scope.q.trim().slice(0, MAX_QUERY_LENGTH) } : query.scope;
+  const hasTabs = scope.kind === "new" || scope.kind === "audience";
+  const page = Number.isFinite(query.page) ? Math.floor(query.page) : 1;
   return {
     scope,
-    ...(query.tab === undefined ? {} : { tab: query.tab }),
+    ...(hasTabs && query.tab !== undefined ? { tab: query.tab } : {}),
     filters: {
       category: hidden.has("category") ? [] : sorted(filters.category),
-      audience: hidden.has("audience") ? [] : sorted(filters.audience),
-      colour: sorted(filters.colour),
-      material: sorted(filters.material),
-      price: sorted(filters.price, PRICE_ORDER),
-      stock: filters.stock,
-      newIn: hidden.has("newIn") ? false : filters.newIn,
+      audience: hidden.has("audience") ? [] : sorted(within(filters.audience, ["women", "men"] as const)),
+      colour: sorted(within(filters.colour, COLOUR_FAMILIES)),
+      material: sorted(within(filters.material, MATERIALS)),
+      price: sorted(within(filters.price, PRICE_ORDER), PRICE_ORDER),
+      stock: filters.stock === true,
+      newIn: hidden.has("newIn") ? false : filters.newIn === true,
     },
     sort: sortsFor(scope).includes(query.sort) ? query.sort : defaultSort(scope),
-    page: Math.max(1, Math.floor(query.page) || 1),
+    page: Math.min(MAX_PAGE, Math.max(1, page)),
   };
 }
 

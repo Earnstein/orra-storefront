@@ -5,6 +5,7 @@ import {
   defaultSort,
   emptyFilters,
   hiddenFacets,
+  MAX_PAGE,
   normaliseQuery,
   optionState,
   PRICE_BANDS,
@@ -70,15 +71,46 @@ describe("normaliseQuery", () => {
     expect(normal.sort).toBe("newest");
   });
 
-  it("clamps the page to a positive whole number", () => {
+  it("clamps the page to a whole number between 1 and MAX_PAGE", () => {
     expect(normaliseQuery(query({ page: -3 })).page).toBe(1);
     expect(normaliseQuery(query({ page: 0 })).page).toBe(1);
     expect(normaliseQuery(query({ page: 2.7 })).page).toBe(2);
+    expect(normaliseQuery(query({ page: 1e20 })).page).toBe(MAX_PAGE);
+    expect(normaliseQuery(query({ page: Infinity })).page).toBe(1);
+    expect(normaliseQuery(query({ page: Number.NaN })).page).toBe(1);
   });
 
-  it("trims and caps the search text", () => {
+  it("drops values outside each filter's vocabulary", () => {
+    const loose = query({
+      filters: {
+        colour: ["black", "purplish"] as Filters["colour"],
+        material: ["wool", "plastic"] as Filters["material"],
+        price: ["cheap", "under-500"] as Filters["price"],
+      },
+      scope: { kind: "search", q: "x" },
+      sort: "relevance",
+    });
+    (loose.filters.audience as string[]).push("kids", "women");
+    expect(normaliseQuery(loose).filters).toMatchObject({
+      colour: ["black"],
+      material: ["wool"],
+      price: ["under-500"],
+      audience: ["women"],
+    });
+  });
+
+  it("builds the cache key from fixed fields only", () => {
+    const messy = { ...query({ scope: { categorySlug: "bags", kind: "category", extra: 1 } as unknown as ResultsScope, tab: "shoes" }) };
+    expect(normaliseQuery(messy)).toEqual(normaliseQuery(query({ scope: bags })));
+    expect(normaliseQuery(query({ scope: women, tab: "bags" })).tab).toBe("bags"); // tabs only exist on New, Women and Men
+    const variants = ["Tote", "tote", " tote! "].map((q) => normaliseQuery(query({ scope: { kind: "search", q }, sort: "relevance" })).scope);
+    expect(new Set(variants.map((scope) => JSON.stringify(scope))).size).toBe(1);
+  });
+
+  it("reduces the search text to its words, capped at 100 characters", () => {
     const normal = normaliseQuery(query({ scope: { kind: "search", q: `  ${"x".repeat(150)}  ` }, sort: "relevance" }));
     expect(normal.scope).toEqual({ kind: "search", q: "x".repeat(100) });
+    expect(normaliseQuery(query({ scope: { kind: "search", q: "&|!" }, sort: "relevance" })).scope).toEqual({ kind: "search", q: "" });
   });
 
   it("is idempotent", () => {
