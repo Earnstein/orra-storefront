@@ -11,7 +11,8 @@ const sectionVariants = cva("w-full", {
     tone: {
       default: "bg-background text-foreground",
       surface: "bg-surface text-surface-foreground",
-      inverse: "bg-inverse text-inverse-foreground",
+      // --ring is the focus outline colour; it would match the band, so it flips with the text.
+      inverse: "bg-inverse text-inverse-foreground [--ring:var(--inverse-foreground)]",
     },
   },
   defaultVariants: { spacing: "default", tone: "default" },
