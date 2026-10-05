@@ -82,15 +82,16 @@ test("keyboard focus is visible on inverse bands", async ({ page }) => {
   }
 });
 
-test("no horizontal overflow", async ({ page }) => {
-  // The project's own viewport, then the narrowest phone we support (the mobile project is 412 wide).
-  for (const width of [page.viewportSize()!.width, 375]) {
-    await page.setViewportSize({ width, height: 812 });
-    for (const path of ["/", "/products/double-monk-shoe", "/collections/new", "/stories", "/stories/knitwear", "/women", "/men", "/does-not-exist"]) {
+// One test per page, so each has its own timeout and they run in parallel.
+for (const path of ["/", "/products/double-monk-shoe", "/collections/new", "/stories", "/stories/knitwear", "/women", "/men", "/does-not-exist"]) {
+  test(`no horizontal overflow on ${path}`, async ({ page }) => {
+    // The project's own viewport, then the narrowest phone we support (the mobile project is 412 wide).
+    for (const width of [page.viewportSize()!.width, 375]) {
+      await page.setViewportSize({ width, height: 812 });
       await page.goto(path);
       // clientWidth excludes a vertical scrollbar, unlike innerWidth, so a scrollbar can't hide an overflow.
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(overflow, `${path} at ${width}px`).toBe(0);
     }
-  }
-});
+  });
+}
