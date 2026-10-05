@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { products as seedProducts } from "@/db/seed/catalog";
 import { emptyFilters, type Filters, type ResultsQuery, type ResultsScope } from "./filters";
-import { getResults, RESULTS_PAGE_SIZE, type Results } from "./results";
+import { getResults, getResultsPage, RESULTS_PAGE_SIZE, type Results } from "./results";
 
 // Real migrations and the real seed, in an in-memory Postgres.
 vi.mock("@/db", async () => ({ db: await (await import("@/test/db")).createTestDb() }));
@@ -138,5 +138,17 @@ describe("getResults", () => {
   it("never errors on an out-of-range page", async () => {
     await expect(getResults(q({ page: 1e20 }))).resolves.toMatchObject({ page: 1 });
     await expect(getResults(q({ page: Infinity }))).resolves.toMatchObject({ page: 1 });
+  });
+});
+
+describe("results payload", () => {
+  it("carries only what a product card shows: no descriptions, details or gallery", async () => {
+    const results = await getResults(q({ scope: newScope }));
+    const page = await getResultsPage(q({ scope: { kind: "new", limit: 1000 }, page: 2 }));
+    for (const product of [...results.products, ...page.products]) {
+      expect(Object.keys(product).toSorted()).toEqual(["images", "name", "price", "slug", "stock"]);
+      expect(product.images).toEqual([seed(product.slug).images[0]]);
+    }
+    expect(page.products.length).toBeGreaterThan(0);
   });
 });

@@ -15,9 +15,9 @@ import {
   type ResultsQuery,
 } from "./filters";
 import { NEW_ARRIVALS_PAGE_LIMIT } from "./merchandising";
-import { productColumns } from "./product-columns";
+import { productSummaryColumns } from "./product-columns";
 import { buildSearchQuery } from "./search";
-import type { Product } from "./types";
+import type { ProductSummary } from "./types";
 
 // Listing and search results. getResults restores the first pages (up to MAX_RESTORE_PAGES) with
 // the total and a count for every filter option; getResultsPage returns one later page on its own,
@@ -29,7 +29,7 @@ export type Facet = { value: string; label: string; count: number };
 
 export type Results = {
   /** The first `page` × 24 products, so a reload restores what Load more had shown. */
-  products: Product[];
+  products: ProductSummary[];
   total: number;
   /** The last page included: the one asked for, capped at MAX_RESTORE_PAGES and the page count. */
   page: number;
@@ -66,7 +66,7 @@ async function cachedPage(query: ResultsQuery): Promise<ResultsPage> {
   if (query.scope.kind === "search" && !search) return { products: [], page: query.page };
 
   const rows = await db
-    .select(productColumns)
+    .select(productSummaryColumns)
     .from(products)
     .innerJoin(categories, eq(products.categoryId, categories.id))
     .where(and(...conditions(query, search)))
@@ -88,7 +88,7 @@ async function cachedResults(query: ResultsQuery): Promise<Results> {
   const visible = FACET_KEYS.filter((key) => !hidden.has(key));
   const [rows, facetRows] = await Promise.all([
     db
-      .select({ ...productColumns, total: sql<number>`count(*) over ()`.mapWith(Number) })
+      .select({ ...productSummaryColumns, total: sql<number>`count(*) over ()`.mapWith(Number) })
       .from(products)
       .innerJoin(categories, eq(products.categoryId, categories.id))
       .where(and(...conditions(query, search)))
@@ -101,7 +101,7 @@ async function cachedResults(query: ResultsQuery): Promise<Results> {
   const pageCount = Math.max(1, Math.ceil(total / RESULTS_PAGE_SIZE));
   const page = Math.min(query.page, pageCount);
   return {
-    products: rows.slice(0, page * RESULTS_PAGE_SIZE).map(toProduct),
+    products: rows.slice(0, page * RESULTS_PAGE_SIZE).map(toSummary),
     total,
     page,
     pageCount,
@@ -113,9 +113,8 @@ type SearchQuery = { tsquery: string; text: string; words: string[] };
 
 
 /** Drops the window-count column a results row carries. */
-function toProduct(row: Product & { total: number }): Product {
-  const { slug, name, category, price, colour, description, details, stock, images } = row;
-  return { slug, name, category, price, colour, description, details, stock, images };
+function toSummary({ slug, name, price, stock, images }: ProductSummary & { total: number }): ProductSummary {
+  return { slug, name, price, stock, images };
 }
 
 /** Products among the newest N (New arrivals, and the "New in" filter). */

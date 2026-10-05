@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { Media } from "@/components/primitives";
 import { formatPrice } from "@/lib/format";
-import type { Product } from "@/lib/catalog/types";
+import type { ProductSummary } from "@/lib/catalog/types";
 import { stockStatus } from "@/lib/catalog/stock";
 
 /** `sizes` for tiles in a Grid layout="products" (2 → 3 at md → 4 at xl columns). */
@@ -18,7 +18,7 @@ export function ProductCard({
   sizes = PRODUCT_GRID_SIZES,
   eager = false,
 }: {
-  product: Product;
+  product: ProductSummary;
   sizes?: string;
   eager?: boolean;
 }) {
