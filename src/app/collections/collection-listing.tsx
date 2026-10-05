@@ -1,0 +1,70 @@
+import { notFound } from "next/navigation";
+
+import { TextLink } from "@/components/primitives";
+import { ProductListing } from "@/components/product/product-listing";
+import { resolveCollection } from "@/lib/catalog/collections";
+import { getCategories, getCollectionProducts } from "@/lib/catalog/queries";
+import type { Category, Product } from "@/lib/catalog/types";
+
+export function collectionPath(collectionSlug: string, categorySlug?: string) {
+  return categorySlug ? `/collections/${collectionSlug}/${categorySlug}` : `/collections/${collectionSlug}`;
+}
+
+/** The categories that products fall into, in category order: a collection's tabs. */
+export function presentCategories(products: Product[], categories: Category[]): Category[] {
+  const present = new Set(products.map((product) => product.category.slug));
+  return categories.filter((category) => present.has(category.slug));
+}
+
+/**
+ * A collection listing, optionally narrowed to one category tab. 404s for an unknown collection or
+ * category, or a tab under a collection that has none; a known category with no products in this
+ * collection shows the empty state.
+ */
+export async function CollectionListing({ collectionSlug, categorySlug }: { collectionSlug: string; categorySlug?: string }) {
+  const categories = await getCategories();
+  const collection = resolveCollection(collectionSlug, categories);
+  if (!collection) notFound();
+  const category = categorySlug === undefined ? undefined : categories.find((candidate) => candidate.slug === categorySlug);
+  if (categorySlug !== undefined && (!collection.hasTabs || !category)) notFound();
+
+  const products = await getCollectionProducts(collection.scope);
+  const shown = category ? products.filter((product) => product.category.slug === category.slug) : products;
+  const tabs = collection.hasTabs
+    ? [
+        { label: "All", href: collectionPath(collection.slug), current: !category },
+        ...presentCategories(products, categories).map((present) => ({
+          label: present.name,
+          href: collectionPath(collection.slug, present.slug),
+          current: present.slug === category?.slug,
+        })),
+      ]
+    : undefined;
+
+  return (
+    <ProductListing
+      breadcrumbs={[
+        { label: "Home", href: "/" },
+        ...(category
+          ? [{ label: collection.title, href: collectionPath(collection.slug) }, { label: category.name }]
+          : [{ label: collection.title }]),
+      ]}
+      eyebrow={category ? collection.title : undefined}
+      title={category ? category.name : collection.title}
+      description={category ? undefined : collection.description}
+      tabs={tabs}
+      sortLabel="Newest first"
+      products={shown}
+      empty={
+        <>
+          <p className="text-title font-normal">
+            {category ? `Nothing in ${category.name.toLowerCase()} here right now.` : "Nothing here right now."}
+          </p>
+          <TextLink href={category ? collectionPath(collection.slug) : "/"} label>
+            {category ? `Back to ${collection.title}` : "Back to the homepage"}
+          </TextLink>
+        </>
+      }
+    />
+  );
+}

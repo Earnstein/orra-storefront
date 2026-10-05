@@ -1,16 +1,56 @@
+import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 
+import { db } from "@/db";
+import { categories } from "@/db/schema";
+import { products as seedProducts, type SeedProduct } from "@/db/seed/catalog";
 import {
   getAllProductSlugs,
   getCategories,
+  getCollectionProducts,
   getNewArrivals,
   getProduct,
   getRelatedProducts,
   getSpotlightProduct,
 } from "./queries";
+import type { Product } from "./types";
 
 // Real migrations and the real seed, in an in-memory Postgres.
 vi.mock("@/db", async () => ({ db: await (await import("@/test/db")).createTestDb() }));
+
+const slugs = (products: Product[]) => products.map((product) => product.slug);
+/** Seed slugs in seed order, which is newest first. */
+const seedSlugs = (keep: (product: SeedProduct) => boolean) => seedProducts.filter(keep).map((product) => product.slug);
+
+describe("getCollectionProducts", () => {
+  it("lists an audience together with unisex products, newest first", async () => {
+    expect(slugs(await getCollectionProducts({ kind: "audience", audience: "women" }))).toEqual(
+      seedSlugs((product) => product.audience !== "men"),
+    );
+    expect(slugs(await getCollectionProducts({ kind: "audience", audience: "men" }))).toEqual(
+      seedSlugs((product) => product.audience !== "women"),
+    );
+  });
+
+  it("lists one category, newest first", async () => {
+    expect(slugs(await getCollectionProducts({ kind: "category", categorySlug: "bags" }))).toEqual(
+      seedSlugs((product) => product.category === "bags"),
+    );
+  });
+
+  it("limits New to the newest N", async () => {
+    expect(slugs(await getCollectionProducts({ kind: "new", limit: 3 }))).toEqual(seedSlugs(() => true).slice(0, 3));
+  });
+
+  it("returns nothing for a category that has no products", async () => {
+    await db.insert(categories).values({ slug: "scarves", name: "Scarves" });
+    try {
+      expect(await getCollectionProducts({ kind: "category", categorySlug: "scarves" })).toEqual([]);
+    } finally {
+      await db.delete(categories).where(eq(categories.slug, "scarves"));
+    }
+  });
+});
 
 describe("catalogue queries", () => {
   it("lists every product slug", async () => {
@@ -67,6 +107,9 @@ describe("catalogue queries", () => {
   });
 
   it("lists categories in creation order", async () => {
+    // An update writes a new row version at the end of the table, so without an ORDER BY "bags"
+    // would come back last.
+    await db.update(categories).set({ name: "Bags" }).where(eq(categories.slug, "bags"));
     expect((await getCategories()).map((c) => c.slug)).toEqual([
       "bags",
       "shoes",

@@ -20,8 +20,8 @@ export function FeaturedCollections() {
           const tall = index === 0;
           return (
             <Link
-              key={collection.slug}
-              href={`/collections/${collection.slug}`}
+              key={collection.href}
+              href={collection.href}
               className={cn("group relative block", tall && "md:row-span-2")}
             >
               <Media ratio={tall ? "portrait" : "landscape"} className={cn(tall && "md:aspect-auto md:h-full")}>

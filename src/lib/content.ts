@@ -12,10 +12,39 @@ function unsplash(id: string) {
   return `https://images.unsplash.com/photo-${id}`;
 }
 
-export type Collection = {
-  slug: string;
+/** A homepage tile that links into a collection listing. */
+export type FeaturedCollection = {
+  href: string;
   name: string;
   image: CatalogImage;
+};
+
+/**
+ * Collection listing copy (see src/lib/catalog/collections.ts): titles and one-line descriptions
+ * for the built-in collections, and a description per category. Category titles come from the
+ * database.
+ */
+export const collectionCopy = {
+  new: {
+    title: "New arrivals",
+    description:
+      "The latest pieces from the workshop, from leather bags to ready-to-wear. New runs land here first.",
+  },
+  women: {
+    title: "Women",
+    description: "Bags, shoes, jewellery and ready-to-wear for women, alongside our unisex pieces.",
+  },
+  men: {
+    title: "Men",
+    description: "Shoes, bags, accessories and ready-to-wear for men, alongside our unisex pieces.",
+  },
+  categories: {
+    bags: "Totes and top-handles in calf leather, cut to soften and darken with use.",
+    shoes: "Pumps, loafers and lace-ups, made on lasts we have refined over many seasons.",
+    accessories: "Sunglasses, belts and small leather goods to finish the look.",
+    jewellery: "Hoops, chains and rings in recycled gold and silver.",
+    "ready-to-wear": "Outerwear and knitwear, made to layer through the season.",
+  } as Record<string, string | undefined>,
 };
 
 export type HeroSlide = {
@@ -57,9 +86,9 @@ export const heroSlides: HeroSlide[] = [
   },
 ];
 
-export const featuredCollections: Collection[] = [
+export const featuredCollections: FeaturedCollection[] = [
   {
-    slug: "women",
+    href: "/collections/women/ready-to-wear",
     name: "Women's outerwear",
     image: {
       src: unsplash("1539109136881-3be0616acf4b"),
@@ -67,7 +96,7 @@ export const featuredCollections: Collection[] = [
     },
   },
   {
-    slug: "men",
+    href: "/collections/men/ready-to-wear",
     name: "Tailoring",
     image: {
       src: unsplash("1507679799987-c73779587ccf"),
@@ -75,7 +104,7 @@ export const featuredCollections: Collection[] = [
     },
   },
   {
-    slug: "shoes",
+    href: "/collections/shoes",
     name: "Leather shoes",
     image: {
       src: unsplash("1614252235316-8c857d38b5f4"),
