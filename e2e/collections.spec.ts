@@ -10,14 +10,14 @@ const productLinks = (page: Page) => page.getByRole("main").locator('a[href^="/p
 
 for (const link of primaryNav) {
   test(`nav: ${link.label} opens a page with products`, async ({ page }) => {
-    expect((await page.goto(link.href))?.status()).toBe(200);
+    expect((await page.goto(link.href, { waitUntil: "domcontentloaded" }))?.status()).toBe(200);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(productLinks(page).first()).toBeVisible();
   });
 }
 
 test("product breadcrumbs link to a working category page", async ({ page }) => {
-  await page.goto("/products/double-monk-shoe");
+  await page.goto("/products/double-monk-shoe", { waitUntil: "domcontentloaded" });
   await page.getByRole("navigation", { name: "breadcrumb" }).getByRole("link", { name: "Shoes", exact: true }).click();
   await expect(page).toHaveURL(/\/collections\/shoes$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Shoes");
@@ -25,13 +25,26 @@ test("product breadcrumbs link to a working category page", async ({ page }) => 
 
 test("Women and Men include unisex products", async ({ page }) => {
   for (const path of ["/collections/women", "/collections/men"]) {
-    await page.goto(path);
+    await page.goto(path, { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("main").locator('a[href="/products/round-sunglasses"]'), path).toBeVisible();
   }
 });
 
+test("a tab's breadcrumb leads to the audience landing page", async ({ page }) => {
+  for (const audience of ["women", "men"] as const) {
+    await page.goto(`/collections/${audience}/bags`, { waitUntil: "domcontentloaded" });
+    const crumbs = page.getByRole("navigation", { name: "breadcrumb" });
+    await expect(crumbs.getByRole("link", { name: audience === "women" ? "Women" : "Men" })).toHaveAttribute("href", `/${audience}`);
+  }
+  await page.goto("/collections/new/bags", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("navigation", { name: "breadcrumb" }).getByRole("link", { name: "New arrivals" })).toHaveAttribute(
+    "href",
+    "/collections/new",
+  );
+});
+
 test("a tab narrows the listing", async ({ page }) => {
-  await page.goto("/collections/women");
+  await page.goto("/collections/women", { waitUntil: "domcontentloaded" });
   await page.getByRole("navigation", { name: "Categories" }).getByRole("link", { name: "Bags", exact: true }).click();
   await expect(page).toHaveURL(/\/collections\/women\/bags$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Bags");
@@ -46,7 +59,7 @@ test("a tab narrows the listing", async ({ page }) => {
 
 test("unknown collection paths 404", async ({ page }) => {
   for (const path of ["/collections/does-not-exist", "/collections/women/does-not-exist", "/collections/bags/shoes"]) {
-    expect((await page.goto(path))?.status(), path).toBe(404);
+    expect((await page.goto(path, { waitUntil: "domcontentloaded" }))?.status(), path).toBe(404);
   }
 });
 
@@ -59,7 +72,7 @@ test("a known category with no products in a collection shows the empty state", 
   )[0];
   test.skip(!empty, "every category has products for both audiences");
 
-  const response = await page.goto(`/collections/${empty.audience}/${empty.category.slug}`);
+  const response = await page.goto(`/collections/${empty.audience}/${empty.category.slug}`, { waitUntil: "domcontentloaded" });
   expect(response?.status()).toBe(200);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(empty.category.name);
   await expect(page.getByText(`Nothing in ${empty.category.name.toLowerCase()} here right now.`)).toBeVisible();
@@ -70,7 +83,7 @@ test("collection pages don't scroll sideways", async ({ page }) => {
   for (const width of [page.viewportSize()!.width, 375]) {
     await page.setViewportSize({ width, height: 812 });
     for (const path of ["/collections/women", "/collections/women/bags", "/collections/bags", "/collections/men/jewellery"]) {
-      await page.goto(path);
+      await page.goto(path, { waitUntil: "domcontentloaded" });
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(overflow, `${path} at ${width}px`).toBe(0);
     }
@@ -78,7 +91,7 @@ test("collection pages don't scroll sideways", async ({ page }) => {
 });
 
 test("homepage featured collections resolve", async ({ page, request }) => {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   const section = page.locator("section", { has: page.getByRole("heading", { name: "Shop the collections" }) });
   const hrefs = await section.locator("a").evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? ""));
   expect(hrefs).toEqual(["/collections/women/ready-to-wear", "/collections/men/ready-to-wear", "/collections/shoes"]);

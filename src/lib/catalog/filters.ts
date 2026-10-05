@@ -3,13 +3,30 @@ import type { CollectionScope } from "./collections";
 import { buildSearchQuery } from "./search";
 import { COLOUR_FAMILIES, MATERIALS } from "./vocabulary";
 
-/** Highest page a request can ask for (2,400 products); keeps a hand-edited URL from fetching everything. */
+/** Products per page of results. */
+export const RESULTS_PAGE_SIZE = 24;
+
+/** Highest page Load more can reach (2,400 products); keeps a hand-edited URL in bounds. */
 export const MAX_PAGE = 100;
+
+/**
+ * How many pages a single read restores (240 products): a reload or a first visit with ?page=N
+ * shows at most this many, and Load more fetches each later page on its own.
+ */
+export const MAX_RESTORE_PAGES = 10;
 
 // What a results request can ask for, and the rules that keep equal requests equal (so they share
 // one cache entry) and drop what a page doesn't offer.
 
-export type Sort = "newest" | "price-asc" | "price-desc" | "relevance";
+export const SORTS = ["newest", "price-asc", "price-desc", "relevance"] as const;
+export type Sort = (typeof SORTS)[number];
+
+export const SORT_LABELS: Record<Sort, string> = {
+  newest: "Newest",
+  "price-asc": "Price: low to high",
+  "price-desc": "Price: high to low",
+  relevance: "Relevance",
+};
 
 export const PRICE_BANDS = [
   { value: "under-500", label: "Under $500", min: 0, max: 49_999 },
@@ -74,8 +91,11 @@ export function defaultSort(scope: ResultsScope): Sort {
 }
 
 const PRICE_ORDER = PRICE_BANDS.map((band) => band.value);
+// Code-point order, not localeCompare: the server and the browser must build the same query key
+// whatever their locales.
+const byCodePoint = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const sorted = <T extends string>(values: T[], order?: readonly T[]) =>
-  [...new Set(values)].sort((a, b) => (order ? order.indexOf(a) - order.indexOf(b) : a.localeCompare(b)));
+  [...new Set(values)].sort((a, b) => (order ? order.indexOf(a) - order.indexOf(b) : byCodePoint(a, b)));
 
 const within = <T extends string>(values: readonly string[], vocabulary: readonly T[]) =>
   values.filter((value): value is T => (vocabulary as readonly string[]).includes(value));
@@ -133,6 +153,26 @@ export function activeFilterCount(filters: Filters): number {
     Number(filters.stock) +
     Number(filters.newIn)
   );
+}
+
+/** One selected filter value; switches use their URL value ("in", "1"). */
+export type ActiveFilter = { key: FacetKey; value: string };
+
+const LIST_KEYS = ["category", "audience", "colour", "material", "price"] as const;
+
+/** Every selected value, in filter order with the switches last: one chip each. */
+export function activeFilters(filters: Filters): ActiveFilter[] {
+  return [
+    ...LIST_KEYS.flatMap((key) => filters[key].map((value) => ({ key, value }))),
+    ...(filters.stock ? [{ key: "stock" as const, value: "in" }] : []),
+    ...(filters.newIn ? [{ key: "newIn" as const, value: "1" }] : []),
+  ];
+}
+
+/** The filters with one value removed (or one switch turned off). */
+export function withoutFilter(filters: Filters, { key, value }: ActiveFilter): Filters {
+  if (key === "stock" || key === "newIn") return { ...filters, [key]: false };
+  return { ...filters, [key]: (filters[key] as string[]).filter((selected) => selected !== value) };
 }
 
 /** A filter option with no results is disabled, unless it's selected (so it can be removed). */

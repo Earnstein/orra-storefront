@@ -28,6 +28,6 @@ export async function generateMetadata({ params }: PageProps<"/collections/[coll
 }
 
 /** Renders the requested collection, delegating slug validation and data loading to CollectionListing. */
-export default async function CollectionPage({ params }: PageProps<"/collections/[collection]">) {
-  return <CollectionListing collectionSlug={(await params).collection} />;
+export default async function CollectionPage({ params, searchParams }: PageProps<"/collections/[collection]">) {
+  return <CollectionListing collectionSlug={(await params).collection} searchParams={searchParams} />;
 }

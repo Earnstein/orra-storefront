@@ -21,3 +21,9 @@ export type Product = {
   /** First image is the primary shot used on product cards. */
   images: CatalogImage[];
 };
+
+/**
+ * What a product card shows: listing and search results carry only this, so their payloads (and
+ * each listing page's embedded data) stay small. `images` holds just the card image.
+ */
+export type ProductSummary = Pick<Product, "slug" | "name" | "price" | "stock" | "images">;

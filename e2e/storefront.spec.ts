@@ -16,7 +16,7 @@ async function tabTo(page: Page, target: Locator) {
 }
 
 test("home shows the newest products", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   const section = page.locator("section", { has: page.getByRole("heading", { name: "New this season" }) });
   const tiles = section.locator('a[href^="/products/"]');
   await expect(tiles).toHaveCount(8);
@@ -24,7 +24,7 @@ test("home shows the newest products", async ({ page }) => {
 });
 
 test("product page shows price and stock", async ({ page }) => {
-  await page.goto("/products/double-monk-shoe");
+  await page.goto("/products/double-monk-shoe", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Double-monk shoe");
   await expect(page.getByText("$790").first()).toBeVisible();
   await expect(page.getByText(/^(In stock|Only \d+ left|Sold out)$/).first()).toBeVisible();
@@ -32,7 +32,7 @@ test("product page shows price and stock", async ({ page }) => {
 });
 
 test("new arrivals filter by category", async ({ page }) => {
-  await page.goto("/collections/new");
+  await page.goto("/collections/new", { waitUntil: "domcontentloaded" });
   const tabs = page.getByRole("navigation", { name: "Categories" });
   await expect(tabs.getByRole("link", { name: "All", exact: true })).toHaveAttribute("aria-current", "page");
   await tabs.getByRole("link", { name: "Shoes", exact: true }).click();
@@ -53,13 +53,13 @@ test("new arrivals filter by category", async ({ page }) => {
 });
 
 test("unknown pages return 404", async ({ page }) => {
-  expect((await page.goto("/products/does-not-exist"))?.status()).toBe(404);
-  expect((await page.goto("/collections/new/does-not-exist"))?.status()).toBe(404);
+  expect((await page.goto("/products/does-not-exist", { waitUntil: "domcontentloaded" }))?.status()).toBe(404);
+  expect((await page.goto("/collections/new/does-not-exist", { waitUntil: "domcontentloaded" }))?.status()).toBe(404);
 });
 
 test("unknown pages show the styled 404", async ({ page }) => {
   for (const path of ["/does-not-exist", "/products/does-not-exist"]) {
-    expect((await page.goto(path))?.status(), path).toBe(404);
+    expect((await page.goto(path, { waitUntil: "domcontentloaded" }))?.status(), path).toBe(404);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Page not found");
     const main = page.getByRole("main");
     await expect(main.getByRole("link", { name: "New in" })).toHaveAttribute("href", "/collections/new");
@@ -68,7 +68,7 @@ test("unknown pages show the styled 404", async ({ page }) => {
 });
 
 test("keyboard focus is visible on inverse bands", async ({ page }) => {
-  await page.goto("/does-not-exist");
+  await page.goto("/does-not-exist", { waitUntil: "domcontentloaded" });
   const targets = [
     page.getByRole("main").getByRole("link", { name: "New in" }), // the 404 band
     page.getByRole("contentinfo").getByRole("link", { name: "Contact us" }), // the footer
@@ -89,7 +89,7 @@ for (const path of ["/", "/products/double-monk-shoe", "/collections/new", "/sto
     // The project's own viewport, then the narrowest phone we support (the mobile project is 412 wide).
     for (const width of [page.viewportSize()!.width, 375]) {
       await page.setViewportSize({ width, height: 812 });
-      await page.goto(path);
+      await page.goto(path, { waitUntil: "domcontentloaded" });
       // clientWidth excludes a vertical scrollbar, unlike innerWidth, so a scrollbar can't hide an overflow.
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(overflow, `${path} at ${width}px`).toBe(0);

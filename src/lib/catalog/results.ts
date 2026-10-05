@@ -4,34 +4,76 @@ import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 
 import { db } from "@/db";
 import { categories, colourFamily, material, products } from "@/db/schema";
-import { normaliseQuery, PRICE_BANDS, hiddenFacets, type FacetKey, type Filters, type ResultsQuery } from "./filters";
+import {
+  hiddenFacets,
+  MAX_RESTORE_PAGES,
+  normaliseQuery,
+  PRICE_BANDS,
+  RESULTS_PAGE_SIZE,
+  type FacetKey,
+  type Filters,
+  type ResultsQuery,
+} from "./filters";
 import { NEW_ARRIVALS_PAGE_LIMIT } from "./merchandising";
-import { productColumns } from "./product-columns";
+import { productSummaryColumns } from "./product-columns";
 import { buildSearchQuery } from "./search";
-import type { Product } from "./types";
+import type { ProductSummary } from "./types";
 
-// Listing and search results: one cached read returns a page of products, the total and a count
-// for every filter option. See the M3 spec, "Data and search".
+// Listing and search results. getResults restores the first pages (up to MAX_RESTORE_PAGES) with
+// the total and a count for every filter option; getResultsPage returns one later page on its own,
+// for Load more. Both are cached reads. See the M3 spec, "Data and search".
 
-export const RESULTS_PAGE_SIZE = 24;
+export { RESULTS_PAGE_SIZE };
 
 export type Facet = { value: string; label: string; count: number };
 
 export type Results = {
-  /** The first `page` × 24 products ("Load more" restores exactly). */
-  products: Product[];
+  /** The first `page` × 24 products, so a reload restores what Load more had shown. */
+  products: ProductSummary[];
   total: number;
+  /** The last page included: the one asked for, capped at MAX_RESTORE_PAGES and the page count. */
   page: number;
   pageCount: number;
   /** Options per filter; empty for filters the page hides. */
   facets: Record<FacetKey, Facet[]>;
 };
 
+/**
+ * One page of products on its own (Load more): page N holds products (N−1) × 24 to N × 24. The
+ * total and page count come from the restored results, so a page doesn't count every match.
+ */
+export type ResultsPage = Pick<Results, "products" | "page">;
+
 const FACET_KEYS: FacetKey[] = ["category", "audience", "colour", "material", "price", "stock", "newIn"];
 
 /** Normalises the query first, so equal requests share one cache entry. */
 export async function getResults(query: ResultsQuery): Promise<Results> {
-  return cachedResults(normaliseQuery(query));
+  const normalised = normaliseQuery(query);
+  return cachedResults({ ...normalised, page: Math.min(normalised.page, MAX_RESTORE_PAGES) });
+}
+
+/** Page `query.page` on its own; empty past the last page. */
+export async function getResultsPage(query: ResultsQuery): Promise<ResultsPage> {
+  return cachedPage(normaliseQuery(query));
+}
+
+async function cachedPage(query: ResultsQuery): Promise<ResultsPage> {
+  "use cache";
+  cacheTag("catalog");
+  cacheLife("catalog");
+
+  const search = query.scope.kind === "search" ? buildSearchQuery(query.scope.q) : undefined;
+  if (query.scope.kind === "search" && !search) return { products: [], page: query.page };
+
+  const rows = await db
+    .select(productSummaryColumns)
+    .from(products)
+    .innerJoin(categories, eq(products.categoryId, categories.id))
+    .where(and(...conditions(query, search)))
+    .orderBy(...ordering(query, search))
+    .limit(RESULTS_PAGE_SIZE)
+    .offset((query.page - 1) * RESULTS_PAGE_SIZE);
+  return { products: rows, page: query.page };
 }
 
 async function cachedResults(query: ResultsQuery): Promise<Results> {
@@ -46,7 +88,7 @@ async function cachedResults(query: ResultsQuery): Promise<Results> {
   const visible = FACET_KEYS.filter((key) => !hidden.has(key));
   const [rows, facetRows] = await Promise.all([
     db
-      .select({ ...productColumns, total: sql<number>`count(*) over ()`.mapWith(Number) })
+      .select({ ...productSummaryColumns, total: sql<number>`count(*) over ()`.mapWith(Number) })
       .from(products)
       .innerJoin(categories, eq(products.categoryId, categories.id))
       .where(and(...conditions(query, search)))
@@ -59,7 +101,7 @@ async function cachedResults(query: ResultsQuery): Promise<Results> {
   const pageCount = Math.max(1, Math.ceil(total / RESULTS_PAGE_SIZE));
   const page = Math.min(query.page, pageCount);
   return {
-    products: rows.slice(0, page * RESULTS_PAGE_SIZE).map(toProduct),
+    products: rows.slice(0, page * RESULTS_PAGE_SIZE).map(toSummary),
     total,
     page,
     pageCount,
@@ -69,10 +111,10 @@ async function cachedResults(query: ResultsQuery): Promise<Results> {
 
 type SearchQuery = { tsquery: string; text: string; words: string[] };
 
+
 /** Drops the window-count column a results row carries. */
-function toProduct(row: Product & { total: number }): Product {
-  const { slug, name, category, price, colour, description, details, stock, images } = row;
-  return { slug, name, category, price, colour, description, details, stock, images };
+function toSummary({ slug, name, price, stock, images }: ProductSummary & { total: number }): ProductSummary {
+  return { slug, name, price, stock, images };
 }
 
 /** Products among the newest N (New arrivals, and the "New in" filter). */
