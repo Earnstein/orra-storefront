@@ -2,8 +2,17 @@ import { count, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import { categories, products } from "@/db/schema";
+import { RESERVED_COLLECTION_SLUGS } from "@/lib/catalog/collections";
 import { createTestDb } from "@/test/db";
 import { seedCatalog } from ".";
+import { categories as seedCategories } from "./catalog";
+
+describe("seed categories", () => {
+  it("don't take a reserved collection slug (new, women, men)", () => {
+    const reserved: readonly string[] = RESERVED_COLLECTION_SLUGS;
+    expect(seedCategories.filter((category) => reserved.includes(category.slug))).toEqual([]);
+  });
+});
 
 describe("seedCatalog", () => {
   it("is idempotent", async () => {
