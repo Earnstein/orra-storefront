@@ -9,11 +9,13 @@ import { stockStatus } from "@/lib/catalog/stock";
 import { ogImage } from "@/lib/metadata";
 import { site } from "@/lib/site";
 
-// Product pages are generated at build time and regenerated at most every 5 minutes, so
-// stock and price edits show up without a deploy. Products added after the build render
-// on first request; unknown slugs 404.
-export const revalidate = 300;
-export const dynamicParams = true;
+// Product pages are prerendered from cached catalogue reads, so stock and price edits show up
+// within 5 minutes without a deploy. Products added after the build render on first request;
+// unknown slugs 404.
+
+// Params outside generateStaticParams (including unknown slugs) render on request and must block
+// rather than stream, so notFound() still returns a real 404 (streaming would send a 200 first).
+export const instant = false;
 
 export async function generateStaticParams() {
   return (await getAllProductSlugs()).map((slug) => ({ slug }));

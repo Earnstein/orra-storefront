@@ -9,6 +9,8 @@ export default defineConfig({
       "@": src,
       // The real package throws outside React Server Components; see src/test/server-only.ts.
       "server-only": `${src}/test/server-only.ts`,
+      // cacheTag/cacheLife throw outside a Next.js render; see src/test/next-cache.ts.
+      "next/cache": `${src}/test/next-cache.ts`,
     },
   },
   test: {

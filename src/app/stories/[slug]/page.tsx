@@ -6,11 +6,12 @@ import { StoryBlock } from "@/components/editorial/story-block";
 import { getStory, stories } from "@/content/stories";
 import { ogImage } from "@/lib/metadata";
 
-// Stories live in code, so every page is prerendered; the products they show refresh at most
-// every 5 minutes, like the rest of the catalogue. Unknown slugs 404 through notFound() rather
-// than dynamicParams = false, which logs an internal NoFallbackError for each one.
-export const revalidate = 300;
-export const dynamicParams = true;
+// Stories live in code, so every page is prerendered; the products they show come from cached
+// catalogue reads. Unknown slugs render on request and 404 through notFound().
+
+// Params outside generateStaticParams (including unknown slugs) render on request and must block
+// rather than stream, so notFound() still returns a real 404 (streaming would send a 200 first).
+export const instant = false;
 
 export function generateStaticParams() {
   return stories.map((story) => ({ slug: story.slug }));
