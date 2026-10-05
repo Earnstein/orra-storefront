@@ -9,14 +9,11 @@ import { Container } from "@/components/primitives";
 import { ProductCard } from "@/components/product/product-card";
 import { Button } from "@/components/ui/button";
 import { SheetClose, SheetTitle } from "@/components/ui/sheet";
-import { POPULAR_SEARCHES } from "@/content/search";
 import { stories } from "@/content/stories";
 import type { Suggestions } from "@/lib/catalog/suggest";
 import { cn } from "@/lib/utils";
+import { LinkGroup, PopularSearches, searchPath } from "./popular-searches";
 import { MIN_SUGGEST_LENGTH, useSuggestions } from "./use-suggestions";
-
-const searchPath = (q: string, category?: string) =>
-  `/search?${new URLSearchParams(category ? { q, category } : { q })}`;
 
 const resultsLabel = (total: number) => (total === 1 ? "1 result" : `${total} results`);
 
@@ -83,30 +80,6 @@ export function SearchPanel({ inputRef, onDone }: { inputRef: React.Ref<HTMLInpu
   );
 }
 
-function LinkGroup({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="flex flex-col gap-3">
-      <h2 className="eyebrow text-muted-foreground">{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-function PopularSearches() {
-  return (
-    <LinkGroup title="Popular searches">
-      <ul className="flex flex-col gap-2">
-        {POPULAR_SEARCHES.map((term) => (
-          <li key={term}>
-            <Link href={searchPath(term)} className="text-title link-quiet">
-              {term}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </LinkGroup>
-  );
-}
 
 /** Before typing: popular searches, new arrivals by audience, and the stories. */
 function StartLinks() {

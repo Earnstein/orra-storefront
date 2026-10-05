@@ -1,6 +1,6 @@
-import { dehydrate, HydrationBoundary, QueryClient } from "@tanstack/react-query";
+import { dehydrate, HydrationBoundary, QueryClient, type DehydratedState } from "@tanstack/react-query";
 
-import type { ResultsScope } from "@/lib/catalog/filters";
+import type { ResultsQuery, ResultsScope } from "@/lib/catalog/filters";
 import { getResults } from "@/lib/catalog/results";
 import { loadResultsParams, toResultsQuery } from "@/lib/catalog/search-params";
 import { ResultsView } from "./results-view";
@@ -24,12 +24,17 @@ export async function ResultsSection({
   empty: React.ReactNode;
 }) {
   const query = toResultsQuery(await loadResultsParams(searchParams), scope, tab);
-  const queryClient = new QueryClient();
-  queryClient.setQueryData(resultsQueryKey(query), initialResultsData(await getResults(query)));
 
   return (
-    <HydrationBoundary state={dehydrate(queryClient)}>
+    <HydrationBoundary state={await prefetchResults(query)}>
       <ResultsView scope={scope} tab={tab} empty={empty} />
     </HydrationBoundary>
   );
+}
+
+/** A query's results, read on the server and packed for a <HydrationBoundary>. */
+export async function prefetchResults(query: ResultsQuery): Promise<DehydratedState> {
+  const queryClient = new QueryClient();
+  queryClient.setQueryData(resultsQueryKey(query), initialResultsData(await getResults(query)));
+  return dehydrate(queryClient);
 }

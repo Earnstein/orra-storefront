@@ -23,6 +23,7 @@ import { FilterChips } from "./filter-chips";
 import { FilterSheet } from "./filter-sheet";
 import { ListingToolbar, type SheetSection } from "./listing-toolbar";
 import { LoadMore } from "./load-more";
+import { ResultsSkeleton } from "./results-skeleton";
 import { summaryOf, useResults, type ResultsData } from "./use-results";
 
 // Tiles in the first row at the widest layout (xl: 4 columns) load their images eagerly.
@@ -47,8 +48,21 @@ const CLEARED_FILTERS = { category: null, audience: null, colour: null, material
  * /api/products. The grid shows the URL's `page` × 24 of the products loaded so far. While a new
  * filter set loads, the current results stay on screen, dimmed.
  */
-export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: string; empty: React.ReactNode }) {
+export function ResultsView({
+  scope: routeScope,
+  tab,
+  empty,
+}: {
+  /** For search, only the kind matters: the text comes from the URL's `q`, which the page edits in place. */
+  scope: ResultsScope;
+  tab?: string;
+  empty: React.ReactNode;
+}) {
   const [params, setParams] = useQueryStates(resultsParsers);
+  const scope = useMemo<ResultsScope>(
+    () => (routeScope.kind === "search" ? { kind: "search", q: params.q } : routeScope),
+    [routeScope, params.q],
+  );
   const query = useMemo(() => toResultsQuery(params, scope, tab), [params, scope, tab]);
   const {
     data,
@@ -90,7 +104,7 @@ export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: 
     if (correctTo !== null) void setParams({ page: correctTo === 1 ? null : correctTo }, { history: "replace", scroll: false });
   }, [correctTo, setParams]);
 
-  if (!shownData) return null;
+  if (!shownData) return <ResultsSkeleton />;
 
   const results = summaryOf(shownData);
   const products = loaded.slice(0, shownPage * RESULTS_PAGE_SIZE);
