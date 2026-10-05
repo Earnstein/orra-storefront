@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { categories, products } from "@/db/schema";
 import type { CollectionScope } from "./collections";
 import { NEW_ARRIVALS_LIMIT, spotlightSlug } from "./merchandising";
+import { productColumns } from "./product-columns";
 import type { Category, Product } from "./types";
 
 // Catalogue reads. Components depend on these signatures and the Product type, not on the
@@ -14,17 +15,6 @@ import type { Category, Product } from "./types";
 // refresh has run, or at once after updateTag("catalog") in a Server Action.
 // queries-cache.test.ts checks that every exported read keeps its three cache lines.
 
-const productColumns = {
-  slug: products.slug,
-  name: products.name,
-  price: products.price,
-  colour: products.colour,
-  description: products.description,
-  details: products.details,
-  stock: products.stock,
-  images: products.images,
-  category: { slug: categories.slug, name: categories.name },
-};
 
 function selectProducts() {
   return db.select(productColumns).from(products).innerJoin(categories, eq(products.categoryId, categories.id));
