@@ -4,7 +4,9 @@ import { categories as seedCategories, products as seedProducts } from "../src/d
 import { primaryNav } from "../src/lib/site";
 
 // Expected product lists come from the seed, so growing the catalogue doesn't break these.
-const productLinks = (page: Page) => page.getByRole("main").locator('a[href^="/products/"]');
+// :visible because Cache Components keeps the previous route mounted but hidden (React <Activity>)
+// after a client-side navigation, so its links are still in the DOM.
+const productLinks = (page: Page) => page.getByRole("main").locator('a[href^="/products/"]:visible');
 
 for (const link of primaryNav) {
   test(`nav: ${link.label} opens a page with products`, async ({ page }) => {

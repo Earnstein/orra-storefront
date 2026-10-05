@@ -1,3 +1,5 @@
+import { cacheLife } from "next/cache";
+
 import { Container, Grid, TextLink } from "@/components/primitives";
 import { Separator } from "@/components/ui/separator";
 import { footerNav, site } from "@/lib/site";
@@ -39,11 +41,18 @@ export function SiteFooter() {
 
         <div className="flex flex-col gap-2 caption text-inverse-foreground/60 sm:flex-row sm:justify-between">
           <p>
-            © {new Date().getFullYear()} {site.name}
+            © <CopyrightYear /> {site.name}
           </p>
           <p>Prices in {site.currency}</p>
         </div>
       </Container>
     </footer>
   );
+}
+
+/** The current year, cached so prerendering doesn't read the clock. */
+async function CopyrightYear() {
+  "use cache";
+  cacheLife("days");
+  return new Date().getFullYear();
 }

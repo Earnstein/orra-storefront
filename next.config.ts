@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  cacheComponents: true,
+  // Catalogue reads (src/lib/catalog/queries.ts) are cached with this lifetime: served for up to
+  // 5 minutes, refreshed in the background after that.
+  cacheLife: {
+    catalog: { stale: 300, revalidate: 300, expire: 3600 },
+  },
   images: {
     // Unsplash URLs are resized by Unsplash's CDN; anything else uses Next's optimiser.
     loader: "custom",

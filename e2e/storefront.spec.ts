@@ -38,7 +38,8 @@ test("new arrivals filter by category", async ({ page }) => {
   await tabs.getByRole("link", { name: "Shoes", exact: true }).click();
   await expect(page).toHaveURL(/\/collections\/new\/shoes$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Shoes");
-  const tiles = page.getByRole("main").locator('a[href^="/products/"]');
+  // :visible because the previous route stays mounted but hidden after a client-side navigation.
+  const tiles = page.getByRole("main").locator('a[href^="/products/"]:visible');
   // The tab narrows the newest batch, so expect the shoes among the newest seed products — not all of them.
   const shoes = seedProducts.filter((product) => product.category === "shoes");
   const expected = seedProducts

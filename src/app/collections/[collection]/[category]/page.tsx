@@ -6,9 +6,7 @@ import { CollectionListing, presentCategories } from "../../collection-listing";
 
 // A collection narrowed to one category tab (New, Women and Men have tabs). Prerendered for the
 // tabs that have products at build time; other known categories render on first request (empty
-// state). Unknown categories, and tabs under a category page, 404. Refreshed at most every 5 minutes.
-export const revalidate = 300;
-export const dynamicParams = true;
+// state). Unknown categories, and tabs under a category page, 404.
 
 /**
  * Returns build-time paths for categories represented in New, Women, and Men.
