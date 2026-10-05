@@ -38,6 +38,14 @@ export async function getAllProductSlugs(): Promise<string[]> {
   return rows.map((row) => row.slug);
 }
 
+/** Products in the given order (editorial picks); unknown slugs are skipped. */
+export async function getProductsBySlugs(slugs: string[]): Promise<Product[]> {
+  if (slugs.length === 0) return [];
+  const rows = await selectProducts().where(inArray(products.slug, slugs));
+  const bySlug = new Map(rows.map((product) => [product.slug, product]));
+  return slugs.flatMap((slug) => bySlug.get(slug) ?? []);
+}
+
 /** Newest products first. Cached per request, so a page and its metadata share one query. */
 export const getNewArrivals = cache(async (limit: number = NEW_ARRIVALS_LIMIT): Promise<Product[]> => {
   return selectProducts().orderBy(desc(products.createdAt), products.id).limit(limit);
