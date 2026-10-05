@@ -48,7 +48,7 @@ export async function generateMetadata({ params }: PageProps<"/collections/[coll
 }
 
 /** Renders a category tab, delegating collection and category validation to CollectionListing. */
-export default async function CollectionCategoryPage({ params }: PageProps<"/collections/[collection]/[category]">) {
+export default async function CollectionCategoryPage({ params, searchParams }: PageProps<"/collections/[collection]/[category]">) {
   const { collection, category } = await params;
-  return <CollectionListing collectionSlug={collection} categorySlug={category} />;
+  return <CollectionListing collectionSlug={collection} categorySlug={category} searchParams={searchParams} />;
 }

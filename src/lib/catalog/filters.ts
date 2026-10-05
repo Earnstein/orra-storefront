@@ -12,6 +12,13 @@ export const MAX_PAGE = 100;
 export const SORTS = ["newest", "price-asc", "price-desc", "relevance"] as const;
 export type Sort = (typeof SORTS)[number];
 
+export const SORT_LABELS: Record<Sort, string> = {
+  newest: "Newest",
+  "price-asc": "Price: low to high",
+  "price-desc": "Price: high to low",
+  relevance: "Relevance",
+};
+
 export const PRICE_BANDS = [
   { value: "under-500", label: "Under $500", min: 0, max: 49_999 },
   { value: "500-1000", label: "$500–$1,000", min: 50_000, max: 99_999 },
