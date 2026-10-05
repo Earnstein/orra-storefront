@@ -8,6 +8,46 @@ import { check, index, integer, jsonb, pgEnum, pgTable, text, timestamp } from "
 export const audience = pgEnum("audience", ["women", "men", "unisex"]);
 export type Audience = (typeof audience.enumValues)[number];
 
+/** Broad colour group for filtering; `colour` keeps the exact shade shown to shoppers. */
+export const colourFamily = pgEnum("colour_family", [
+  "black",
+  "white",
+  "grey",
+  "beige",
+  "brown",
+  "red",
+  "pink",
+  "orange",
+  "yellow",
+  "green",
+  "blue",
+  "purple",
+  "gold",
+  "silver",
+  "multicolour",
+]);
+export type ColourFamily = (typeof colourFamily.enumValues)[number];
+
+/** Main material for filtering; the product details carry the full composition. */
+export const material = pgEnum("material", [
+  "leather",
+  "suede",
+  "canvas",
+  "nylon",
+  "cotton",
+  "linen",
+  "wool",
+  "cashmere",
+  "silk",
+  "satin",
+  "gold",
+  "silver",
+  "metal",
+  "acetate",
+  "mixed",
+]);
+export type Material = (typeof material.enumValues)[number];
+
 export const categories = pgTable("categories", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   slug: text().notNull().unique(),
@@ -32,6 +72,8 @@ export const products = pgTable(
     /** Integer cents. */
     price: integer().notNull(),
     colour: text().notNull(),
+    colourFamily: colourFamily().notNull(),
+    material: material().notNull(),
     description: text().notNull(),
     details: jsonb().$type<ProductDetail[]>().notNull().default([]),
     /** In display order; the first is the primary shot used on product cards. */

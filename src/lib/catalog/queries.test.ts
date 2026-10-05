@@ -54,7 +54,7 @@ describe("getCollectionProducts", () => {
 
 describe("catalogue queries", () => {
   it("lists every product slug", async () => {
-    expect(await getAllProductSlugs()).toHaveLength(9);
+    expect((await getAllProductSlugs()).toSorted()).toEqual(seedProducts.map((p) => p.slug).toSorted());
   });
 
   it("returns the 8 newest products, newest first", async () => {
@@ -71,9 +71,8 @@ describe("catalogue queries", () => {
   });
 
   it("honours a larger limit", async () => {
-    const all = await getNewArrivals(24);
-    expect(all).toHaveLength(9);
-    expect(all.at(-1)?.slug).toBe("leather-tote-tan");
+    expect((await getNewArrivals(24)).map((p) => p.slug)).toEqual(seedProducts.slice(0, 24).map((p) => p.slug));
+    expect((await getNewArrivals(seedProducts.length + 10)).map((p) => p.slug)).toEqual(seedProducts.map((p) => p.slug));
   });
 
   it("maps a product row to the storefront shape", async () => {
@@ -98,12 +97,9 @@ describe("catalogue queries", () => {
 
   it("puts same-category products first in related products", async () => {
     const shoe = await getProduct("double-monk-shoe");
-    expect((await getRelatedProducts(shoe!)).map((p) => p.slug)).toEqual([
-      "floral-pump",
-      "top-handle-bag-teal",
-      "round-sunglasses",
-      "gold-hoop-earrings",
-    ]);
+    const otherShoes = seedProducts.filter((p) => p.category === "shoes" && p.slug !== "double-monk-shoe");
+    expect(otherShoes.length).toBeGreaterThanOrEqual(4);
+    expect((await getRelatedProducts(shoe!)).map((p) => p.slug)).toEqual(otherShoes.slice(0, 4).map((p) => p.slug));
   });
 
   it("lists categories in creation order", async () => {
