@@ -35,6 +35,7 @@ export async function seedCatalog(db: SeedDatabase, now = new Date()): Promise<{
       set: {
         name: sql`excluded.name`,
         categoryId: sql`excluded.category_id`,
+        audience: sql`excluded.audience`,
         price: sql`excluded.price`,
         colour: sql`excluded.colour`,
         description: sql`excluded.description`,

@@ -1,4 +1,4 @@
-import type { ProductDetail, ProductImage } from "../schema/catalog";
+import type { Audience, ProductDetail, ProductImage } from "../schema/catalog";
 
 /**
  * Initial catalogue, loaded by `npm run db:seed`. After the first load the database is the
@@ -14,6 +14,7 @@ export type SeedProduct = {
   name: string;
   /** Category slug. */
   category: string;
+  audience: Audience;
   price: number;
   colour: string;
   description: string;
@@ -57,6 +58,7 @@ export const products: SeedProduct[] = [
     slug: "top-handle-bag-teal",
     name: "Top-handle bag",
     category: "bags",
+    audience: "women",
     price: 189000,
     colour: "Teal",
     description:
@@ -77,6 +79,7 @@ export const products: SeedProduct[] = [
     slug: "double-monk-shoe",
     name: "Double-monk shoe",
     category: "shoes",
+    audience: "men",
     price: 79000,
     colour: "Tan",
     description: "Goodyear-welted double-monk straps in burnished calf, on a leather sole with a stacked heel.",
@@ -94,6 +97,7 @@ export const products: SeedProduct[] = [
     slug: "round-sunglasses",
     name: "Round metal sunglasses",
     category: "accessories",
+    audience: "unisex",
     price: 42000,
     colour: "Gold / green",
     description: "Thin gold-tone frames with round green lenses and adjustable nose pads. Supplied with a leather case.",
@@ -111,6 +115,7 @@ export const products: SeedProduct[] = [
     slug: "gold-hoop-earrings",
     name: "Twisted hoop earrings",
     category: "jewellery",
+    audience: "women",
     price: 56000,
     colour: "Gold",
     description: "Medium hoops in a twisted rope profile, cast in recycled sterling silver with 18k gold vermeil.",
@@ -128,6 +133,7 @@ export const products: SeedProduct[] = [
     slug: "leather-biker-jacket",
     name: "Leather biker jacket",
     category: "ready-to-wear",
+    audience: "unisex",
     price: 345000,
     colour: "Black",
     description:
@@ -148,6 +154,7 @@ export const products: SeedProduct[] = [
     slug: "bomber-jacket-rust",
     name: "Bomber jacket",
     category: "ready-to-wear",
+    audience: "men",
     price: 128000,
     colour: "Rust",
     description: "A lightweight bomber in washed nylon twill with ribbed trims and a two-way zip.",
@@ -165,6 +172,7 @@ export const products: SeedProduct[] = [
     slug: "floral-pump",
     name: "Floral satin pump",
     category: "shoes",
+    audience: "women",
     price: 89000,
     colour: "Blue floral",
     description: "A pointed pump in printed duchess satin on a slim 10 cm heel, with a leather sole.",
@@ -182,6 +190,7 @@ export const products: SeedProduct[] = [
     slug: "fringed-knit-poncho",
     name: "Fringed knit poncho",
     category: "ready-to-wear",
+    audience: "women",
     price: 98000,
     colour: "Ecru",
     description: "An open-knit poncho in undyed cotton and linen, finished with a hand-knotted fringe.",
@@ -199,6 +208,7 @@ export const products: SeedProduct[] = [
     slug: "leather-tote-tan",
     name: "Leather tote",
     category: "bags",
+    audience: "unisex",
     price: 98000,
     colour: "Tan",
     description:

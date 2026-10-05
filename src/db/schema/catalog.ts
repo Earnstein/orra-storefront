@@ -1,8 +1,12 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { check, index, integer, jsonb, pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 // Catalogue: categories and products. Stock is a column on products (no variants or
 // warehouses yet, so a product has exactly one stock figure).
+
+/** Who a product is for. The Women and Men collections list their audience plus unisex. */
+export const audience = pgEnum("audience", ["women", "men", "unisex"]);
+export type Audience = (typeof audience.enumValues)[number];
 
 export const categories = pgTable("categories", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
@@ -24,6 +28,7 @@ export const products = pgTable(
     categoryId: integer()
       .notNull()
       .references(() => categories.id, { onDelete: "restrict" }),
+    audience: audience().notNull(),
     /** Integer cents. */
     price: integer().notNull(),
     colour: text().notNull(),
