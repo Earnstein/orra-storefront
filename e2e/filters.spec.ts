@@ -1,22 +1,25 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { products as seedProducts } from "../src/db/seed/catalog";
+import { gotoHydrated } from "./hydration";
 
 // Results on listings: toolbar, Load more, sort and the filter sheet. Expected values come from
 // the seed. Tests that only read the page navigate with waitUntil "domcontentloaded" (the load
-// event waits for every image); tests that click the results' controls wait for "load", so the
-// page has hydrated before the first click.
+// event waits for every image); tests that click the results' controls use gotoHydrated, which
+// also waits until the results have hydrated.
 // :visible because Cache Components keeps the previous route mounted but hidden after a
 // client-side navigation (see collections.spec.ts).
 const productLinks = (page: Page) => page.getByRole("main").locator('a[href^="/products/"]:visible');
 const loadMore = (page: Page) => page.getByRole("button", { name: "Load more" });
+// Every results control hydrates with this one (they're in one client component).
+const filterButton = (page: Page) => page.getByRole("button", { name: /^Filter and sort/ });
 
 const women = seedProducts.filter((product) => product.audience !== "men");
 const bags = seedProducts.filter((product) => product.category === "bags");
 
 test("load more appends and survives reload", async ({ page }) => {
   expect(women.length).toBeGreaterThan(24);
-  await page.goto("/collections/women");
+  await gotoHydrated(page, "/collections/women", filterButton);
   await expect(page.getByText(`${women.length} items sorted by Newest`)).toBeVisible();
   await expect(page.getByText(`Showing 24 of ${women.length}`)).toBeVisible();
   await expect(productLinks(page)).toHaveCount(24);
@@ -32,17 +35,17 @@ test("load more appends and survives reload", async ({ page }) => {
   await expect(page.getByText(`${women.length - 24} more items loaded`)).toBeAttached();
   await expect(loadMore(page)).toHaveCount(0);
 
-  await page.reload();
+  await page.reload({ waitUntil: "domcontentloaded" });
   await expect(productLinks(page)).toHaveCount(women.length);
   await expect(loadMore(page)).toHaveCount(0);
 });
 
 test("Load more replaces the history entry", async ({ page }) => {
-  await page.goto("/collections/bags");
-  await page.goto("/collections/women");
+  await page.goto("/collections/bags", { waitUntil: "domcontentloaded" });
+  await gotoHydrated(page, "/collections/women", filterButton);
   await loadMore(page).click();
   await expect(page).toHaveURL(/page=2/);
-  await page.goBack();
+  await page.goBack({ waitUntil: "domcontentloaded" });
   await expect(page).toHaveURL(/\/collections\/bags$/);
 });
 
@@ -75,7 +78,7 @@ const brownWomen = women.filter((product) => product.colourFamily === "brown").l
 
 test("filter, back and reload", async ({ page }) => {
   expect(blackWomen).toBeGreaterThan(0);
-  await page.goto("/collections/women");
+  await gotoHydrated(page, "/collections/women", filterButton);
   await page.getByRole("button", { name: /^Filter and sort/ }).click();
   await sheet(page).getByRole("button", { name: "Colour" }).click();
   await sheet(page).getByRole("checkbox", { name: `Black (${blackWomen})` }).check();
@@ -89,18 +92,18 @@ test("filter, back and reload", async ({ page }) => {
   await expect(page.getByText(`${blackWomen} items sorted by Newest`)).toBeVisible();
   await expect(productLinks(page)).toHaveCount(Math.min(blackWomen, 24));
 
-  await page.goBack();
+  await page.goBack({ waitUntil: "commit" });
   await expect(page).not.toHaveURL(/colour=/);
   await expect(page.getByText(`${women.length} items sorted by Newest`)).toBeVisible();
-  await page.goForward();
+  await page.goForward({ waitUntil: "commit" });
   await expect(page).toHaveURL(/colour=black/);
-  await page.reload();
+  await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByText(`${blackWomen} items sorted by Newest`)).toBeVisible();
   await expect(page.getByRole("button", { name: "Remove filter: Black" })).toBeVisible();
 });
 
 test("the sort name opens the sheet at Sort", async ({ page }) => {
-  await page.goto("/collections/bags");
+  await gotoHydrated(page, "/collections/bags", filterButton);
   await page.getByRole("button", { name: "Newest", exact: true }).click();
   await sheet(page).getByRole("radio", { name: "Price: high to low" }).check();
   await sheet(page).getByRole("button", { name: `Show ${bags.length} items` }).click();
@@ -109,7 +112,7 @@ test("the sort name opens the sheet at Sort", async ({ page }) => {
 });
 
 test("closing the sheet discards the draft", async ({ page }) => {
-  await page.goto("/collections/women");
+  await gotoHydrated(page, "/collections/women", filterButton);
   await page.getByRole("button", { name: /^Filter and sort/ }).click();
   await sheet(page).getByRole("button", { name: "Colour" }).click();
   await sheet(page).getByRole("checkbox", { name: `Black (${blackWomen})` }).check();
@@ -124,7 +127,7 @@ test("closing the sheet discards the draft", async ({ page }) => {
 
 test("two quick filter changes: the latest wins", async ({ page }) => {
   expect(brownWomen).toBeGreaterThan(0);
-  await page.goto("/collections/women?colour=black&colour=brown&stock=in");
+  await gotoHydrated(page, "/collections/women?colour=black&colour=brown&stock=in", filterButton);
   await expect(page.getByRole("button", { name: "Remove filter: Black" })).toBeVisible();
   await page.getByRole("button", { name: "Remove filter: Black" }).click();
   await page.getByRole("button", { name: "Remove filter: Brown" }).click();
@@ -137,14 +140,14 @@ test("two quick filter changes: the latest wins", async ({ page }) => {
 });
 
 test("Clear all removes every filter", async ({ page }) => {
-  await page.goto("/collections/women?colour=black&material=leather&sort=price-asc");
+  await gotoHydrated(page, "/collections/women?colour=black&material=leather&sort=price-asc", filterButton);
   await page.getByRole("button", { name: "Clear all" }).click();
   await expect(page).toHaveURL(/\/collections\/women\?sort=price-asc$/);
   await expect(page.getByText(`${women.length} items sorted by Price: low to high`)).toBeVisible();
 });
 
 test("removing chips by keyboard keeps focus among the chips, then on Filter and sort", async ({ page }) => {
-  await page.goto("/collections/women?colour=black&colour=brown");
+  await gotoHydrated(page, "/collections/women?colour=black&colour=brown", filterButton);
   await page.getByRole("button", { name: "Remove filter: Black" }).focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("button", { name: "Remove filter: Brown" })).toBeFocused();
@@ -154,11 +157,11 @@ test("removing chips by keyboard keeps focus among the chips, then on Filter and
 });
 
 test("Show without changes doesn't add a history entry", async ({ page }) => {
-  await page.goto("/collections/bags");
-  await page.goto("/collections/women");
+  await page.goto("/collections/bags", { waitUntil: "domcontentloaded" });
+  await gotoHydrated(page, "/collections/women", filterButton);
   await page.getByRole("button", { name: /^Filter and sort/ }).click();
   await sheet(page).getByRole("button", { name: `Show ${women.length} items` }).click();
   await expect(sheet(page)).toHaveCount(0);
-  await page.goBack();
+  await page.goBack({ waitUntil: "domcontentloaded" });
   await expect(page).toHaveURL(/\/collections\/bags$/);
 });
