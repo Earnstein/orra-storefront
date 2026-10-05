@@ -82,8 +82,11 @@ export function defaultSort(scope: ResultsScope): Sort {
 }
 
 const PRICE_ORDER = PRICE_BANDS.map((band) => band.value);
+// Code-point order, not localeCompare: the server and the browser must build the same query key
+// whatever their locales.
+const byCodePoint = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const sorted = <T extends string>(values: T[], order?: readonly T[]) =>
-  [...new Set(values)].sort((a, b) => (order ? order.indexOf(a) - order.indexOf(b) : a.localeCompare(b)));
+  [...new Set(values)].sort((a, b) => (order ? order.indexOf(a) - order.indexOf(b) : byCodePoint(a, b)));
 
 const within = <T extends string>(values: readonly string[], vocabulary: readonly T[]) =>
   values.filter((value): value is T => (vocabulary as readonly string[]).includes(value));

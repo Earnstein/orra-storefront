@@ -135,3 +135,23 @@ test("Clear all removes every filter", async ({ page }) => {
   await expect(page).toHaveURL(/\/collections\/women\?sort=price-asc$/);
   await expect(page.getByText(`${women.length} items sorted by Price: low to high`)).toBeVisible();
 });
+
+test("removing chips by keyboard keeps focus among the chips, then on Filter and sort", async ({ page }) => {
+  await page.goto("/collections/women?colour=black&colour=brown");
+  await page.getByRole("button", { name: "Remove filter: Black" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: "Remove filter: Brown" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: /^Filter and sort/ })).toBeFocused();
+  await expect(page).toHaveURL(/\/collections\/women$/);
+});
+
+test("Show without changes doesn't add a history entry", async ({ page }) => {
+  await page.goto("/collections/bags");
+  await page.goto("/collections/women");
+  await page.getByRole("button", { name: /^Filter and sort/ }).click();
+  await sheet(page).getByRole("button", { name: `Show ${women.length} items` }).click();
+  await expect(sheet(page)).toHaveCount(0);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/collections\/bags$/);
+});

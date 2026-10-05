@@ -1,4 +1,7 @@
+"use client";
+
 import { XIcon } from "lucide-react";
+import { useEffect, useEffectEvent, useRef } from "react";
 
 import { Container } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
@@ -17,24 +20,42 @@ function filterLabel(filter: ActiveFilter, facets: Results["facets"]): string {
   return capitalise(filter.value);
 }
 
-/** One removable chip per active filter value, then Clear all. Renders nothing without filters. */
+/**
+ * One removable chip per active filter value, then Clear all. Renders nothing without filters.
+ * Removing a chip moves focus to the chip now in its place (or the last one); removing the last
+ * calls `onEmptied` so the parent can place focus.
+ */
 export function FilterChips({
   filters,
   facets,
   onRemove,
   onClear,
+  onEmptied,
 }: {
   filters: Filters;
   facets: Results["facets"];
   onRemove: (filter: ActiveFilter) => void;
   onClear: () => void;
+  onEmptied: () => void;
 }) {
   const active = activeFilters(filters);
+  const list = useRef<HTMLDivElement>(null);
+  // The index of a chip just removed, until the chips re-render without it.
+  const removed = useRef<number | null>(null);
+  const placeFocus = useEffectEvent(() => {
+    if (removed.current === null) return;
+    const chips = list.current?.querySelectorAll<HTMLButtonElement>("[data-chip]") ?? [];
+    if (chips.length > 0) chips[Math.min(removed.current, chips.length - 1)].focus();
+    else onEmptied();
+    removed.current = null;
+  });
+  useEffect(() => placeFocus(), [active.length]);
+
   if (active.length === 0) return null;
 
   return (
-    <Container className="flex flex-wrap items-center gap-2 pb-4">
-      {active.map((filter) => {
+    <Container ref={list} className="flex flex-wrap items-center gap-2 pb-4">
+      {active.map((filter, index) => {
         const label = filterLabel(filter, facets);
         return (
           <Button
@@ -42,7 +63,11 @@ export function FilterChips({
             variant="outline"
             size="xs"
             aria-label={`Remove filter: ${label}`}
-            onClick={() => onRemove(filter)}
+            data-chip
+            onClick={() => {
+              removed.current = index;
+              onRemove(filter);
+            }}
           >
             {label}
             <XIcon data-icon="inline-end" aria-hidden />

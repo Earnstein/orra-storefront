@@ -13,12 +13,15 @@ export function LoadMore({
   shown,
   total,
   loading,
+  disabled,
   announcement,
   onLoadMore,
 }: {
   shown: number;
   total: number;
   loading: boolean;
+  /** While other results load, the counts shown are about to change. */
+  disabled: boolean;
   announcement: string;
   onLoadMore: () => void;
 }) {
@@ -27,7 +30,7 @@ export function LoadMore({
   const announced = announcement !== "";
 
   useEffect(() => {
-    if (announced && !hasMore && countRef.current && document.activeElement === document.body) countRef.current.focus();
+    if (announced && !hasMore && countRef.current && document.activeElement === document.body) countRef.current.focus({ preventScroll: true });
   }, [announced, hasMore]);
 
   return (
@@ -46,6 +49,7 @@ export function LoadMore({
           variant="outline"
           className="min-w-60"
           aria-busy={loading}
+          disabled={disabled}
           onClick={() => {
             if (!loading) onLoadMore();
           }}

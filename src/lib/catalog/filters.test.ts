@@ -154,3 +154,11 @@ describe("activeFilters and withoutFilter", () => {
     expect(withoutFilter(filters, { key: "newIn", value: "1" })).toEqual({ ...filters, newIn: false });
   });
 });
+
+describe("normaliseQuery ordering", () => {
+  it("orders values by code point, so server and browser agree whatever their locale", () => {
+    // localeCompare would put "a" before "B" (and, in Lithuanian, "yellow" before "pink").
+    const normalised = normaliseQuery(query({ scope: search, filters: { category: ["b-side", "B", "a", "ab"] } }));
+    expect(normalised.filters.category).toEqual(["B", "a", "ab", "b-side"]);
+  });
+});

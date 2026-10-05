@@ -12,11 +12,14 @@ export function ListingToolbar({
   total,
   sortLabel,
   activeCount,
+  filterButtonRef,
   onOpen,
 }: {
   total: number;
   sortLabel: string;
   activeCount: number;
+  /** Where focus goes after filters are cleared. */
+  filterButtonRef?: React.Ref<HTMLButtonElement>;
   onOpen?: (section: SheetSection) => void;
 }) {
   return (
@@ -32,7 +35,14 @@ export function ListingToolbar({
           {sortLabel}
         </button>
       </p>
-      <Button variant="link" size="sm" className="text-foreground" disabled={!onOpen} onClick={() => onOpen?.("filters")}>
+      <Button
+        ref={filterButtonRef}
+        variant="link"
+        size="sm"
+        className="text-foreground"
+        disabled={!onOpen}
+        onClick={() => onOpen?.("filters")}
+      >
         Filter and sort{activeCount > 0 && ` (${activeCount})`}
       </Button>
     </Container>

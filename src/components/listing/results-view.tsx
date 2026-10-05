@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryStates } from "nuqs";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Container, Grid } from "@/components/primitives";
 import { ProductCard } from "@/components/product/product-card";
@@ -41,53 +41,88 @@ export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: 
   const [params, setParams] = useQueryStates(resultsParsers);
   const query = useMemo(() => toResultsQuery(params, scope, tab), [params, scope, tab]);
   const { data, isPlaceholderData, isError, isFetching, refetch } = useResults(query);
-  const [sheet, setSheet] = useState<SheetSection | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetSection, setSheetSection] = useState<SheetSection>("filters");
+  const filterButton = useRef<HTMLButtonElement>(null);
 
   // The last results shown stay on screen if a later request fails.
   const [lastData, setLastData] = useState<Results | undefined>(data);
   if (data && data !== lastData) setLastData(data);
   const results = data ?? lastData;
 
-  // The Load more in flight: the URL it asked for and how many products were shown before.
+  // The Load more in flight (the URL it asked for and how many products were shown before), and
+  // the announcement once it lands. Both belong to one URL: leaving it (a filter change, Back)
+  // drops them, so coming back later doesn't announce again.
   const [more, setMore] = useState<{ path: string; from: number } | null>(null);
+  const [announced, setAnnounced] = useState<{ path: string; text: string } | null>(null);
   const path = resultsApiPath(query);
+  if (more && more.path !== path) setMore(null);
+  if (announced && announced.path !== path) setAnnounced(null);
+  if (more?.path === path && data && !isPlaceholderData) {
+    setAnnounced({ path, text: `${data.products.length - more.from} more items loaded` });
+    setMore(null);
+  }
   const loadingMore = isPlaceholderData && more?.path === path;
-  const announcement =
-    more?.path === path && !isPlaceholderData && results ? `${results.products.length - more.from} more items loaded` : "";
 
   if (!results) return null;
 
   const filtersActive = activeFilterCount(query.filters) > 0;
-  const updating = (isPlaceholderData && !loadingMore) || (isError && !data);
+  const updating = isPlaceholderData && !loadingMore;
 
   // Filter changes start from page 1 and add a history entry. Chip removals read the latest URL
   // state, so quick successive removals all apply.
   const push = { history: "push", scroll: false } as const;
-  const apply = (next: ResultsQuery) => setParams(resultsParamsFor(normaliseQuery({ ...next, page: 1 })), push);
+  const apply = (draft: ResultsQuery) => {
+    const next = normaliseQuery({ ...draft, page: 1 });
+    // Showing the same results again only resets the page; it isn't a new history entry.
+    if (resultsApiPath(next) === resultsApiPath({ ...query, page: 1 })) {
+      if (query.page !== 1) void setParams({ page: null }, { history: "replace", scroll: false });
+      return;
+    }
+    void setParams(resultsParamsFor(next), push);
+  };
   const remove = (filter: ActiveFilter) =>
     setParams((latest) => {
       const current = toResultsQuery(latest, scope, tab);
       return resultsParamsFor({ ...current, filters: withoutFilter(current.filters, filter), page: 1 });
     }, push);
-  const clear = () => setParams(CLEARED_FILTERS, push);
+  // Clearing removes the control that was used, so focus moves to Filter and sort.
+  const clear = () => {
+    void setParams(CLEARED_FILTERS, push);
+    filterButton.current?.focus();
+  };
 
   return (
     <>
-      <ListingToolbar
-        total={results.total}
-        sortLabel={SORT_LABELS[query.sort]}
-        activeCount={activeFilterCount(query.filters)}
-        onOpen={setSheet}
+      {/* An empty listing without filters has nothing to sort or filter. */}
+      {(results.total > 0 || filtersActive || updating) && (
+        <ListingToolbar
+          total={results.total}
+          sortLabel={SORT_LABELS[query.sort]}
+          activeCount={activeFilterCount(query.filters)}
+          filterButtonRef={filterButton}
+          onOpen={(section) => {
+            setSheetSection(section);
+            setSheetOpen(true);
+          }}
+        />
+      )}
+      <FilterChips
+        filters={query.filters}
+        facets={results.facets}
+        onRemove={remove}
+        onClear={clear}
+        onEmptied={() => filterButton.current?.focus()}
       />
-      <FilterChips filters={query.filters} facets={results.facets} onRemove={remove} onClear={clear} />
       <FilterSheet
-        section={sheet}
+        open={sheetOpen}
+        section={sheetSection}
         query={query}
         results={results}
-        onClose={() => setSheet(null)}
+        onClose={() => setSheetOpen(false)}
         onApply={(draft) => {
-          setSheet(null);
-          void apply(draft);
+          setSheetOpen(false);
+          apply(draft);
         }}
       />
 
@@ -124,8 +159,11 @@ export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: 
             shown={results.products.length}
             total={results.total}
             loading={loadingMore}
-            announcement={announcement}
+            disabled={updating}
+            announcement={announced?.path === path ? announced.text : ""}
             onLoadMore={() => {
+              // A failed Load more already asked for the next page: try it again.
+              if (isError) return void refetch();
               const next = { ...query, page: results.page + 1 };
               setMore({ path: resultsApiPath(next), from: results.products.length });
               void setParams({ page: next.page }, { history: "replace", scroll: false });

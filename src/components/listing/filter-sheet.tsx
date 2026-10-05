@@ -46,33 +46,38 @@ const itemsLabel = (count: number) => (count === 1 ? "1 item" : `${count} items`
  * Options with no results are disabled unless selected, so they can always be removed.
  */
 export function FilterSheet({
+  open,
   section,
   query,
   results,
   onClose,
   onApply,
 }: {
-  /** Which part to open on, or null when the sheet is closed. */
-  section: SheetSection | null;
+  open: boolean;
+  /** Which part to open on. */
+  section: SheetSection;
   query: ResultsQuery;
   results: Results;
   onClose: () => void;
   onApply: (draft: ResultsQuery) => void;
 }) {
   return (
-    <Sheet open={section !== null} onOpenChange={(open) => !open && onClose()}>
+    <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
       <SheetContent
         side="right"
         showCloseButton={false}
         className="gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-md"
       >
-        {section !== null && <FilterPanel section={section} query={query} results={results} onApply={onApply} />}
+        <FilterPanel section={section} query={query} results={results} onApply={onApply} />
       </SheetContent>
     </Sheet>
   );
 }
 
-/** The sheet's contents; mounted per opening, so each opening starts a fresh draft. */
+/**
+ * The sheet's contents. The sheet mounts them on opening and unmounts them once its closing
+ * animation ends, so each opening starts a fresh draft.
+ */
 function FilterPanel({
   section,
   query,

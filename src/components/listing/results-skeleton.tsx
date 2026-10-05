@@ -4,7 +4,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 /** Stands in for the toolbar and the first rows while a listing's results stream in. */
 export function ResultsSkeleton() {
   return (
-    <div aria-busy="true" aria-label="Loading products">
+    <div role="status" aria-busy="true">
+      <span className="sr-only">Loading products</span>
       <Container className="flex items-center justify-between gap-4 py-4">
         <Skeleton className="h-4 w-40 bg-surface" />
         <Skeleton className="h-4 w-24 bg-surface" />
