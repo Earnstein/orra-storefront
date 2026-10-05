@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { SearchIcon, UserIcon } from "lucide-react";
+import { UserIcon } from "lucide-react";
 
 import { Container } from "@/components/primitives";
+import { SearchButton } from "@/components/search/search-button";
 import { buttonVariants } from "@/components/ui/button";
 import { primaryNav, site } from "@/lib/site";
 import { cn } from "@/lib/utils";
@@ -38,9 +39,7 @@ export function SiteHeader() {
         </Link>
 
         <div className="-mr-2.5 flex items-center justify-end">
-          <Link href="/search" className={iconLink} aria-label="Search">
-            <SearchIcon />
-          </Link>
+          <SearchButton />
           <Link href="/account" className={cn(iconLink, "max-sm:hidden")} aria-label="Account">
             <UserIcon />
           </Link>

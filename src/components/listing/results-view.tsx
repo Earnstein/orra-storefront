@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryStates } from "nuqs";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Container, Grid } from "@/components/primitives";
 import { ProductCard } from "@/components/product/product-card";
@@ -23,6 +23,7 @@ import { FilterChips } from "./filter-chips";
 import { FilterSheet } from "./filter-sheet";
 import { ListingToolbar, type SheetSection } from "./listing-toolbar";
 import { LoadMore } from "./load-more";
+import { ResultsSkeleton } from "./results-skeleton";
 import { summaryOf, useResults, type ResultsData } from "./use-results";
 
 // Tiles in the first row at the widest layout (xl: 4 columns) load their images eagerly.
@@ -41,14 +42,29 @@ function uniqueProducts(data: ResultsData) {
 const CLEARED_FILTERS = { category: null, audience: null, colour: null, material: null, price: null, stock: null, new: null, page: null };
 
 /**
- * A listing's results, driven by the URL: toolbar, chips, filter sheet, grid and Load more.
- * Applying the sheet and removing a chip push a history entry (Back undoes them); Load more
- * replaces the current one. The first results come hydrated from the server; later ones from
- * /api/products. The grid shows the URL's `page` × 24 of the products loaded so far. While a new
- * filter set loads, the current results stay on screen, dimmed.
+ * A listing's or a search's results, driven by the URL: toolbar, chips, filter sheet, grid and
+ * Load more. Applying the sheet and removing a chip push a history entry (Back undoes them); Load
+ * more replaces the current one. The first results come hydrated from the server; later ones from
+ * /api/products. The grid shows the URL's `page` × 24 of the products loaded so far. While new
+ * results load (other filters, sort or search text), the current ones stay on screen, dimmed.
  */
-export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: string; empty: React.ReactNode }) {
+export function ResultsView({
+  scope: routeScope,
+  tab,
+  empty,
+}: {
+  /** For search, only the kind matters: the text comes from the URL's `q`, which the page edits in place. */
+  scope: ResultsScope;
+  tab?: string;
+  empty: React.ReactNode;
+}) {
   const [params, setParams] = useQueryStates(resultsParsers);
+  // Search text lives in the URL; callbacks that read the latest URL state rebuild the scope too.
+  const scopeFor = useCallback(
+    (q: string): ResultsScope => (routeScope.kind === "search" ? { kind: "search", q } : routeScope),
+    [routeScope],
+  );
+  const scope = useMemo(() => scopeFor(params.q), [scopeFor, params.q]);
   const query = useMemo(() => toResultsQuery(params, scope, tab), [params, scope, tab]);
   const {
     data,
@@ -90,7 +106,17 @@ export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: 
     if (correctTo !== null) void setParams({ page: correctTo === 1 ? null : correctTo }, { history: "replace", scroll: false });
   }, [correctTo, setParams]);
 
-  if (!shownData) return null;
+  if (!shownData) {
+    if (!isError) return <ResultsSkeleton />;
+    return (
+      <Container className="flex items-center gap-4 py-block caption" role="alert">
+        <p>Couldn’t load results.</p>
+        <Button variant="link" size="sm" onClick={() => refetch()}>
+          Try again
+        </Button>
+      </Container>
+    );
+  }
 
   const results = summaryOf(shownData);
   const products = loaded.slice(0, shownPage * RESULTS_PAGE_SIZE);
@@ -112,7 +138,7 @@ export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: 
     const base = resultsApiPath({ ...query, page: 1 });
     setAnnounced({ path: resultsApiPath({ ...query, page: nextPage }), text: `${added} more items loaded` });
     void setParams(
-      (latest) => (resultsApiPath({ ...toResultsQuery(latest, scope, tab), page: 1 }) === base ? { page: nextPage } : {}),
+      (latest) => (resultsApiPath({ ...toResultsQuery(latest, scopeFor(latest.q), tab), page: 1 }) === base ? { page: nextPage } : {}),
       { history: "replace", scroll: false },
     );
   };
@@ -131,7 +157,7 @@ export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: 
   };
   const remove = (filter: ActiveFilter) =>
     setParams((latest) => {
-      const current = toResultsQuery(latest, scope, tab);
+      const current = toResultsQuery(latest, scopeFor(latest.q), tab);
       return resultsParamsFor({ ...current, filters: withoutFilter(current.filters, filter), page: 1 });
     }, push);
   // Clearing removes the control that was used, so focus moves to Filter and sort.
@@ -183,7 +209,10 @@ export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: 
         </Container>
       )}
 
-      {results.total === 0 ? (
+      {results.total === 0 && updating ? (
+        // The results being replaced found nothing; don't show their empty message for new ones.
+        <ResultsSkeleton />
+      ) : results.total === 0 ? (
         <Container className="flex flex-col items-start gap-6 pt-block pb-section">
           {empty}
           {filtersActive && (
