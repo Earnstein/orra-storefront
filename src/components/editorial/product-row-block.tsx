@@ -1,8 +1,8 @@
 import { Container, Grid, Section, TextLink } from "@/components/primitives";
+import { completeRows } from "@/components/product/complete-rows";
 import { ProductCard } from "@/components/product/product-card";
 import type { Block } from "@/content/types";
 import type { Product } from "@/lib/catalog/types";
-import { cn } from "@/lib/utils";
 
 type ProductRowBlockProps = Pick<Extract<Block, { type: "productRow" }>, "heading" | "action"> & { products: Product[] };
 
@@ -32,10 +32,4 @@ export function ProductRowBlock({ heading, action, products }: ProductRowBlockPr
       </Grid>
     </Section>
   );
-}
-
-/** Hides a card when it falls in an incomplete last row for the grid's current column count. */
-function completeRows(index: number, count: number) {
-  const fits = (columns: number) => index < Math.max(columns, count - (count % columns));
-  return cn(!fits(2) && "max-md:hidden", !fits(3) && "md:max-xl:hidden", !fits(4) && "xl:hidden");
 }

@@ -14,6 +14,11 @@ export function collectionPath(collectionSlug: string, categorySlug?: string) {
   return categorySlug ? `/collections/${collectionSlug}/${categorySlug}` : `/collections/${collectionSlug}`;
 }
 
+/** Where a tab's breadcrumb leads: Women and Men to their landing pages, New to its listing. */
+function crumbPath(collectionSlug: string) {
+  return collectionSlug === "women" || collectionSlug === "men" ? `/${collectionSlug}` : collectionPath(collectionSlug);
+}
+
 /** The categories that products fall into, in category order: a collection's tabs. */
 export function presentCategories(products: Product[], categories: Category[]): Category[] {
   const present = new Set(products.map((product) => product.category.slug));
@@ -60,7 +65,7 @@ export async function CollectionListing({
       breadcrumbs={[
         { label: "Home", href: "/" },
         ...(category
-          ? [{ label: collection.title, href: collectionPath(collection.slug) }, { label: category.name }]
+          ? [{ label: collection.title, href: crumbPath(collection.slug) }, { label: category.name }]
           : [{ label: collection.title }]),
       ]}
       eyebrow={category ? collection.title : undefined}

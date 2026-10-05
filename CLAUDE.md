@@ -32,7 +32,7 @@ npm run skills:update                        # update the shadcn skill (skills C
 npx shadcn@latest add <component>
 ```
 
-Tests: Vitest (`vitest.config.mts`, Node environment, no React plugin). `@/…` resolves to `src/`, and `server-only` is aliased to `src/test/server-only.ts` so server modules can be imported in tests.
+Tests: Vitest (`vitest.config.mts`, Node environment, no React plugin). In e2e tests, navigate with `{ waitUntil: "domcontentloaded" }` when a test only reads the page (the `load` event waits for every image and times out under load), and with the default `load` when it clicks client-side controls, so they've hydrated. `@/…` resolves to `src/`, and `server-only` is aliased to `src/test/server-only.ts` so server modules can be imported in tests.
 
 ## How we ship
 
@@ -101,7 +101,7 @@ Roadmap and process: `docs/superpowers/specs/2026-10-04-roadmap-to-live-design.m
 - `findContentProblems()` (`src/content/blocks.ts`) catches links that would 404, unknown products, images not on `images.unsplash.com` or without alt text, and products or category tiles on a Women/Men page that don't suit that audience. `src/content/content.test.ts` runs it against the seed catalogue, so content can't reference a product the seed lacks.
 - Stories (`src/content/stories.ts`) render at `/stories` and `/stories/[slug]` (static, other slugs 404). `homepageStory` feeds the homepage story band.
 - `/women` and `/men` (`src/content/landings.ts`) are the primary nav's Women and Men destinations and the homepage hero's links: hero (from `heroSlides`), a category tile per category the audience can shop (opening `/collections/<audience>/<category>`), "The edit" (8 products), a story split, then "Shop all". Their listings stay at `/collections/women` and `/collections/men`.
-- Product rows hide the cards that would start an incomplete last row at the current column count; category tiles are a swipeable strip on phones and one row from md up.
+- Product rows and "You may also like" hide the cards that would start an incomplete last row at the current column count (`completeRows()` in `src/components/product/complete-rows.ts`); category tiles are a swipeable strip on phones and one row from md up.
 
 **Bag & saved items** — no cart backend yet: `src/lib/bag/store.ts` is a browser-only store (`useBag()`, `bagActions.add/toggleSaved`) persisted to `localStorage` (`orra:bag:v1`), synced across tabs, empty on the server. Pure rules (quantity capped at stock, save toggle, parsing stored data) live in `src/lib/bag/rules.ts`; move them server-side when the cart gets an API. The product page's `PurchaseActions` (Add to bag, Save for later, delivery estimate from `src/lib/catalog/delivery.ts`, sticky bar) and the header `BagLink` count read from it.
 

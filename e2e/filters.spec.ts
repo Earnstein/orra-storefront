@@ -2,7 +2,10 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { products as seedProducts } from "../src/db/seed/catalog";
 
-// Results on listings: toolbar, Load more and sort. Expected values come from the seed.
+// Results on listings: toolbar, Load more, sort and the filter sheet. Expected values come from
+// the seed. Tests that only read the page navigate with waitUntil "domcontentloaded" (the load
+// event waits for every image); tests that click the results' controls wait for "load", so the
+// page has hydrated before the first click.
 // :visible because Cache Components keeps the previous route mounted but hidden after a
 // client-side navigation (see collections.spec.ts).
 const productLinks = (page: Page) => page.getByRole("main").locator('a[href^="/products/"]:visible');
@@ -39,7 +42,7 @@ test("Load more replaces the history entry", async ({ page }) => {
 });
 
 test("sort by price, low to high", async ({ page }) => {
-  await page.goto("/collections/bags?sort=price-asc");
+  await page.goto("/collections/bags?sort=price-asc", { waitUntil: "domcontentloaded" });
   await expect(page.getByText(`${bags.length} items sorted by Price: low to high`)).toBeVisible();
   const expected = [...bags].sort((a, b) => a.price - b.price).map((product) => `/products/${product.slug}`);
   await expect(productLinks(page)).toHaveCount(expected.length);
@@ -48,14 +51,14 @@ test("sort by price, low to high", async ({ page }) => {
 
 test("a listing of 24 or fewer has no Load more", async ({ page }) => {
   expect(bags.length).toBeLessThanOrEqual(24);
-  await page.goto("/collections/bags");
+  await page.goto("/collections/bags", { waitUntil: "domcontentloaded" });
   await expect(productLinks(page)).toHaveCount(bags.length);
   await expect(page.getByText(`Showing ${bags.length} of ${bags.length}`)).toBeVisible();
   await expect(loadMore(page)).toHaveCount(0);
 });
 
 test("a hand-edited page past the end shows everything", async ({ page }) => {
-  expect((await page.goto("/collections/bags?page=9&sort=nope&colour=nope"))?.status()).toBe(200);
+  expect((await page.goto("/collections/bags?page=9&sort=nope&colour=nope", { waitUntil: "domcontentloaded" }))?.status()).toBe(200);
   await expect(productLinks(page)).toHaveCount(bags.length);
 });
 

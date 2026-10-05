@@ -11,7 +11,7 @@ async function seriousViolations(page: Page) {
 }
 
 test("a listing", async ({ page }) => {
-  await page.goto("/collections/women?colour=black");
+  await page.goto("/collections/women?colour=black", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("button", { name: "Remove filter: Black" })).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
 });
