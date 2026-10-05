@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { products as seedProducts } from "../src/db/seed/catalog";
+import { categories as seedCategories, products as seedProducts } from "../src/db/seed/catalog";
 import { primaryNav } from "../src/lib/site";
 
 // Expected product lists come from the seed, so growing the catalogue doesn't break these.
@@ -46,6 +46,21 @@ test("unknown collection paths 404", async ({ page }) => {
   for (const path of ["/collections/does-not-exist", "/collections/women/does-not-exist", "/collections/bags/shoes"]) {
     expect((await page.goto(path))?.status(), path).toBe(404);
   }
+});
+
+test("a known category with no products in a collection shows the empty state", async ({ page }) => {
+  // From the seed: a Women or Men tab whose category has none of that audience's (or unisex) products.
+  const empty = (["women", "men"] as const).flatMap((audience) =>
+    seedCategories
+      .filter((category) => !seedProducts.some((p) => p.category === category.slug && (p.audience === audience || p.audience === "unisex")))
+      .map((category) => ({ audience, category })),
+  )[0];
+  test.skip(!empty, "every category has products for both audiences");
+
+  const response = await page.goto(`/collections/${empty.audience}/${empty.category.slug}`);
+  expect(response?.status()).toBe(200);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(empty.category.name);
+  await expect(page.getByText(`Nothing in ${empty.category.name.toLowerCase()} here right now.`)).toBeVisible();
 });
 
 test("collection pages don't scroll sideways", async ({ page }) => {
