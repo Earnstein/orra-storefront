@@ -6,6 +6,7 @@ import { resolveCollection } from "@/lib/catalog/collections";
 import { getCategories, getCollectionProducts } from "@/lib/catalog/queries";
 import type { Category, Product } from "@/lib/catalog/types";
 
+/** Builds a collection URL from unescaped slugs; an omitted or empty category selects the collection root. */
 export function collectionPath(collectionSlug: string, categorySlug?: string) {
   return categorySlug ? `/collections/${collectionSlug}/${categorySlug}` : `/collections/${collectionSlug}`;
 }
@@ -20,6 +21,8 @@ export function presentCategories(products: Product[], categories: Category[]): 
  * A collection listing, optionally narrowed to one category tab. 404s for an unknown collection or
  * category, or a tab under a collection that has none; a known category with no products in this
  * collection shows the empty state.
+ * Category filtering happens after the collection's product limit, so New tabs only narrow
+ * the newest batch. Database errors propagate instead of showing the empty state.
  */
 export async function CollectionListing({ collectionSlug, categorySlug }: { collectionSlug: string; categorySlug?: string }) {
   const categories = await getCategories();

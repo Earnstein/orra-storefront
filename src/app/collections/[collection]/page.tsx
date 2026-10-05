@@ -9,17 +9,23 @@ import { CollectionListing } from "../collection-listing";
 export const revalidate = 300;
 export const dynamicParams = true;
 
+/** Returns build-time paths for built-in collections and all database categories; database errors propagate. */
 export async function generateStaticParams() {
   const categories = await getCategories();
   return [...RESERVED_COLLECTION_SLUGS, ...categories.map((category) => category.slug)].map((collection) => ({ collection }));
 }
 
+/**
+ * Returns collection copy as metadata, or empty metadata for an unknown slug.
+ * Database errors propagate; unknown routes are rejected when the listing renders.
+ */
 export async function generateMetadata({ params }: PageProps<"/collections/[collection]">): Promise<Metadata> {
   const collection = resolveCollection((await params).collection, await getCategories());
   if (!collection) return {};
   return { title: collection.title, description: collection.description };
 }
 
+/** Renders the requested collection, delegating slug validation and data loading to CollectionListing. */
 export default async function CollectionPage({ params }: PageProps<"/collections/[collection]">) {
   return <CollectionListing collectionSlug={(await params).collection} />;
 }

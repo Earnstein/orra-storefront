@@ -43,7 +43,13 @@ export const getNewArrivals = cache(async (limit: number = NEW_ARRIVALS_LIMIT): 
   return selectProducts().orderBy(desc(products.createdAt), products.id).limit(limit);
 });
 
-/** A collection's products, newest first. collections.ts decides which scope an address lists. */
+/**
+ * A collection's products, newest first, with ties ordered by ascending product ID.
+ * collections.ts decides which scope an address lists. New arrivals use scope.limit;
+ * audience listings include unisex products, and category listings match the exact slug.
+ * Returns an empty array when nothing matches, including unknown category slugs.
+ * Database errors propagate to the caller.
+ */
 export async function getCollectionProducts(scope: CollectionScope): Promise<Product[]> {
   switch (scope.kind) {
     case "new":

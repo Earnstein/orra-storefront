@@ -8,6 +8,7 @@
  * One spelling per Neon endpoint, so a check can't be bypassed by formatting: trims and
  * lowercases, takes the hostname from a pasted URL, drops a port and terminal dots (URL.hostname
  * keeps "host."), and folds the pooled hostname ("ep-x-pooler.…") into the direct one ("ep-x.…").
+ * URL parse failures fall back to normalizing the supplied text; they do not throw.
  */
 export function endpointHost(value: string): string {
   let host = value.trim().toLowerCase();
@@ -24,7 +25,7 @@ export function endpointHost(value: string): string {
     .replace(/^([^.]+)-pooler\./, "$1.");
 }
 
-/** The hostname of a connection string, or undefined when it's missing or not a URL. */
+/** The hostname of a connection string, or undefined when it's missing, invalid, or has no hostname. */
 export function hostOf(databaseUrl: string | undefined): string | undefined {
   if (!databaseUrl) return undefined;
   try {
@@ -36,7 +37,10 @@ export function hostOf(databaseUrl: string | undefined): string | undefined {
 
 export type DatabaseTarget = "production" | "other" | "unknown";
 
-/** "unknown" when PRODUCTION_DB_HOST is blank or DATABASE_URL is missing or not a URL. */
+/**
+ * Compares normalized endpoint hosts, returning "production" for a match and "other" otherwise.
+ * Returns "unknown" if the normalized production host is empty or DATABASE_URL has no parseable hostname.
+ */
 export function databaseTarget(env: { databaseUrl: string | undefined; productionDbHost: string | undefined }): DatabaseTarget {
   const productionHost = env.productionDbHost ? endpointHost(env.productionDbHost) : "";
   const host = hostOf(env.databaseUrl);

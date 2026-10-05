@@ -12,6 +12,10 @@ export type SeedDatabase = PgDatabase<PgQueryResultHKT, typeof schema>;
  * it resets those products' content and stock to the seed values and leaves other products alone.
  * Products are given created_at times one minute apart, newest first in seed order, so
  * "New this season" keeps the seed's order.
+ * `now` sets the first product's created_at time, including on re-seeding.
+ * Returns the counts of seed categories and products upserted, including existing rows.
+ * Rejects for an unknown seed category or a database error. The writes are not wrapped in a
+ * transaction here, so category updates can persist if seeding products fails.
  */
 export async function seedCatalog(db: SeedDatabase, now = new Date()): Promise<{ categories: number; products: number }> {
   const categoryRows = await db

@@ -24,6 +24,11 @@ export type Collection = {
   hasTabs: boolean;
 };
 
+/**
+ * Resolves a case-sensitive slug to listing copy, product scope, and tab availability.
+ * New, Women, and Men take precedence over category slugs and have tabs; categories do not.
+ * Returns undefined when the slug matches neither a built-in collection nor a supplied category.
+ */
 export function resolveCollection(slug: string, categories: Category[]): Collection | undefined {
   if (slug === "new") {
     const { title, description } = collectionCopy.new;

@@ -10,6 +10,10 @@ import { CollectionListing, presentCategories } from "../../collection-listing";
 export const revalidate = 300;
 export const dynamicParams = true;
 
+/**
+ * Returns build-time paths for categories represented in New, Women, and Men.
+ * New uses its limited batch of arrivals. Database errors propagate.
+ */
 export async function generateStaticParams() {
   const categories = await getCategories();
   const params: { collection: string; category: string }[] = [];
@@ -22,6 +26,10 @@ export async function generateStaticParams() {
   return params;
 }
 
+/**
+ * Returns category metadata even for an empty listing, or empty metadata for an unknown
+ * category or a collection without tabs. Database errors propagate; the listing handles 404s.
+ */
 export async function generateMetadata({ params }: PageProps<"/collections/[collection]/[category]">): Promise<Metadata> {
   const { collection: collectionSlug, category: categorySlug } = await params;
   const categories = await getCategories();
@@ -37,6 +45,7 @@ export async function generateMetadata({ params }: PageProps<"/collections/[coll
   };
 }
 
+/** Renders a category tab, delegating collection and category validation to CollectionListing. */
 export default async function CollectionCategoryPage({ params }: PageProps<"/collections/[collection]/[category]">) {
   const { collection, category } = await params;
   return <CollectionListing collectionSlug={collection} categorySlug={category} />;
