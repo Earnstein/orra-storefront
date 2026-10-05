@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { products as seedProducts } from "@/db/seed/catalog";
-import type { Results } from "@/lib/catalog/results";
+import type { Results, ResultsPage } from "@/lib/catalog/results";
 import { GET } from "./route";
 
 // Real migrations and the real seed, in an in-memory Postgres.
@@ -54,5 +54,16 @@ describe("GET /api/products", () => {
     const results: Results = await res.json();
     expect(results.page).toBe(1);
     expect(results.products.every((product) => seed(product.slug).colourFamily === "black")).toBe(true);
+  });
+
+  it("returns one later page on its own with slice=1", async () => {
+    const all: Results = await (await get("?collection=new&sort=price-asc&page=2")).json();
+    const res = await get("?collection=new&sort=price-asc&page=2&slice=1");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("public, s-maxage=300, stale-while-revalidate=600");
+    const page: ResultsPage = await res.json();
+    expect(page).not.toHaveProperty("facets");
+    expect(page.page).toBe(2);
+    expect(page.products.map((product) => product.slug)).toEqual(all.products.slice(24).map((product) => product.slug));
   });
 });

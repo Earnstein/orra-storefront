@@ -65,9 +65,10 @@ function collectionOf(scope: Exclude<ResultsScope, { kind: "search" }>): string 
 
 /**
  * The results endpoint's URL for a query. Keys come in a fixed order and defaults are left out, so
- * equal queries share one URL (and one browser and CDN cache entry).
+ * equal queries share one URL (and one browser and CDN cache entry). With `slice`, it asks for
+ * page `query.page` on its own (Load more) rather than everything up to it.
  */
-export function resultsApiPath(query: ResultsQuery): string {
+export function resultsApiPath(query: ResultsQuery, { slice = false }: { slice?: boolean } = {}): string {
   const { scope, tab, filters, sort, page } = normaliseQuery(query);
   const params = new URLSearchParams();
   if (scope.kind === "search") params.set("q", scope.q);
@@ -80,6 +81,7 @@ export function resultsApiPath(query: ResultsQuery): string {
   if (filters.stock) params.set("stock", "in");
   if (filters.newIn) params.set("new", "1");
   if (page !== 1) params.set("page", String(page));
+  if (slice) params.set("slice", "1");
   return `/api/products?${params}`;
 }
 

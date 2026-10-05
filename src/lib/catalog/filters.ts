@@ -3,8 +3,17 @@ import type { CollectionScope } from "./collections";
 import { buildSearchQuery } from "./search";
 import { COLOUR_FAMILIES, MATERIALS } from "./vocabulary";
 
-/** Highest page a request can ask for (2,400 products); keeps a hand-edited URL from fetching everything. */
+/** Products per page of results. */
+export const RESULTS_PAGE_SIZE = 24;
+
+/** Highest page Load more can reach (2,400 products); keeps a hand-edited URL in bounds. */
 export const MAX_PAGE = 100;
+
+/**
+ * How many pages a single read restores (240 products): a reload or a first visit with ?page=N
+ * shows at most this many, and Load more fetches each later page on its own.
+ */
+export const MAX_RESTORE_PAGES = 10;
 
 // What a results request can ask for, and the rules that keep equal requests equal (so they share
 // one cache entry) and drop what a page doesn't offer.

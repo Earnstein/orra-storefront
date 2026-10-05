@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryStates } from "nuqs";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Container, Grid } from "@/components/primitives";
 import { ProductCard } from "@/components/product/product-card";
@@ -9,20 +9,20 @@ import { Button } from "@/components/ui/button";
 import {
   activeFilterCount,
   normaliseQuery,
+  RESULTS_PAGE_SIZE,
   SORT_LABELS,
   withoutFilter,
   type ActiveFilter,
   type ResultsQuery,
   type ResultsScope,
 } from "@/lib/catalog/filters";
-import type { Results } from "@/lib/catalog/results";
 import { resultsApiPath, resultsParamsFor, resultsParsers, toResultsQuery } from "@/lib/catalog/search-params";
 import { cn } from "@/lib/utils";
 import { FilterChips } from "./filter-chips";
 import { FilterSheet } from "./filter-sheet";
 import { ListingToolbar, type SheetSection } from "./listing-toolbar";
 import { LoadMore } from "./load-more";
-import { useResults } from "./use-results";
+import { summaryOf, useResults, type ResultsData } from "./use-results";
 
 // Tiles in the first row at the widest layout (xl: 4 columns) load their images eagerly.
 const FIRST_ROW = 4;
@@ -33,41 +33,69 @@ const CLEARED_FILTERS = { category: null, audience: null, colour: null, material
 /**
  * A listing's results, driven by the URL: toolbar, chips, filter sheet, grid and Load more.
  * Applying the sheet and removing a chip push a history entry (Back undoes them); Load more
- * replaces the current one. The first results come
- * hydrated from the server; later ones from /api/products. While new results load, the current
- * ones stay on screen, dimmed (but not for Load more, which shows on its button instead).
+ * replaces the current one. The first results come hydrated from the server; later ones from
+ * /api/products. The grid shows the URL's `page` × 24 of the products loaded so far. While a new
+ * filter set loads, the current results stay on screen, dimmed.
  */
 export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: string; empty: React.ReactNode }) {
   const [params, setParams] = useQueryStates(resultsParsers);
   const query = useMemo(() => toResultsQuery(params, scope, tab), [params, scope, tab]);
-  const { data, isPlaceholderData, isError, isFetching, refetch } = useResults(query);
+  const { data, isPlaceholderData, isError, isFetching, isFetchingNextPage, isFetchNextPageError, fetchNextPage, refetch } =
+    useResults(query);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetSection, setSheetSection] = useState<SheetSection>("filters");
   const filterButton = useRef<HTMLButtonElement>(null);
 
   // The last results shown stay on screen if a later request fails.
-  const [lastData, setLastData] = useState<Results | undefined>(data);
+  const [lastData, setLastData] = useState<ResultsData | undefined>(data);
   if (data && data !== lastData) setLastData(data);
-  const results = data ?? lastData;
+  const shownData = data ?? lastData;
 
-  // The Load more in flight (the URL it asked for and how many products were shown before), and
-  // the announcement once it lands. Both belong to one URL: leaving it (a filter change, Back)
-  // drops them, so coming back later doesn't announce again.
-  const [more, setMore] = useState<{ path: string; from: number } | null>(null);
+  // The Load more announcement belongs to the URL it led to: leaving that URL (a filter change,
+  // Back) drops it, so coming back later doesn't announce again.
   const [announced, setAnnounced] = useState<{ path: string; text: string } | null>(null);
   const path = resultsApiPath(query);
-  if (more && more.path !== path) setMore(null);
   if (announced && announced.path !== path) setAnnounced(null);
-  if (more?.path === path && data && !isPlaceholderData) {
-    setAnnounced({ path, text: `${data.products.length - more.from} more items loaded` });
-    setMore(null);
-  }
-  const loadingMore = isPlaceholderData && more?.path === path;
 
-  if (!results) return null;
+  const loaded = useMemo(() => shownData?.pages.flatMap((page) => page.products) ?? [], [shownData]);
+  const loadedPage = shownData?.pages.at(-1)?.page ?? 1;
+  const shownPage = Math.min(query.page, loadedPage);
+  const settled = !isPlaceholderData && !isFetching;
 
+  // A URL asking for more pages than were restored (a hand-edited ?page, or one past the restore
+  // cap) is brought in line with what's shown.
+  useEffect(() => {
+    if (settled && query.page > loadedPage) {
+      void setParams({ page: loadedPage === 1 ? null : loadedPage }, { history: "replace", scroll: false });
+    }
+  }, [settled, query.page, loadedPage, setParams]);
+
+  if (!shownData) return null;
+
+  const results = summaryOf(shownData);
+  const products = loaded.slice(0, shownPage * RESULTS_PAGE_SIZE);
   const filtersActive = activeFilterCount(query.filters) > 0;
-  const updating = isPlaceholderData && !loadingMore;
+  const updating = isPlaceholderData;
+
+  // Load more shows the next page: from the cache if it's already loaded, else fetched on its
+  // own. The URL moves on only once the products are there, and only if the filters haven't
+  // changed meanwhile.
+  const loadMore = async () => {
+    const nextPage = shownPage + 1;
+    let available = loaded;
+    if (loadedPage < nextPage) {
+      const result = await fetchNextPage();
+      if (result.isError || !result.data) return;
+      available = result.data.pages.flatMap((page) => page.products);
+    }
+    const added = Math.min(available.length, nextPage * RESULTS_PAGE_SIZE) - products.length;
+    const base = resultsApiPath({ ...query, page: 1 });
+    setAnnounced({ path: resultsApiPath({ ...query, page: nextPage }), text: `${added} more items loaded` });
+    void setParams(
+      (latest) => (resultsApiPath({ ...toResultsQuery(latest, scope, tab), page: 1 }) === base ? { page: nextPage } : {}),
+      { history: "replace", scroll: false },
+    );
+  };
 
   // Filter changes start from page 1 and add a history entry. Chip removals read the latest URL
   // state, so quick successive removals all apply.
@@ -128,8 +156,8 @@ export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: 
 
       {isError && !isFetching && (
         <Container className="flex items-center gap-4 pb-4 caption" role="alert">
-          <p>Couldn’t update results.</p>
-          <Button variant="link" size="sm" onClick={() => refetch()}>
+          <p>{isFetchNextPageError ? "Couldn’t load more items." : "Couldn’t update results."}</p>
+          <Button variant="link" size="sm" onClick={() => (isFetchNextPageError ? loadMore() : refetch())}>
             Try again
           </Button>
         </Container>
@@ -151,23 +179,17 @@ export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: 
             aria-busy={updating}
             className={cn("px-tile pb-block transition-opacity duration-200", updating && "opacity-60")}
           >
-            {results.products.map((product, index) => (
+            {products.map((product, index) => (
               <ProductCard key={product.slug} product={product} eager={index < FIRST_ROW} />
             ))}
           </Grid>
           <LoadMore
-            shown={results.products.length}
+            shown={products.length}
             total={results.total}
-            loading={loadingMore}
+            loading={isFetchingNextPage}
             disabled={updating}
             announcement={announced?.path === path ? announced.text : ""}
-            onLoadMore={() => {
-              // A failed Load more already asked for the next page: try it again.
-              if (isError) return void refetch();
-              const next = { ...query, page: results.page + 1 };
-              setMore({ path: resultsApiPath(next), from: results.products.length });
-              void setParams({ page: next.page }, { history: "replace", scroll: false });
-            }}
+            onLoadMore={() => void loadMore()}
           />
         </>
       )}

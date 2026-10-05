@@ -1,13 +1,14 @@
 import { resolveCollection } from "@/lib/catalog/collections";
 import type { ResultsScope } from "@/lib/catalog/filters";
 import { getCategories } from "@/lib/catalog/queries";
-import { getResults } from "@/lib/catalog/results";
+import { getResults, getResultsPage } from "@/lib/catalog/results";
 import { loadResultsParams, toResultsQuery } from "@/lib/catalog/search-params";
 
 // Results for the listing UI's client-side fetches (filters, sort, Load more) and for search.
 // The scope is a collection (?collection=…, with an optional ?tab=… on New, Women and Men), or a
 // search (?q=…) when there's no collection. Everything else is parsed and normalised like the
-// page's own URL, so a hand-edited request gets sensible results rather than an error.
+// page's own URL, so a hand-edited request gets sensible results rather than an error. ?slice=1
+// returns page ?page on its own (Load more); otherwise the first pages up to it, with facets.
 
 const CACHE_CONTROL = "public, s-maxage=300, stale-while-revalidate=600";
 
@@ -33,7 +34,7 @@ export async function GET(request: Request): Promise<Response> {
 
   const query = toResultsQuery(loadResultsParams(searchParams), scope, tab);
   const start = performance.now();
-  const results = await getResults(query);
+  const results = searchParams.get("slice") === "1" ? await getResultsPage(query) : await getResults(query);
   const duration = (performance.now() - start).toFixed(1);
 
   return Response.json(results, {

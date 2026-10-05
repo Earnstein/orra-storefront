@@ -26,7 +26,7 @@ import type { Facet, Results } from "@/lib/catalog/results";
 import { cn } from "@/lib/utils";
 import type { SheetSection } from "./listing-toolbar";
 import { SWATCHES } from "./swatches";
-import { useResults } from "./use-results";
+import { summaryOf, useResults } from "./use-results";
 
 type ListKey = Exclude<FacetKey, "stock" | "newIn">;
 
@@ -91,7 +91,7 @@ function FilterPanel({
 }) {
   const [draft, setDraft] = useState<ResultsQuery>(() => ({ ...query, page: 1 }));
   const { data, isPlaceholderData } = useResults(draft, results);
-  const { facets, total } = data ?? results;
+  const { facets, total } = data ? summaryOf(data) : results;
 
   const setFilters = (update: (filters: Filters) => Filters) =>
     setDraft((current) => ({ ...current, filters: update(current.filters) }));

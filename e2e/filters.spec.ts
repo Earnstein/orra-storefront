@@ -21,7 +21,12 @@ test("load more appends and survives reload", async ({ page }) => {
   await expect(page.getByText(`Showing 24 of ${women.length}`)).toBeVisible();
   await expect(productLinks(page)).toHaveCount(24);
 
+  const response = page.waitForResponse((res) => res.url().includes("/api/products"));
   await loadMore(page).click();
+  // Only the next page is fetched, not the products already shown.
+  const next = await response;
+  expect(new URL(next.url()).searchParams.get("slice")).toBe("1");
+  expect((await next.json()).products).toHaveLength(women.length - 24);
   await expect(productLinks(page)).toHaveCount(women.length);
   await expect(page).toHaveURL(/[?&]page=2(&|$)/);
   await expect(page.getByText(`${women.length - 24} more items loaded`)).toBeAttached();
@@ -60,6 +65,8 @@ test("a listing of 24 or fewer has no Load more", async ({ page }) => {
 test("a hand-edited page past the end shows everything", async ({ page }) => {
   expect((await page.goto("/collections/bags?page=9&sort=nope&colour=nope", { waitUntil: "domcontentloaded" }))?.status()).toBe(200);
   await expect(productLinks(page)).toHaveCount(bags.length);
+  // Once hydrated, the URL is brought in line with the pages actually shown.
+  await expect(page).not.toHaveURL(/page=/);
 });
 
 const sheet = (page: Page) => page.getByRole("dialog", { name: "Filter and sort" });

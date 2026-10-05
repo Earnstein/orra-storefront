@@ -76,6 +76,11 @@ describe("resultsApiPath", () => {
     expect(path("?sort=relevance", search("tote"))).toBe("/api/products?q=tote");
   });
 
+  it("asks for one page on its own with slice=1", () => {
+    const query = toResultsQuery(loadResultsParams("?page=3&colour=red"), bags);
+    expect(resultsApiPath(query, { slice: true })).toBe("/api/products?collection=bags&colour=red&page=3&slice=1");
+  });
+
   it("is the same for equal queries written differently", () => {
     expect(path("?colour=red&colour=black&colour=red", bags)).toBe(path("?colour=black&colour=red", bags));
   });
