@@ -10,8 +10,9 @@ import type { Category, Product } from "./types";
 
 // Catalogue reads. Components depend on these signatures and the Product type, not on the
 // table layout. Every read is cached (Cache Components) under the `catalog` tag with the
-// `catalog` lifetime (next.config.ts), so edits show within 5 minutes, or at once after
-// revalidateTag("catalog").
+// `catalog` lifetime (next.config.ts): an edit shows on the first visit after the 5-minute
+// refresh has run, or at once after updateTag("catalog") in a Server Action.
+// queries-cache.test.ts checks that every exported read keeps its three cache lines.
 
 const productColumns = {
   slug: products.slug,

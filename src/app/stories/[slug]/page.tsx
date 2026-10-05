@@ -9,6 +9,10 @@ import { ogImage } from "@/lib/metadata";
 // Stories live in code, so every page is prerendered; the products they show come from cached
 // catalogue reads. Unknown slugs render on request and 404 through notFound().
 
+// Params outside generateStaticParams (including unknown slugs) render on request and must block
+// rather than stream, so notFound() still returns a real 404 (streaming would send a 200 first).
+export const instant = false;
+
 export function generateStaticParams() {
   return stories.map((story) => ({ slug: story.slug }));
 }

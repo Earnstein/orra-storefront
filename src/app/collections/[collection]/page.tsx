@@ -7,6 +7,10 @@ import { CollectionListing } from "../collection-listing";
 // Prerendered for every collection (New, Women, Men and each category) from cached catalogue
 // reads. Categories added after the build render on first request; unknown slugs 404.
 
+// Params outside generateStaticParams (including unknown slugs) render on request and must block
+// rather than stream, so notFound() still returns a real 404 (streaming would send a 200 first).
+export const instant = false;
+
 /** Returns build-time paths for built-in collections and all database categories; database errors propagate. */
 export async function generateStaticParams() {
   const categories = await getCategories();

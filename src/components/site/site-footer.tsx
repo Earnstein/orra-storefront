@@ -50,9 +50,12 @@ export function SiteFooter() {
   );
 }
 
-/** The current year, cached so prerendering doesn't read the clock. */
+/**
+ * The current year, cached so prerendering doesn't read the clock. Refreshed daily; it expires
+ * after a year like the catalogue, because the shortest expiry on a page caps the whole page's.
+ */
 async function CopyrightYear() {
   "use cache";
-  cacheLife("days");
+  cacheLife({ revalidate: 86_400, expire: 31_536_000 });
   return new Date().getFullYear();
 }

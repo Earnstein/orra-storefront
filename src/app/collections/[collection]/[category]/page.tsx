@@ -8,6 +8,10 @@ import { CollectionListing, presentCategories } from "../../collection-listing";
 // tabs that have products at build time; other known categories render on first request (empty
 // state). Unknown categories, and tabs under a category page, 404.
 
+// Params outside generateStaticParams (including unknown slugs) render on request and must block
+// rather than stream, so notFound() still returns a real 404 (streaming would send a 200 first).
+export const instant = false;
+
 /**
  * Returns build-time paths for categories represented in New, Women, and Men.
  * New uses its limited batch of arrivals. Database errors propagate.

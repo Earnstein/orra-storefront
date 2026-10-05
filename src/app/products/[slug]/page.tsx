@@ -13,6 +13,10 @@ import { site } from "@/lib/site";
 // within 5 minutes without a deploy. Products added after the build render on first request;
 // unknown slugs 404.
 
+// Params outside generateStaticParams (including unknown slugs) render on request and must block
+// rather than stream, so notFound() still returns a real 404 (streaming would send a 200 first).
+export const instant = false;
+
 export async function generateStaticParams() {
   return (await getAllProductSlugs()).map((slug) => ({ slug }));
 }
