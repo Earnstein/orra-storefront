@@ -1,6 +1,6 @@
 import { keepPreviousData, useInfiniteQuery, type InfiniteData } from "@tanstack/react-query";
 
-import type { ResultsQuery } from "@/lib/catalog/filters";
+import { MAX_PAGE, type ResultsQuery } from "@/lib/catalog/filters";
 import type { Results, ResultsPage } from "@/lib/catalog/results";
 import { resultsApiPath } from "@/lib/catalog/search-params";
 
@@ -36,8 +36,17 @@ export function useResults(query: ResultsQuery, fallback?: Results) {
     queryFn: ({ pageParam, signal }) =>
       fetchResults(resultsApiPath({ ...query, page: pageParam.page }, { slice: pageParam.slice }), signal),
     initialPageParam: { page: query.page, slice: false },
-    getNextPageParam: (last) => (last.page < last.pageCount ? { page: last.page + 1, slice: true } : undefined),
+    // The page count comes from the restored entry; Load more stops at MAX_PAGE.
+    getNextPageParam: (last, pages) =>
+      last.page < Math.min((pages[0] as Results).pageCount, MAX_PAGE) ? { page: last.page + 1, slice: true } : undefined,
     placeholderData: fallback ? (previous) => previous ?? initialResultsData(fallback) : keepPreviousData,
+    // Refetching an infinite query re-requests every loaded page, one after another, so results
+    // don't refetch in the background; a new filter set still fetches, and stale ones refetch
+    // after the catalogue's 5-minute lifetime.
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 }
 

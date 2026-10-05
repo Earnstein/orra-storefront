@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 export function LoadMore({
   shown,
   total,
+  hasMore,
   loading,
   disabled,
   announcement,
@@ -19,6 +20,8 @@ export function LoadMore({
 }: {
   shown: number;
   total: number;
+  /** Whether Load more has anything left to show (it stops at MAX_PAGE). */
+  hasMore: boolean;
   loading: boolean;
   /** While other results load, the counts shown are about to change. */
   disabled: boolean;
@@ -26,7 +29,6 @@ export function LoadMore({
   onLoadMore: () => void;
 }) {
   const countRef = useRef<HTMLParagraphElement>(null);
-  const hasMore = shown < total;
   const announced = announcement !== "";
 
   useEffect(() => {

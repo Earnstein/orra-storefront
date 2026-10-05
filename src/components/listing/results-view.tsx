@@ -8,6 +8,7 @@ import { ProductCard } from "@/components/product/product-card";
 import { Button } from "@/components/ui/button";
 import {
   activeFilterCount,
+  MAX_RESTORE_PAGES,
   normaliseQuery,
   RESULTS_PAGE_SIZE,
   SORT_LABELS,
@@ -27,6 +28,15 @@ import { summaryOf, useResults, type ResultsData } from "./use-results";
 // Tiles in the first row at the widest layout (xl: 4 columns) load their images eagerly.
 const FIRST_ROW = 4;
 
+/**
+ * The loaded products in order, each once. The restored entry and later pages are cached
+ * separately, so a catalogue change between them can shift a product across the boundary.
+ */
+function uniqueProducts(data: ResultsData) {
+  const seen = new Set<string>();
+  return data.pages.flatMap((page) => page.products).filter((product) => !seen.has(product.slug) && seen.add(product.slug));
+}
+
 /** Every URL key that holds a filter, cleared together by Clear all. */
 const CLEARED_FILTERS = { category: null, audience: null, colour: null, material: null, price: null, stock: null, new: null, page: null };
 
@@ -40,8 +50,17 @@ const CLEARED_FILTERS = { category: null, audience: null, colour: null, material
 export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: string; empty: React.ReactNode }) {
   const [params, setParams] = useQueryStates(resultsParsers);
   const query = useMemo(() => toResultsQuery(params, scope, tab), [params, scope, tab]);
-  const { data, isPlaceholderData, isError, isFetching, isFetchingNextPage, isFetchNextPageError, fetchNextPage, refetch } =
-    useResults(query);
+  const {
+    data,
+    isPlaceholderData,
+    isError,
+    isFetching,
+    isFetchingNextPage,
+    isFetchNextPageError,
+    hasNextPage,
+    fetchNextPage,
+    refetch,
+  } = useResults(query);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetSection, setSheetSection] = useState<SheetSection>("filters");
   const filterButton = useRef<HTMLButtonElement>(null);
@@ -57,18 +76,19 @@ export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: 
   const path = resultsApiPath(query);
   if (announced && announced.path !== path) setAnnounced(null);
 
-  const loaded = useMemo(() => shownData?.pages.flatMap((page) => page.products) ?? [], [shownData]);
+  const loaded = useMemo(() => (shownData ? uniqueProducts(shownData) : []), [shownData]);
   const loadedPage = shownData?.pages.at(-1)?.page ?? 1;
   const shownPage = Math.min(query.page, loadedPage);
-  const settled = !isPlaceholderData && !isFetching;
 
-  // A URL asking for more pages than were restored (a hand-edited ?page, or one past the restore
-  // cap) is brought in line with what's shown.
+  // A URL asking for more pages than the server restores (past the last page, or past the restore
+  // cap) is brought in line with what's shown. Only fresh results for this URL count: not the
+  // previous results kept on screen while loading, or after an error.
+  const summary = data && !isPlaceholderData && !isFetching && !isError ? summaryOf(data) : undefined;
+  const serverPage = summary && Math.min(summary.pageCount, MAX_RESTORE_PAGES);
+  const correctTo = serverPage !== undefined && query.page > serverPage && loadedPage === serverPage ? serverPage : null;
   useEffect(() => {
-    if (settled && query.page > loadedPage) {
-      void setParams({ page: loadedPage === 1 ? null : loadedPage }, { history: "replace", scroll: false });
-    }
-  }, [settled, query.page, loadedPage, setParams]);
+    if (correctTo !== null) void setParams({ page: correctTo === 1 ? null : correctTo }, { history: "replace", scroll: false });
+  }, [correctTo, setParams]);
 
   if (!shownData) return null;
 
@@ -86,7 +106,7 @@ export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: 
     if (loadedPage < nextPage) {
       const result = await fetchNextPage();
       if (result.isError || !result.data) return;
-      available = result.data.pages.flatMap((page) => page.products);
+      available = uniqueProducts(result.data);
     }
     const added = Math.min(available.length, nextPage * RESULTS_PAGE_SIZE) - products.length;
     const base = resultsApiPath({ ...query, page: 1 });
@@ -186,6 +206,7 @@ export function ResultsView({ scope, tab, empty }: { scope: ResultsScope; tab?: 
           <LoadMore
             shown={products.length}
             total={results.total}
+            hasMore={shownPage < loadedPage || hasNextPage}
             loading={isFetchingNextPage}
             disabled={updating}
             announcement={announced?.path === path ? announced.text : ""}

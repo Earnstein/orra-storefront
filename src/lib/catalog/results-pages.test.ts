@@ -38,7 +38,7 @@ describe("results pages", () => {
   it("returns one page's products on their own, continuing the restored list", async () => {
     const restored = await getResults(query(MAX_RESTORE_PAGES));
     const next = await getResultsPage(query(MAX_RESTORE_PAGES + 1));
-    expect(next).toMatchObject({ page: MAX_RESTORE_PAGES + 1, total: restored.total, pageCount: restored.pageCount });
+    expect(next.page).toBe(MAX_RESTORE_PAGES + 1);
     expect(next.products).toHaveLength(RESULTS_PAGE_SIZE);
 
     const all = await getResults(query(1));

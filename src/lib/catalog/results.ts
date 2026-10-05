@@ -38,8 +38,11 @@ export type Results = {
   facets: Record<FacetKey, Facet[]>;
 };
 
-/** One page of products on its own (Load more): page N holds products (N−1) × 24 to N × 24. */
-export type ResultsPage = Omit<Results, "facets">;
+/**
+ * One page of products on its own (Load more): page N holds products (N−1) × 24 to N × 24. The
+ * total and page count come from the restored results, so a page doesn't count every match.
+ */
+export type ResultsPage = Pick<Results, "products" | "page">;
 
 const FACET_KEYS: FacetKey[] = ["category", "audience", "colour", "material", "price", "stock", "newIn"];
 
@@ -60,11 +63,17 @@ async function cachedPage(query: ResultsQuery): Promise<ResultsPage> {
   cacheLife("catalog");
 
   const search = query.scope.kind === "search" ? buildSearchQuery(query.scope.q) : undefined;
-  if (query.scope.kind === "search" && !search) return { products: [], total: 0, page: query.page, pageCount: 1 };
+  if (query.scope.kind === "search" && !search) return { products: [], page: query.page };
 
-  const rows = await productRows(query, search, RESULTS_PAGE_SIZE, (query.page - 1) * RESULTS_PAGE_SIZE);
-  const total = rows[0]?.total ?? 0;
-  return { products: rows.map(toProduct), total, page: query.page, pageCount: Math.max(1, Math.ceil(total / RESULTS_PAGE_SIZE)) };
+  const rows = await db
+    .select(productColumns)
+    .from(products)
+    .innerJoin(categories, eq(products.categoryId, categories.id))
+    .where(and(...conditions(query, search)))
+    .orderBy(...ordering(query, search))
+    .limit(RESULTS_PAGE_SIZE)
+    .offset((query.page - 1) * RESULTS_PAGE_SIZE);
+  return { products: rows, page: query.page };
 }
 
 async function cachedResults(query: ResultsQuery): Promise<Results> {
@@ -78,7 +87,13 @@ async function cachedResults(query: ResultsQuery): Promise<Results> {
   const hidden = new Set(hiddenFacets(query.scope));
   const visible = FACET_KEYS.filter((key) => !hidden.has(key));
   const [rows, facetRows] = await Promise.all([
-    productRows(query, search, query.page * RESULTS_PAGE_SIZE, 0),
+    db
+      .select({ ...productColumns, total: sql<number>`count(*) over ()`.mapWith(Number) })
+      .from(products)
+      .innerJoin(categories, eq(products.categoryId, categories.id))
+      .where(and(...conditions(query, search)))
+      .orderBy(...ordering(query, search))
+      .limit(query.page * RESULTS_PAGE_SIZE),
     visible.length === 0 ? [] : facetCounts(query, search, visible),
   ]);
 
@@ -96,17 +111,6 @@ async function cachedResults(query: ResultsQuery): Promise<Results> {
 
 type SearchQuery = { tsquery: string; text: string; words: string[] };
 
-/** The query's products in order, from `offset`, each with the total match count. */
-function productRows(query: ResultsQuery, search: SearchQuery | undefined, limit: number, offset: number) {
-  return db
-    .select({ ...productColumns, total: sql<number>`count(*) over ()`.mapWith(Number) })
-    .from(products)
-    .innerJoin(categories, eq(products.categoryId, categories.id))
-    .where(and(...conditions(query, search)))
-    .orderBy(...ordering(query, search))
-    .limit(limit)
-    .offset(offset);
-}
 
 /** Drops the window-count column a results row carries. */
 function toProduct(row: Product & { total: number }): Product {
