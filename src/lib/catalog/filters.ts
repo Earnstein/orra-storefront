@@ -9,7 +9,8 @@ export const MAX_PAGE = 100;
 // What a results request can ask for, and the rules that keep equal requests equal (so they share
 // one cache entry) and drop what a page doesn't offer.
 
-export type Sort = "newest" | "price-asc" | "price-desc" | "relevance";
+export const SORTS = ["newest", "price-asc", "price-desc", "relevance"] as const;
+export type Sort = (typeof SORTS)[number];
 
 export const PRICE_BANDS = [
   { value: "under-500", label: "Under $500", min: 0, max: 49_999 },
