@@ -10,10 +10,9 @@ import { ProductCard } from "@/components/product/product-card";
 import { Button } from "@/components/ui/button";
 import { SheetClose, SheetTitle } from "@/components/ui/sheet";
 import { stories } from "@/content/stories";
-import type { Suggestions } from "@/lib/catalog/suggest";
 import { cn } from "@/lib/utils";
-import { LinkGroup, PopularSearches, searchPath } from "./popular-searches";
-import { MIN_SUGGEST_LENGTH, useSuggestions } from "./use-suggestions";
+import { LinkGroup, PopularSearches, searchPath } from "./search-links";
+import { MIN_SUGGEST_LENGTH, useSuggestions, type TermSuggestions } from "./use-suggestions";
 
 const resultsLabel = (total: number) => (total === 1 ? "1 result" : `${total} results`);
 
@@ -24,14 +23,16 @@ const resultsLabel = (total: number) => (total === 1 ? "1 result" : `${total} re
  */
 export function SearchPanel({ inputRef, onDone }: { inputRef: React.Ref<HTMLInputElement>; onDone: () => void }) {
   const [q, setQ] = useState("");
-  const { data, isPlaceholderData, term } = useSuggestions(q);
+  const { data, isPlaceholderData, isError } = useSuggestions(q);
   const typing = q.trim().length >= MIN_SUGGEST_LENGTH;
 
   return (
     <div
       className="flex min-h-0 flex-1 flex-col"
       onClick={(event) => {
-        if ((event.target as HTMLElement).closest("a")) onDone();
+        // A plain click on a link navigates here; a modified one opens elsewhere, so stay open.
+        const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
+        if (!modified && (event.target as HTMLElement).closest("a")) onDone();
       }}
     >
       <SheetTitle className="sr-only">Search</SheetTitle>
@@ -62,14 +63,14 @@ export function SearchPanel({ inputRef, onDone }: { inputRef: React.Ref<HTMLInpu
           {!typing ? (
             <StartLinks />
           ) : !data ? (
-            <p className="caption text-muted-foreground">Searching…</p>
+            <p className="caption text-muted-foreground">{isError ? "Couldn’t load suggestions. Press Enter to search." : "Searching…"}</p>
           ) : data.total === 0 ? (
-            <div className="flex flex-col gap-block">
-              <p className="text-title">No results for ‘{term}’</p>
+            <div className={cn("flex flex-col gap-block", isPlaceholderData && "opacity-60")}>
+              <p className="text-title">No results for ‘{data.term}’</p>
               <PopularSearches />
             </div>
           ) : (
-            <Matches suggestions={data} term={term} dimmed={isPlaceholderData} />
+            <Matches suggestions={data} dimmed={isPlaceholderData} />
           )}
         </Container>
       </div>
@@ -79,7 +80,6 @@ export function SearchPanel({ inputRef, onDone }: { inputRef: React.Ref<HTMLInpu
     </div>
   );
 }
-
 
 /** Before typing: popular searches, new arrivals by audience, and the stories. */
 function StartLinks() {
@@ -115,7 +115,8 @@ function StartLinks() {
 }
 
 /** While typing: matching categories and "See all", then up to six products. */
-function Matches({ suggestions, term, dimmed }: { suggestions: Suggestions; term: string; dimmed: boolean }) {
+function Matches({ suggestions, dimmed }: { suggestions: TermSuggestions; dimmed: boolean }) {
+  const { term } = suggestions;
   return (
     <div
       aria-busy={dimmed}

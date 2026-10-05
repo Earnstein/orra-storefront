@@ -25,10 +25,7 @@ export default function SearchPage({ searchParams }: PageProps<"/search">) {
   );
 }
 
-/**
- * Reads the query and its first results on the server and hands them to the client view through
- * the query cache. Keyed by the query, so navigating to another search starts a fresh field.
- */
+/** Reads the query and its first results on the server and hands them to the client view through the query cache. */
 async function SearchSection({ searchParams }: { searchParams: PageProps<"/search">["searchParams"] }) {
   const params = await loadResultsParams(searchParams);
   const q = params.q.trim();
@@ -36,7 +33,7 @@ async function SearchSection({ searchParams }: { searchParams: PageProps<"/searc
 
   return (
     <HydrationBoundary state={state}>
-      <SearchView key={q} />
+      <SearchView />
     </HydrationBoundary>
   );
 }
