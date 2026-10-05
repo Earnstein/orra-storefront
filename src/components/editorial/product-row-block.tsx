@@ -5,7 +5,11 @@ import type { Product } from "@/lib/catalog/types";
 
 type ProductRowBlockProps = Pick<Extract<Block, { type: "productRow" }>, "heading" | "action"> & { products: Product[] };
 
-/** A heading and a grid of product cards; renders nothing if none of the products exist. */
+/**
+ * A heading and one row of product cards (two rows of two on phones); renders nothing if none
+ * of the products exist. The fourth card is hidden while the grid has three columns, so the
+ * row never leaves a card on its own.
+ */
 export function ProductRowBlock({ heading, action, products }: ProductRowBlockProps) {
   if (products.length === 0) return null;
   return (
@@ -19,8 +23,10 @@ export function ProductRowBlock({ heading, action, products }: ProductRowBlockPr
         )}
       </Container>
       <Grid layout="products" className="px-tile">
-        {products.map((product) => (
-          <ProductCard key={product.slug} product={product} />
+        {products.slice(0, 4).map((product, index) => (
+          <div key={product.slug} className={index === 3 ? "md:max-xl:hidden" : undefined}>
+            <ProductCard product={product} />
+          </div>
         ))}
       </Grid>
     </Section>

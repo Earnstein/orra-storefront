@@ -1,7 +1,7 @@
 import type { CatalogImage } from "@/lib/catalog/types";
 
 /**
- * Editorial homepage content (campaigns, collections, story, services). Products and
+ * Editorial homepage content (campaigns, collections, services; stories are in src/content). Products and
  * categories live in the database; see src/lib/catalog/queries.ts.
  * Photos are from Unsplash (free to use under the Unsplash License); each was checked
  * for visible third-party logos.
@@ -112,17 +112,6 @@ export const featuredCollections: FeaturedCollection[] = [
     },
   },
 ];
-
-export const story = {
-  title: "Knitwear, made slowly",
-  body: "Each piece is knitted from undyed merino and finished by hand, then left to rest before it is pressed. It takes longer. It also keeps its shape for years.",
-  href: "/stories/knitwear",
-  linkLabel: "Read the story",
-  image: {
-    src: unsplash("1558769132-cb1aea458c5e"),
-    alt: "Rail of neutral-toned knitwear beside dried pampas grass",
-  },
-};
 
 export const services = [
   { icon: "truck", title: "Complimentary delivery", body: "On every order, tracked from dispatch to your door." },
