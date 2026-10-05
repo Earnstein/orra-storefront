@@ -316,7 +316,7 @@ export const products: SeedProduct[] = [
     stock: 0,
     images: gallery("1713425884499-743f5372a65e", "Burgundy leather barrel bag", [
       { x: 0.5, y: 0.42, zoom: 3, alt: "Close-up of the twin handles" },
-      { x: 0.22, y: 0.62, zoom: 5, alt: "Close-up of the side clasp" },
+      { x: 0.22, y: 0.62, zoom: 5, alt: "Close-up of the side hardware" },
     ]),
   },
   {
@@ -736,6 +736,7 @@ export const products: SeedProduct[] = [
     details: [
       { term: "Material", value: "Gold-plated brass" },
       { term: "Length", value: "9 cm" },
+      { term: "Finish", value: "Polished" },
     ],
     stock: 22,
     images: gallery("1744177762258-c98418b7a4eb", "Gold-tone metal hair claw", [
@@ -755,6 +756,7 @@ export const products: SeedProduct[] = [
     details: [
       { term: "Material", value: "Cellulose acetate" },
       { term: "Length", value: "11 cm" },
+      { term: "Finish", value: "Hand-polished" },
     ],
     stock: 25,
     images: gallery("1635423759716-53ccaa71b3fa", "Tortoiseshell acetate hair claw", [
@@ -775,6 +777,7 @@ export const products: SeedProduct[] = [
       { term: "Frame", value: "Gold-plated metal" },
       { term: "Lenses", value: "Brown gradient, UV400" },
       { term: "Comes with", value: "Leather case" },
+      { term: "Temple tips", value: "Tortoiseshell acetate" },
     ],
     stock: 10,
     images: gallery("1649119161997-00ffc8c24e11", "Gold wire round sunglasses with brown lenses", [
@@ -834,6 +837,7 @@ export const products: SeedProduct[] = [
     details: [
       { term: "Material", value: "Sterling silver, cubic zirconia" },
       { term: "Band width", value: "6 mm at the front" },
+      { term: "Finish", value: "Rhodium-plated" },
     ],
     stock: 9,
     images: gallery("1589674781759-c21c37956a44", "Silver pavé crossover ring", [
@@ -881,7 +885,7 @@ export const products: SeedProduct[] = [
     ]),
   },
   {
-    slug: "steel-band-rings",
+    slug: "steel-band-ring",
     name: "Brushed band ring",
     category: "jewellery",
     audience: "men",
@@ -893,6 +897,7 @@ export const products: SeedProduct[] = [
     details: [
       { term: "Material", value: "Stainless steel" },
       { term: "Width", value: "8 mm" },
+      { term: "Finish", value: "Brushed, with a polished centre line" },
     ],
     stock: 17,
     images: gallery("1565206077209-0e7e57b6c152", "Two brushed steel band rings", [

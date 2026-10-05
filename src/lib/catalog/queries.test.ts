@@ -72,6 +72,7 @@ describe("catalogue queries", () => {
 
   it("honours a larger limit", async () => {
     expect((await getNewArrivals(24)).map((p) => p.slug)).toEqual(seedProducts.slice(0, 24).map((p) => p.slug));
+    expect((await getNewArrivals(seedProducts.length + 10)).map((p) => p.slug)).toEqual(seedProducts.map((p) => p.slug));
   });
 
   it("maps a product row to the storefront shape", async () => {

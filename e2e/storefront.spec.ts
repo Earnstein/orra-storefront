@@ -35,15 +35,17 @@ test("new arrivals filter by category", async ({ page }) => {
   await page.goto("/collections/new");
   const tabs = page.getByRole("navigation", { name: "Categories" });
   await expect(tabs.getByRole("link", { name: "All", exact: true })).toHaveAttribute("aria-current", "page");
-  await tabs.getByRole("link", { name: "Bags", exact: true }).click();
-  await expect(page).toHaveURL(/\/collections\/new\/bags$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Bags");
+  await tabs.getByRole("link", { name: "Shoes", exact: true }).click();
+  await expect(page).toHaveURL(/\/collections\/new\/shoes$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Shoes");
   const tiles = page.getByRole("main").locator('a[href^="/products/"]');
-  // The tab narrows the newest batch, so expect the bags among the newest seed products.
+  // The tab narrows the newest batch, so expect the shoes among the newest seed products — not all of them.
+  const shoes = seedProducts.filter((product) => product.category === "shoes");
   const expected = seedProducts
     .slice(0, NEW_ARRIVALS_PAGE_LIMIT)
-    .filter((product) => product.category === "bags")
+    .filter((product) => product.category === "shoes")
     .map((product) => `/products/${product.slug}`);
+  expect(expected.length).toBeLessThan(shoes.length);
   await expect(tiles).toHaveCount(expected.length); // waits for the new page, unlike evaluateAll
   const hrefs = await tiles.evaluateAll((links) => links.map((a) => a.getAttribute("href")));
   expect(hrefs).toEqual(expected);

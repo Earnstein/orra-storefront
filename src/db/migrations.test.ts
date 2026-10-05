@@ -1,6 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { describe, expect, it } from "vitest";
 
+import { products as seedProducts } from "@/db/seed/catalog";
 import { applyMigrations, insertLegacyCatalogue, migrationTags } from "@/test/migrations";
 
 // Production is migrated but never seeded, so M2's migrations must fill their new columns on rows
@@ -34,6 +35,11 @@ describe("M2 migrations on a database that predates them", () => {
       "leather-tote-tan": "unisex / brown / leather",
       "legacy-product": "unisex / multicolour / mixed",
     });
+    // Previews are seeded and production is only backfilled, so the two must agree.
+    const backfilled = Object.fromEntries(rows.map((row) => [row.slug, [row.audience, row.colour_family, row.material]]));
+    for (const product of seedProducts.slice(0, 9)) {
+      expect(backfilled[product.slug], product.slug).toEqual([product.audience, product.colourFamily, product.material]);
+    }
     for (const column of ["audience", "colour_family", "material"]) {
       await expect(client.query(`update products set ${column} = null`)).rejects.toThrow();
     }
