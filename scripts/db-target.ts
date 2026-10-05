@@ -44,14 +44,16 @@ export function databaseTarget(env: { databaseUrl: string | undefined; productio
 }
 
 /**
- * Why `npm run db:seed` must stop, or undefined. Only the production database is refused, and only
- * without --production. When PRODUCTION_DB_HOST is unset (CI), the target is unknown and the seed runs.
+ * Why `npm run db:seed` or `db:migrate` must stop, or undefined. Only the production database is
+ * refused, and only when production isn't allowed (`--production`, or a Vercel production build for
+ * migrations). When PRODUCTION_DB_HOST is unset (CI), the target is unknown and the command runs.
  */
-export function seedGuardError(env: {
+export function productionGuardError(env: {
   databaseUrl: string | undefined;
   productionDbHost: string | undefined;
   allowProduction: boolean;
+  action: "seed" | "migrate";
 }): string | undefined {
   if (env.allowProduction || databaseTarget(env) !== "production") return undefined;
-  return "DATABASE_URL points at the production database (PRODUCTION_DB_HOST). Refusing to seed it; pass --production to do this on purpose.";
+  return `DATABASE_URL points at the production database (PRODUCTION_DB_HOST). Refusing to ${env.action} it; pass --production to do this on purpose.`;
 }

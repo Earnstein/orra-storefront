@@ -14,7 +14,7 @@ import { drizzle } from "drizzle-orm/neon-http";
 
 import * as schema from "../src/db/schema";
 import { seedCatalog } from "../src/db/seed";
-import { databaseTarget, seedGuardError } from "./db-target";
+import { databaseTarget, productionGuardError } from "./db-target";
 
 config({ path: [".env.local", ".env"], quiet: true });
 
@@ -33,7 +33,7 @@ if (flags.has("--check")) {
 const url = env.databaseUrl;
 if (!url) throw new Error("DATABASE_URL is not set (see .env.example)");
 
-const refusal = seedGuardError({ ...env, allowProduction: flags.has("--production") });
+const refusal = productionGuardError({ ...env, allowProduction: flags.has("--production"), action: "seed" });
 if (refusal) {
   console.error(refusal);
   process.exit(1);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { databaseTarget, seedGuardError } from "./db-target";
+import { databaseTarget, productionGuardError } from "./db-target";
 
 const url = (host: string) => `postgresql://u:p@${host}/neondb?sslmode=require`;
 const prod = "ep-prod-123.us-east-2.aws.neon.tech";
@@ -26,14 +26,19 @@ describe("databaseTarget", () => {
   });
 });
 
-describe("seedGuardError", () => {
-  it("refuses the production database unless --production is passed", () => {
-    expect(seedGuardError({ databaseUrl: url(prod), productionDbHost: prod, allowProduction: false })).toMatch(/--production/);
-    expect(seedGuardError({ databaseUrl: url(prod), productionDbHost: prod, allowProduction: true })).toBeUndefined();
+describe("productionGuardError", () => {
+  it("refuses to seed or migrate the production database unless production is allowed", () => {
+    expect(productionGuardError({ databaseUrl: url(prod), productionDbHost: prod, allowProduction: false, action: "seed" })).toMatch(
+      /Refusing to seed.*--production/,
+    );
+    expect(
+      productionGuardError({ databaseUrl: url(prod), productionDbHost: prod, allowProduction: false, action: "migrate" }),
+    ).toMatch(/Refusing to migrate.*--production/);
+    expect(productionGuardError({ databaseUrl: url(prod), productionDbHost: prod, allowProduction: true, action: "migrate" })).toBeUndefined();
   });
 
   it("allows other databases, and CI where PRODUCTION_DB_HOST is unset", () => {
-    expect(seedGuardError({ databaseUrl: url(dev), productionDbHost: prod, allowProduction: false })).toBeUndefined();
-    expect(seedGuardError({ databaseUrl: url(prod), productionDbHost: undefined, allowProduction: false })).toBeUndefined();
+    expect(productionGuardError({ databaseUrl: url(dev), productionDbHost: prod, allowProduction: false, action: "seed" })).toBeUndefined();
+    expect(productionGuardError({ databaseUrl: url(prod), productionDbHost: undefined, allowProduction: false, action: "migrate" })).toBeUndefined();
   });
 });

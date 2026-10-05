@@ -20,8 +20,9 @@ npm run test:watch       # Vitest in watch mode
 npm run test:e2e         # Playwright smoke tests (desktop + mobile); needs `npm run build` and a seeded DB, serves on :3100 (or set E2E_BASE_URL)
 
 npm run auth:generate    # Better Auth tables → src/db/schema/auth.ts
-npm run db:generate      # drizzle-kit migration from schema
-npm run db:migrate | db:push | db:studio
+npm run db:generate      # drizzle-kit migration from schema (add `-- --name <name>`)
+npm run db:migrate       # apply migrations; refuses production unless `-- --production` (allowed in Vercel production builds)
+npm run db:push | db:studio
 npm run db:seed          # upsert the initial catalogue (src/db/seed/catalog.ts) by slug; refuses production unless `-- --production`
 npm run db:seed -- --check   # print whether DATABASE_URL points at production (doesn't connect)
 
@@ -41,7 +42,7 @@ Roadmap and process: `docs/superpowers/specs/2026-10-04-roadmap-to-live-design.m
 - When a milestone's last PR merges: tag `vX.Y.0`, publish a GitHub Release, add an entry to `docs/milestones.md`.
 - Stage files by path (never `git add -A`); the user installs things in the working tree in parallel.
 - Environments: CI (`.github/workflows/ci.yml`) builds and tests on a throwaway, expiring `ci-*` Neon branch with credentials masked. Vercel previews get their own Neon branch via the Neon integration and are migrated **and seeded**; production is migrated but **never seeded** (`vercel.json` → `scripts/vercel-build.ts`, steps in `vercel-build-steps.ts`). A preview build stops before touching any database unless `DATABASE_URL`'s host differs from `PRODUCTION_DB_HOST`, so it can never migrate or seed production.
-- Local development uses the Neon `dev` branch. `.env.local` sets `DATABASE_URL` to it, and Next, drizzle-kit and the seed script read `.env.local` before `.env`. `.env` keeps production's URL plus `PRODUCTION_DB_HOST`, which `db:seed` checks (`scripts/db-target.ts`). Before any local `db:migrate`, run `npm run db:seed -- --check`; it must print `not production`. Worktrees symlink both files; never read them.
+- Local development uses the Neon `dev` branch. `.env.local` sets `DATABASE_URL` to it, and Next, the npm `db:*` scripts and the seed script read `.env.local` before `.env`. `.env` keeps production's URL plus `PRODUCTION_DB_HOST`, which `db:seed` and `db:migrate` check (`scripts/db-target.ts`). They refuse production unless run with `-- --production`. `npm run db:seed -- --check` prints which database `DATABASE_URL` points at, and must say `not production` before local database work. Worktrees symlink both files; never read them.
 
 ## Architecture
 
@@ -85,6 +86,8 @@ Roadmap and process: `docs/superpowers/specs/2026-10-04-roadmap-to-live-design.m
 **`cn`** — `src/lib/utils.ts` builds `cn` with `createCn` and registers the custom `text-*`, spacing and container names; otherwise class merging drops e.g. `text-caption` next to a text colour. tsconfig aliases the bare `"cn"` import to that file, so shadcn components (which `import { cn } from "cn"`) get it too. When adding a theme token in `globals.css`, add it to `utils.ts` as well.
 
 ## Gotchas
+
+- drizzle-kit loads `.env` on startup, before `drizzle.config.ts`, and dotenv never overrides a value that's already set. Run bare, it ignores `.env.local` and targets production. That's why its npm scripts set `DOTENV_CONFIG_PATH=.env.local` and `db:migrate` runs through `scripts/migrate.ts`; `scripts/package-scripts.test.ts` pins this. Always use the npm scripts, never `npx drizzle-kit`.
 
 - `scripts/fix-intent-bin.mjs` (root `postinstall`) re-points `node_modules/.bin/intent` at `@tanstack/intent`: TanStack Form's `@tanstack/devtools-event-client` ships a broken `intent` bin that npm links over it. If `npx intent` crashes with `ERR_PACKAGE_PATH_NOT_EXPORTED … intent-library`, run `npm install`. Delete the script once that package fixes its bin.
 - npm 11 blocks dependency install scripts by default; warnings about `esbuild`/`unrs-resolver` postinstalls during `npm install` are expected.
