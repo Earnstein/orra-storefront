@@ -27,18 +27,27 @@ describe("databaseTarget", () => {
 });
 
 describe("productionGuardError", () => {
-  it("refuses to seed or migrate the production database unless production is allowed", () => {
-    expect(productionGuardError({ databaseUrl: url(prod), productionDbHost: prod, allowProduction: false, action: "seed" })).toMatch(
-      /Refusing to seed.*--production/,
-    );
-    expect(
-      productionGuardError({ databaseUrl: url(prod), productionDbHost: prod, allowProduction: false, action: "migrate" }),
-    ).toMatch(/Refusing to migrate.*--production/);
-    expect(productionGuardError({ databaseUrl: url(prod), productionDbHost: prod, allowProduction: true, action: "migrate" })).toBeUndefined();
+  const guard = (databaseUrl: string, productionDbHost: string | undefined, production: "refuse" | "require" | "allow", action: "seed" | "migrate" = "seed") =>
+    productionGuardError({ databaseUrl, productionDbHost, production, action });
+
+  it("refuses the production database by default", () => {
+    expect(guard(url(prod), prod, "refuse")).toMatch(/Refusing to seed.*--production/);
+    expect(guard(url(prod), prod, "refuse", "migrate")).toMatch(/Refusing to migrate.*--production/);
   });
 
-  it("allows other databases, and CI where PRODUCTION_DB_HOST is unset", () => {
-    expect(productionGuardError({ databaseUrl: url(dev), productionDbHost: prod, allowProduction: false, action: "seed" })).toBeUndefined();
-    expect(productionGuardError({ databaseUrl: url(prod), productionDbHost: undefined, allowProduction: false, action: "migrate" })).toBeUndefined();
+  it("lets other databases through by default, and CI where PRODUCTION_DB_HOST is unset", () => {
+    expect(guard(url(dev), prod, "refuse")).toBeUndefined();
+    expect(guard(url(prod), undefined, "refuse", "migrate")).toBeUndefined();
+  });
+
+  it("with --production, requires the production database, so a release can't quietly hit another one", () => {
+    expect(guard(url(prod), prod, "require")).toBeUndefined();
+    expect(guard(url(dev), prod, "require")).toMatch(/--production was passed, but DATABASE_URL isn't the production database/);
+    expect(guard(url(prod), undefined, "require", "migrate")).toMatch(/--production was passed, but .* can't be confirmed/);
+  });
+
+  it("never stops a Vercel production build", () => {
+    expect(guard(url(prod), prod, "allow", "migrate")).toBeUndefined();
+    expect(guard(url(prod), undefined, "allow", "migrate")).toBeUndefined();
   });
 });

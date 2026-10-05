@@ -1,6 +1,7 @@
 /**
  * Which database a script is about to touch, judged by Neon endpoint. PRODUCTION_DB_HOST is the
- * production endpoint's hostname (not secret). Used by the Vercel preview guard and by db:seed.
+ * production endpoint's hostname (not secret). Used by the Vercel preview guard, db:seed and
+ * db:migrate.
  */
 
 /**
@@ -43,17 +44,43 @@ export function databaseTarget(env: { databaseUrl: string | undefined; productio
   return endpointHost(host) === productionHost ? "production" : "other";
 }
 
+/** For logs and `--check`: which database DATABASE_URL is, without printing it. */
+export function describeTarget(env: { databaseUrl: string | undefined; productionDbHost: string | undefined }): string {
+  const target = databaseTarget(env);
+  if (target === "production") return "production";
+  if (target === "other") return "not production";
+  return env.productionDbHost?.trim() ? "unknown (DATABASE_URL is missing or not a URL)" : "unknown (PRODUCTION_DB_HOST is not set)";
+}
+
 /**
- * Why `npm run db:seed` or `db:migrate` must stop, or undefined. Only the production database is
- * refused, and only when production isn't allowed (`--production`, or a Vercel production build for
- * migrations). When PRODUCTION_DB_HOST is unset (CI), the target is unknown and the command runs.
+ * How a command treats the production database:
+ * - refuse (the default): stop if DATABASE_URL is production;
+ * - require (`--production`): stop unless DATABASE_URL is confirmed as production, so a release step
+ *   can't quietly run against another database;
+ * - allow (a Vercel production build): never stop.
+ */
+export type ProductionMode = "refuse" | "require" | "allow";
+
+/**
+ * Why `npm run db:seed` or `db:migrate` must stop, or undefined. When PRODUCTION_DB_HOST is unset
+ * (CI), the target is unknown: the default lets it through, `--production` can't confirm it.
  */
 export function productionGuardError(env: {
   databaseUrl: string | undefined;
   productionDbHost: string | undefined;
-  allowProduction: boolean;
+  production: ProductionMode;
   action: "seed" | "migrate";
 }): string | undefined {
-  if (env.allowProduction || databaseTarget(env) !== "production") return undefined;
-  return `DATABASE_URL points at the production database (PRODUCTION_DB_HOST). Refusing to ${env.action} it; pass --production to do this on purpose.`;
+  const target = databaseTarget(env);
+  if (env.production === "allow") return undefined;
+  if (env.production === "require") {
+    if (target === "production") return undefined;
+    return target === "other"
+      ? `--production was passed, but DATABASE_URL isn't the production database. Nothing to ${env.action}; check which env file is loaded.`
+      : `--production was passed, but DATABASE_URL can't be confirmed as the production database (${describeTarget(env)}).`;
+  }
+  if (target === "production") {
+    return `DATABASE_URL points at the production database (PRODUCTION_DB_HOST). Refusing to ${env.action} it; pass --production to do this on purpose.`;
+  }
+  return undefined;
 }

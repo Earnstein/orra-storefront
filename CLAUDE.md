@@ -42,7 +42,7 @@ Roadmap and process: `docs/superpowers/specs/2026-10-04-roadmap-to-live-design.m
 - When a milestone's last PR merges: tag `vX.Y.0`, publish a GitHub Release, add an entry to `docs/milestones.md`.
 - Stage files by path (never `git add -A`); the user installs things in the working tree in parallel.
 - Environments: CI (`.github/workflows/ci.yml`) builds and tests on a throwaway, expiring `ci-*` Neon branch with credentials masked. Vercel previews get their own Neon branch via the Neon integration and are migrated **and seeded**; production is migrated but **never seeded** (`vercel.json` → `scripts/vercel-build.ts`, steps in `vercel-build-steps.ts`). A preview build stops before touching any database unless `DATABASE_URL`'s host differs from `PRODUCTION_DB_HOST`, so it can never migrate or seed production.
-- Local development uses the Neon `dev` branch. `.env.local` sets `DATABASE_URL` to it, and Next, the npm `db:*` scripts and the seed script read `.env.local` before `.env`. `.env` keeps production's URL plus `PRODUCTION_DB_HOST`, which `db:seed` and `db:migrate` check (`scripts/db-target.ts`). They refuse production unless run with `-- --production`. `npm run db:seed -- --check` prints which database `DATABASE_URL` points at, and must say `not production` before local database work. Worktrees symlink both files; never read them.
+- Local development uses the Neon `dev` branch. `.env.local` sets `DATABASE_URL` to it, and Next, the npm `db:*` scripts and the seed script read `.env.local` before `.env`. `.env` keeps production's URL plus `PRODUCTION_DB_HOST`, which `db:seed` and `db:migrate` check (`scripts/db-target.ts`). They refuse production unless run with `-- --production`, which in turn refuses any database that isn't confirmed as production. Both print which database they're about to touch. `npm run db:seed -- --check` prints which database `DATABASE_URL` points at, and must say `not production` before local database work. Worktrees symlink both files; never read them.
 
 ## Architecture
 
@@ -81,7 +81,7 @@ Roadmap and process: `docs/superpowers/specs/2026-10-04-roadmap-to-live-design.m
 - New, Women and Men have category tabs. The slugs `new`, `women` and `men` are reserved, and a seed test fails if a category takes one.
 - Unknown collections or categories 404. A known category with no products in that collection shows the empty state.
 - All listings are built on `ProductListing` (`src/components/product/product-listing.tsx`: breadcrumb, heading, sticky `ListingTabs`, count, product grid). They're prerendered and revalidate every 5 minutes.
-- Titles and descriptions live in `collectionCopy` in `src/lib/content.ts`.
+- `collectionCopy` in `src/lib/content.ts` holds the titles and descriptions for New, Women and Men, and each category's description. Category titles come from the database.
 - There's deliberately no `loading.tsx` under collections. An on-demand render inside a loading boundary streams a 200 before `notFound()`, so unknown paths would lose their 404.
 - Help, account, bag and search routes don't exist yet, so Next's link prefetching logs 404s for them in the console.
 

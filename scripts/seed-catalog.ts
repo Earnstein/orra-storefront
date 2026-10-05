@@ -14,7 +14,7 @@ import { drizzle } from "drizzle-orm/neon-http";
 
 import * as schema from "../src/db/schema";
 import { seedCatalog } from "../src/db/seed";
-import { databaseTarget, productionGuardError } from "./db-target";
+import { describeTarget, productionGuardError } from "./db-target";
 
 config({ path: [".env.local", ".env"], quiet: true });
 
@@ -22,22 +22,19 @@ const flags = new Set(process.argv.slice(2));
 const env = { databaseUrl: process.env.DATABASE_URL, productionDbHost: process.env.PRODUCTION_DB_HOST };
 
 if (flags.has("--check")) {
-  const target = databaseTarget(env);
-  if (target === "production") console.log("production");
-  else if (target === "other") console.log("not production");
-  else if (!env.productionDbHost?.trim()) console.log("unknown (PRODUCTION_DB_HOST is not set)");
-  else console.log("unknown (DATABASE_URL is missing or not a URL)");
+  console.log(describeTarget(env));
   process.exit(0);
 }
 
 const url = env.databaseUrl;
 if (!url) throw new Error("DATABASE_URL is not set (see .env.example)");
 
-const refusal = productionGuardError({ ...env, allowProduction: flags.has("--production"), action: "seed" });
+const refusal = productionGuardError({ ...env, production: flags.has("--production") ? "require" : "refuse", action: "seed" });
 if (refusal) {
   console.error(refusal);
   process.exit(1);
 }
+console.log(`Seeding DATABASE_URL (${describeTarget(env)}).`);
 
 const db = drizzle({ client: neon(url), schema, casing: "snake_case" });
 

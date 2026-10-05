@@ -10,21 +10,23 @@
 import { spawnSync } from "node:child_process";
 import { config } from "dotenv";
 
-import { databaseTarget, productionGuardError } from "./db-target";
+import { describeTarget, productionGuardError } from "./db-target";
 
+// Read before the env files load: only the real environment of a Vercel build may allow production,
+// never a VERCEL_ENV line in .env or .env.local.
+const vercelEnv = process.env.VERCEL_ENV;
 config({ path: [".env.local", ".env"], quiet: true });
 
 const env = { databaseUrl: process.env.DATABASE_URL, productionDbHost: process.env.PRODUCTION_DB_HOST };
-const allowProduction = process.argv.slice(2).includes("--production") || process.env.VERCEL_ENV === "production";
+const production = process.argv.slice(2).includes("--production") ? "require" : vercelEnv === "production" ? "allow" : "refuse";
 
-const refusal = productionGuardError({ ...env, allowProduction, action: "migrate" });
+const refusal = productionGuardError({ ...env, production, action: "migrate" });
 if (refusal) {
   console.error(refusal);
   process.exit(1);
 }
 
-const target = databaseTarget(env);
-console.log(`Migrating DATABASE_URL (${target === "other" ? "not production" : target}).`);
+console.log(`Migrating DATABASE_URL (${describeTarget(env)}).`);
 
 const result = spawnSync("npx", ["--no", "--", "drizzle-kit", "migrate"], {
   stdio: "inherit",
