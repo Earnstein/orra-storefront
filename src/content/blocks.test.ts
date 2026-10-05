@@ -71,8 +71,6 @@ describe("findContentProblems", () => {
   it("accepts every internal route shape", () => {
     const hrefs = [
       "/",
-      "/women",
-      "/men",
       "/stories",
       "/stories/knitwear",
       "/products/double-monk-shoe",
@@ -94,6 +92,8 @@ describe("findContentProblems", () => {
       "/products/unknown",
       "/about",
       "collections/new",
+      "/women", // the landing pages arrive in M2 Task 10
+      "/men",
     ]) {
       expect(findContentProblems([page({ blocks: [textWithAction(href)] })], known), href).toHaveLength(1);
     }
@@ -103,6 +103,14 @@ describe("findContentProblems", () => {
     expect(findContentProblems([page({ blocks: [image("https://plus.unsplash.com/premium_photo-1")] })], known)).toHaveLength(1);
     expect(findContentProblems([page({ blocks: [image("https://example.com/photo.jpg")] })], known)).toHaveLength(1);
     expect(findContentProblems([page({ blocks: [image("https://images.unsplash.com/photo-1", " ")] })], known)).toHaveLength(1);
+  });
+
+  it("checks every image: hero, story split, image block and the page's own", () => {
+    const bad = photo("https://plus.unsplash.com/premium_photo-1");
+    const action = { label: "Read", href: "/stories/knitwear" };
+    expect(findContentProblems([page({ blocks: [{ ...hero, image: bad }] })], known)).toHaveLength(1);
+    expect(findContentProblems([page({ blocks: [{ type: "story", image: bad, title: "S", body: "B", action }] })], known)).toHaveLength(1);
+    expect(findContentProblems([{ ...page(), image: bad }], known)).toHaveLength(1);
   });
 
   it("keeps an audience page to that audience's products and categories", () => {

@@ -26,11 +26,12 @@ export function HeroBlock({ image, focal, eyebrow, title, body, action, headingL
           alt={image.alt}
           fill
           sizes="100vw"
-          priority={Heading === "h1"}
+          loading={Heading === "h1" ? "eager" : undefined}
+          fetchPriority={Heading === "h1" ? "high" : undefined}
           className="object-cover object-(--focal-mobile) md:object-(--focal-desktop)"
         />
       </Media>
-      <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-scrim/75 via-scrim/30 via-45% to-scrim/0 to-80%" />
+      <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-scrim/80 via-scrim/40 via-45% to-scrim/0 to-85% md:from-scrim/70 md:via-scrim/20 md:via-35% md:to-70%" />
       <Container className="absolute inset-x-0 bottom-0 flex flex-col gap-4 pb-block text-on-image">
         {eyebrow && <p className="eyebrow">{eyebrow}</p>}
         <Heading className="max-w-[16ch] text-display">{title}</Heading>

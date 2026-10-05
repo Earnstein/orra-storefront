@@ -8,7 +8,7 @@ export function QuoteBlock({ text, attribution }: QuoteBlockProps) {
   return (
     <Section spacing="compact">
       <Container size="prose">
-        <figure className="flex flex-col gap-4 border-l border-foreground pl-6">
+        <figure className="flex flex-col gap-4 border-l border-strong pl-6">
           <blockquote className="text-headline">
             <p>{text}</p>
           </blockquote>

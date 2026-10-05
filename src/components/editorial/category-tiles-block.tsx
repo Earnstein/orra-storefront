@@ -16,10 +16,10 @@ export function CategoryTilesBlock({ heading, tiles, products }: CategoryTilesBl
         <h2 className="text-headline">{heading}</h2>
       </Container>
       <Grid layout="products" className="px-tile">
-        {tiles.map((tile) => {
+        {tiles.map((tile, index) => {
           const image = products.get(tile.productSlug)?.images[0];
           return (
-            <Link key={tile.href} href={tile.href} className="group flex flex-col gap-3">
+            <Link key={`${tile.href}-${index}`} href={tile.href} className="group flex flex-col gap-3">
               <Media ratio="portrait">
                 {image && (
                   <Image

@@ -18,10 +18,12 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: PageProps<"/stories/[slug]">): Promise<Metadata> {
   const story = getStory((await params).slug);
   if (!story) return {};
+  const image = new URL(story.image.src);
+  image.searchParams.set("w", "1200");
   return {
     title: story.title,
-    description: story.standfirst,
-    openGraph: { images: [{ url: `${story.image.src}?w=1200`, alt: story.image.alt }] },
+    description: story.description,
+    openGraph: { type: "article", images: [{ url: image.toString(), alt: story.image.alt }] },
   };
 }
 

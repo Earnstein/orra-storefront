@@ -24,7 +24,7 @@ export function ProductRowBlock({ heading, action, products }: ProductRowBlockPr
       </Container>
       <Grid layout="products" className="px-tile">
         {products.slice(0, 4).map((product, index) => (
-          <div key={product.slug} className={index === 3 ? "md:max-xl:hidden" : undefined}>
+          <div key={`${product.slug}-${index}`} className={index === 3 ? "md:max-xl:hidden" : undefined}>
             <ProductCard product={product} />
           </div>
         ))}

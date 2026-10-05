@@ -10,8 +10,8 @@ export function TextBlock({ heading, paragraphs, action }: TextBlockProps) {
       <Container size="prose">
         <Stack gap="lg">
           {heading && <h2 className="text-title">{heading}</h2>}
-          {paragraphs.map((paragraph) => (
-            <p key={paragraph}>{paragraph}</p>
+          {paragraphs.map((paragraph, index) => (
+            <p key={index}>{paragraph}</p>
           ))}
           {action && (
             <TextLink href={action.href} label className="self-start">

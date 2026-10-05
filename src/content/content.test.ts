@@ -5,7 +5,10 @@ import { categories, products } from "@/db/seed/catalog";
 import { findContentProblems, type KnownContent } from "./blocks";
 import { getStory, homepageStory, stories } from "./stories";
 
-/** What editorial content may refer to, from the seed catalogue (production is seeded from it too). */
+/**
+ * What editorial content may refer to, from the seed catalogue. Previews are seeded from it and
+ * production was seeded from it once; products edited later in a database aren't covered.
+ */
 function knownFromSeed(): KnownContent {
   const forAudience = (audience: Audience) =>
     new Set(products.filter((p) => p.audience === audience || p.audience === "unisex").map((p) => p.category));

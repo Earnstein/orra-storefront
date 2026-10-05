@@ -29,7 +29,8 @@ test("unknown stories return 404", async ({ page }) => {
 test("the homepage story band and the footer link to working story pages", async ({ page, request }) => {
   await page.goto("/");
   const read = page.getByRole("link", { name: "Read the story" });
-  expect((await request.get((await read.getAttribute("href"))!)).status()).toBe(200);
+  await expect(read).toHaveAttribute("href", "/stories/knitwear");
+  expect((await request.get("/stories/knitwear")).status()).toBe(200);
 
   const stories = page.getByRole("contentinfo").getByRole("link", { name: "Stories", exact: true });
   expect(await stories.getAttribute("href")).toBe("/stories");
