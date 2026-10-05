@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, jsonb, pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { check, customType, index, integer, jsonb, pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 // Catalogue: categories and products. Stock is a column on products (no variants or
 // warehouses yet, so a product has exactly one stock figure).
@@ -55,6 +55,9 @@ export const categories = pgTable("categories", {
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
 
+/** Postgres full-text search vector (read as its text form; the trigger writes it). */
+const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
+
 export type ProductImage = { src: string; alt: string };
 export type ProductDetail = { term: string; value: string };
 
@@ -85,10 +88,20 @@ export const products = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    /**
+     * Full-text search: name (weight A); colour, colour family, material and category name (B);
+     * description and detail values (C). Kept current by triggers (migration 0004), which read
+     * the category's name — a generated column can't. The empty default is always overwritten.
+     */
+    search: tsvector().notNull().default(sql`''::tsvector`),
+    /** Lower-cased name, colour, colour family, material and category name, for typo matching (pg_trgm). */
+    searchText: text().notNull().default(""),
   },
   (table) => [
     index("products_category_id_idx").on(table.categoryId),
     index("products_created_at_idx").on(table.createdAt),
+    index("products_search_idx").using("gin", table.search),
+    index("products_search_text_trgm_idx").using("gin", sql`${table.searchText} gin_trgm_ops`),
     check("products_price_nonnegative", sql`${table.price} >= 0`),
     check("products_stock_nonnegative", sql`${table.stock} >= 0`),
   ],
