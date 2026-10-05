@@ -49,8 +49,9 @@ for (const audience of ["women", "men"] as const) {
     const edit = page.locator("section", { has: page.getByRole("heading", { name: "The edit" }) });
     await expect(edit.locator('a[href^="/products/"]')).toHaveCount(8);
 
+    // In the hero and the closing block.
     const shopAll = main.getByRole("link", { name: `Shop all ${audience}` });
-    expect(await shopAll.count()).toBeGreaterThanOrEqual(1);
+    await expect(shopAll).toHaveCount(2);
     for (const link of await shopAll.all()) await expect(link).toHaveAttribute("href", `/collections/${audience}`);
   });
 }

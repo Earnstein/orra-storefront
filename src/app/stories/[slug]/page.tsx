@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { EditorialBlocks } from "@/components/editorial/editorial-blocks";
 import { StoryBlock } from "@/components/editorial/story-block";
 import { getStory, stories } from "@/content/stories";
+import { ogImage } from "@/lib/metadata";
 
 // Stories live in code, so every page is prerendered; the products they show refresh at most
 // every 5 minutes, like the rest of the catalogue. Unknown slugs 404 through notFound() rather
@@ -18,12 +19,10 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: PageProps<"/stories/[slug]">): Promise<Metadata> {
   const story = getStory((await params).slug);
   if (!story) return {};
-  const image = new URL(story.image.src);
-  image.searchParams.set("w", "1200");
   return {
     title: story.title,
     description: story.description,
-    openGraph: { type: "article", images: [{ url: image.toString(), alt: story.image.alt }] },
+    openGraph: { type: "article", images: [ogImage(story.image)] },
   };
 }
 

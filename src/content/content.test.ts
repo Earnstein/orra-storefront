@@ -40,9 +40,11 @@ describe("Women and Men landings", () => {
       expect(closing.type === "text" && closing.action).toEqual(shopAll);
       expect(edit.type === "productRow" && edit.heading).toBe("The edit");
       expect(edit.type === "productRow" && new Set(edit.productSlugs).size).toBe(8);
-      // A tile for every category the audience can shop, each opening that tab.
-      expect(tiles.type === "categoryTiles" && tiles.tiles.map((tile) => tile.href).toSorted()).toEqual(
-        [...known.audienceCategories[audience]].map((category) => `/collections/${audience}/${category}`).toSorted(),
+      // A tile for every category the audience can shop, in the catalogue's order and named as
+      // there, each opening that tab.
+      const expected = categories.filter((category) => known.audienceCategories[audience].has(category.slug));
+      expect(tiles.type === "categoryTiles" && tiles.tiles.map(({ label, href }) => ({ label, href }))).toEqual(
+        expected.map((category) => ({ label: category.name, href: `/collections/${audience}/${category.slug}` })),
       );
     }
   });

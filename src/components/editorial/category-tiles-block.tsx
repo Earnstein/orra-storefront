@@ -4,21 +4,24 @@ import Link from "next/link";
 import { Container, Media, Section } from "@/components/primitives";
 import type { Block } from "@/content/types";
 import type { Product } from "@/lib/catalog/types";
+import { TileStrip } from "./tile-strip";
 
 type CategoryTilesBlockProps = Extract<Block, { type: "categoryTiles" }> & { products: Map<string, Product> };
 
 /**
  * Category links pictured by one of their products; a missing product leaves the label on a
- * blank tile. A swipeable strip on phones, then one row with a column per tile from md up.
+ * blank tile. A swipeable strip on phones, then one row with a column per tile from md up. The
+ * strip scrolls, which clips overflow on both axes, so py-1 leaves room for the focus ring.
  */
 export function CategoryTilesBlock({ heading, tiles, products }: CategoryTilesBlockProps) {
+  if (tiles.length === 0) return null;
   return (
     <Section>
       <Container className="pb-block">
         <h2 className="text-headline">{heading}</h2>
       </Container>
-      <div
-        className="flex snap-x snap-mandatory gap-tile overflow-x-auto overscroll-x-contain px-tile [scrollbar-width:none] md:grid md:grid-cols-(--tile-columns) md:overflow-visible"
+      <TileStrip
+        className="flex snap-x snap-mandatory scroll-px-tile gap-tile overflow-x-auto overscroll-x-contain px-tile py-1 [scrollbar-width:none] md:grid md:py-0 md:grid-cols-(--tile-columns) md:overflow-visible"
         style={{ "--tile-columns": `repeat(${tiles.length}, minmax(0, 1fr))` } as React.CSSProperties}
       >
         {tiles.map((tile, index) => {
@@ -44,7 +47,7 @@ export function CategoryTilesBlock({ heading, tiles, products }: CategoryTilesBl
             </Link>
           );
         })}
-      </div>
+      </TileStrip>
     </Section>
   );
 }
