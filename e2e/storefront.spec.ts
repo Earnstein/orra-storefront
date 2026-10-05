@@ -86,7 +86,7 @@ test("no horizontal overflow", async ({ page }) => {
   // The project's own viewport, then the narrowest phone we support (the mobile project is 412 wide).
   for (const width of [page.viewportSize()!.width, 375]) {
     await page.setViewportSize({ width, height: 812 });
-    for (const path of ["/", "/products/double-monk-shoe", "/collections/new", "/does-not-exist"]) {
+    for (const path of ["/", "/products/double-monk-shoe", "/collections/new", "/stories", "/stories/knitwear", "/does-not-exist"]) {
       await page.goto(path);
       // clientWidth excludes a vertical scrollbar, unlike innerWidth, so a scrollbar can't hide an overflow.
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

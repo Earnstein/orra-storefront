@@ -1,7 +1,7 @@
 import Image from "next/image";
 
 import { Media, Section, Stack, TextLink } from "@/components/primitives";
-import { story } from "@/lib/content";
+import { homepageStory as story } from "@/content/stories";
 
 /** Editorial split on the surface band: image 7/12, copy 5/12 from lg up. */
 export function StoryBand() {
@@ -15,9 +15,9 @@ export function StoryBand() {
           <h2 id="story-heading" className="text-headline">
             {story.title}
           </h2>
-          <p className="max-w-prose text-muted-foreground">{story.body}</p>
-          <TextLink href={story.href} label className="self-start">
-            {story.linkLabel}
+          <p className="max-w-prose text-muted-foreground">{story.standfirst}</p>
+          <TextLink href={`/stories/${story.slug}`} label className="self-start">
+            Read the story
           </TextLink>
         </Stack>
       </div>

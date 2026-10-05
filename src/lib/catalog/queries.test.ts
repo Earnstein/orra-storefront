@@ -10,6 +10,7 @@ import {
   getCollectionProducts,
   getNewArrivals,
   getProduct,
+  getProductsBySlugs,
   getRelatedProducts,
   getSpotlightProduct,
 } from "./queries";
@@ -48,6 +49,25 @@ describe("getCollectionProducts", () => {
       expect(await getCollectionProducts({ kind: "category", categorySlug: "scarves" })).toEqual([]);
     } finally {
       await db.delete(categories).where(eq(categories.slug, "scarves"));
+    }
+  });
+});
+
+describe("getProductsBySlugs", () => {
+  it("returns products in the given order, skipping unknown slugs", async () => {
+    expect(slugs(await getProductsBySlugs(["leather-tote-tan", "does-not-exist", "top-handle-bag-teal"]))).toEqual([
+      "leather-tote-tan",
+      "top-handle-bag-teal",
+    ]);
+  });
+
+  it("returns nothing for no slugs, without querying", async () => {
+    const select = vi.spyOn(db, "select");
+    try {
+      expect(await getProductsBySlugs([])).toEqual([]);
+      expect(select).not.toHaveBeenCalled();
+    } finally {
+      select.mockRestore();
     }
   });
 });
