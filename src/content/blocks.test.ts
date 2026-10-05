@@ -71,6 +71,8 @@ describe("findContentProblems", () => {
   it("accepts every internal route shape", () => {
     const hrefs = [
       "/",
+      "/women",
+      "/men",
       "/stories",
       "/stories/knitwear",
       "/products/double-monk-shoe",
@@ -92,8 +94,6 @@ describe("findContentProblems", () => {
       "/products/unknown",
       "/about",
       "collections/new",
-      "/women", // the landing pages arrive in M2 Task 10
-      "/men",
     ]) {
       expect(findContentProblems([page({ blocks: [textWithAction(href)] })], known), href).toHaveLength(1);
     }

@@ -93,12 +93,12 @@ export function findContentProblems(pages: (EditorialPage & { image?: CatalogIma
 const collectionSlugs: readonly string[] = RESERVED_COLLECTION_SLUGS;
 
 /**
- * Matches the app's routes: /, /stories[/<story>], /products/<product>, /collections/…
+ * Matches the app's routes: /, /women, /men, /stories[/<story>], /products/<product>, /collections/…
  * Links must be bare paths: a query, hash or trailing slash is reported. Collection links are
  * checked for existence, not for having products (an empty tab shows the empty state).
  */
 function isKnownRoute(href: string, known: KnownContent): boolean {
-  if (["/", "/stories"].includes(href)) return true;
+  if (["/", "/women", "/men", "/stories"].includes(href)) return true;
   const [, section, first, second, ...rest] = href.split("/");
   if (!href.startsWith("/") || rest.length > 0) return false;
   if (section === "stories") return second === undefined && known.storySlugs.has(first);

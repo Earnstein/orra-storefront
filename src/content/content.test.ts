@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Audience } from "@/db/schema/catalog";
 import { categories, products } from "@/db/seed/catalog";
 import { findContentProblems, type KnownContent } from "./blocks";
+import { landings } from "./landings";
 import { getStory, homepageStory, stories } from "./stories";
 
 /**
@@ -19,6 +20,33 @@ function knownFromSeed(): KnownContent {
     storySlugs: new Set(stories.map((story) => story.slug)),
   };
 }
+
+describe("Women and Men landings", () => {
+  const known = knownFromSeed();
+  const audiences = ["women", "men"] as const;
+
+  it("only link to pages and products that exist and suit the audience", () => {
+    expect(findContentProblems(Object.values(landings), known)).toEqual([]);
+  });
+
+  it("follow the landing layout: hero, categories, the edit, a story, then Shop all", () => {
+    for (const audience of audiences) {
+      const landing = landings[audience];
+      expect(landing.audience).toBe(audience);
+      expect(landing.blocks.map((block) => block.type)).toEqual(["hero", "categoryTiles", "productRow", "story", "text"]);
+      const [hero, tiles, edit, , closing] = landing.blocks;
+      const shopAll = { label: `Shop all ${audience}`, href: `/collections/${audience}` };
+      expect(hero.type === "hero" && hero.action).toEqual(shopAll);
+      expect(closing.type === "text" && closing.action).toEqual(shopAll);
+      expect(edit.type === "productRow" && edit.heading).toBe("The edit");
+      expect(edit.type === "productRow" && new Set(edit.productSlugs).size).toBe(8);
+      // A tile for every category the audience can shop, each opening that tab.
+      expect(tiles.type === "categoryTiles" && tiles.tiles.map((tile) => tile.href).toSorted()).toEqual(
+        [...known.audienceCategories[audience]].map((category) => `/collections/${audience}/${category}`).toSorted(),
+      );
+    }
+  });
+});
 
 describe("stories", () => {
   it("only link to pages and products that exist, with checked images", () => {

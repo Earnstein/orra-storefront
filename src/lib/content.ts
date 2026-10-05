@@ -65,7 +65,7 @@ export const heroSlides: HeroSlide[] = [
     label: "Women",
     title: "Coats for the long walk home",
     body: "Soft wool coats and silk scarves, cut to layer through the season.",
-    action: { label: "Shop women", href: "/collections/women" },
+    action: { label: "Shop women", href: "/women" },
     image: {
       src: unsplash("1485462537746-965f33f7f6a7"),
       alt: "Woman in a pink wool coat and patterned scarf beneath a stone arcade",
@@ -77,7 +77,7 @@ export const heroSlides: HeroSlide[] = [
     label: "Men",
     title: "Tailoring, softened",
     body: "Unstructured camel jackets over plain tees. Sharp enough for work, easy enough for the weekend.",
-    action: { label: "Shop men", href: "/collections/men" },
+    action: { label: "Shop men", href: "/men" },
     image: {
       src: unsplash("1552374196-1ab2a1c593e8"),
       alt: "Man in a camel jacket and white tee seated on a wooden stool",

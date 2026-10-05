@@ -2,13 +2,14 @@ import { Container, Grid, Section, TextLink } from "@/components/primitives";
 import { ProductCard } from "@/components/product/product-card";
 import type { Block } from "@/content/types";
 import type { Product } from "@/lib/catalog/types";
+import { cn } from "@/lib/utils";
 
 type ProductRowBlockProps = Pick<Extract<Block, { type: "productRow" }>, "heading" | "action"> & { products: Product[] };
 
 /**
- * A heading and one row of product cards (two rows of two on phones); renders nothing if none
- * of the products exist. The fourth card is hidden while the grid has three columns, so the
- * row never leaves a card on its own.
+ * A heading and a grid of product cards; renders nothing if none of the products exist. Cards
+ * that would start an incomplete last row are hidden at that column count (2, then 3 from md,
+ * then 4 from xl), so the grid never leaves a card on its own.
  */
 export function ProductRowBlock({ heading, action, products }: ProductRowBlockProps) {
   if (products.length === 0) return null;
@@ -23,12 +24,18 @@ export function ProductRowBlock({ heading, action, products }: ProductRowBlockPr
         )}
       </Container>
       <Grid layout="products" className="px-tile">
-        {products.slice(0, 4).map((product, index) => (
-          <div key={`${product.slug}-${index}`} className={index === 3 ? "md:max-xl:hidden" : undefined}>
+        {products.map((product, index) => (
+          <div key={`${product.slug}-${index}`} className={completeRows(index, products.length)}>
             <ProductCard product={product} />
           </div>
         ))}
       </Grid>
     </Section>
   );
+}
+
+/** Hides a card when it falls in an incomplete last row for the grid's current column count. */
+function completeRows(index: number, count: number) {
+  const fits = (columns: number) => index < Math.max(columns, count - (count % columns));
+  return cn(!fits(2) && "max-md:hidden", !fits(3) && "md:max-xl:hidden", !fits(4) && "xl:hidden");
 }
