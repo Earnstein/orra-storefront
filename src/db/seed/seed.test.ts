@@ -5,7 +5,7 @@ import { categories, products } from "@/db/schema";
 import { RESERVED_COLLECTION_SLUGS } from "@/lib/catalog/collections";
 import { createTestDb } from "@/test/db";
 import { seedCatalog } from ".";
-import { categories as seedCategories } from "./catalog";
+import { categories as seedCategories, products as seedProducts } from "./catalog";
 
 describe("seed categories", () => {
   it("don't take a reserved collection slug (new, women, men)", () => {
@@ -20,7 +20,7 @@ describe("seedCatalog", () => {
     await seedCatalog(db);
     const [{ value: categoryCount }] = await db.select({ value: count() }).from(categories);
     const [{ value: productCount }] = await db.select({ value: count() }).from(products);
-    expect([categoryCount, productCount]).toEqual([5, 9]);
+    expect([categoryCount, productCount]).toEqual([seedCategories.length, seedProducts.length]);
   });
 });
 

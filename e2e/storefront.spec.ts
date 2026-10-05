@@ -1,5 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+import { products as seedProducts } from "../src/db/seed/catalog";
+import { NEW_ARRIVALS_PAGE_LIMIT } from "../src/lib/catalog/merchandising";
+
 // Assertions use seed facts that rarely change (names, prices, category membership) and match
 // stock labels by pattern, so a locally edited dev database doesn't cause false failures.
 
@@ -36,9 +39,14 @@ test("new arrivals filter by category", async ({ page }) => {
   await expect(page).toHaveURL(/\/collections\/new\/bags$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Bags");
   const tiles = page.getByRole("main").locator('a[href^="/products/"]');
-  await expect(tiles).toHaveCount(2); // waits for the new page, unlike evaluateAll
+  // The tab narrows the newest batch, so expect the bags among the newest seed products.
+  const expected = seedProducts
+    .slice(0, NEW_ARRIVALS_PAGE_LIMIT)
+    .filter((product) => product.category === "bags")
+    .map((product) => `/products/${product.slug}`);
+  await expect(tiles).toHaveCount(expected.length); // waits for the new page, unlike evaluateAll
   const hrefs = await tiles.evaluateAll((links) => links.map((a) => a.getAttribute("href")));
-  expect(hrefs.sort()).toEqual(["/products/leather-tote-tan", "/products/top-handle-bag-teal"]);
+  expect(hrefs).toEqual(expected);
 });
 
 test("unknown pages return 404", async ({ page }) => {
