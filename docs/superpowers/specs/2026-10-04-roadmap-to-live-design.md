@@ -194,8 +194,8 @@ Homepage with hero carousel. Product detail pages with gallery, Add to bag and S
 **Reads and writes.**
 - Pages are server components that read through `src/lib/**/queries.ts`; components never import `@/db`.
 - Mutations are server actions, with Zod-validated input and server-side auth and role checks.
-- Product pages, the homepage and the editorial pages are ISR (`revalidate = 300`). Listings are too, until M3.
-- From M3, listings and search load their results from a GET endpoint backed by the database. Results are cached for 5 minutes under the `catalog` tag, and the first page is rendered on the server.
+- Through M2, pages were ISR (`revalidate = 300`). From M3, the app uses Next 16's Cache Components: catalogue reads are `"use cache"` functions tagged `catalog` with a 5-minute lifetime, and pages have no route segment configs ([M3 spec](2026-10-05-m3-find-design.md)).
+- From M3, listings and search load their results from a GET endpoint backed by the same cached reads, and the first page is rendered on the server.
 - Writes call `revalidatePath` / `revalidateTag` so changes show immediately.
 
 **Client data tools.**
@@ -247,8 +247,8 @@ Tests are written first (red → green) for every behaviour a plan task introduc
   - free Unsplash photos, with plain backgrounds first;
   - each photo checked for brand marks;
   - approved on a contact sheet.
-- **Pagination style and price filter control (M3).** "Load more" versus numbered pages; price bands versus a range.
-- **Function region (M3).** Vercel functions should run in the Neon database's region, so search round trips stay short.
+- **Pagination style and price filter control (M3): settled** in the [M3 spec](2026-10-05-m3-find-design.md): a "Load more" button, and price bands with counts.
+- **Function region (M3): settled.** Neon runs in AWS US East, next to Vercel's default `iad1`, so no change is needed.
 - **Demo reset window (M6).** How long demo orders and carts live before the nightly reset clears them.
 - **Monitoring vendor (M7).** Which error-monitoring service; free tier only.
 
