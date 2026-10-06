@@ -1,11 +1,14 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { authOptions } from "@/lib/auth.options";
 import { cookiesFrom, createTestAuth } from "@/test/auth";
 
 type TestAuth = Awaited<ReturnType<typeof createTestAuth>>;
 
-const ada = { name: "Ada", email: "ada@example.test", password: "correct-horse" };
+// One database for the file (a fresh PGlite per test is slow enough to time out other suites
+// running in parallel), so each test signs up its own user.
+let ada = { name: "Ada", email: "", password: "correct-horse" };
+let next = 0;
 
 /** The Better Auth error code a rejected API call carries. */
 async function codeOf(call: Promise<unknown>): Promise<string | undefined> {
@@ -19,8 +22,13 @@ async function codeOf(call: Promise<unknown>): Promise<string | undefined> {
 
 let t: TestAuth;
 
-beforeEach(async () => {
+beforeAll(async () => {
   t = await createTestAuth();
+});
+
+beforeEach(() => {
+  ada = { ...ada, email: `ada-${++next}@example.test` };
+  t.outbox.length = 0;
 });
 
 async function signUp(user = ada) {

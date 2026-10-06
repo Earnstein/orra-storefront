@@ -88,3 +88,15 @@ export function productionGuardError(env: {
   }
   return undefined;
 }
+
+/**
+ * Why `npm run db:clear-accounts` must stop, or undefined. Stricter than productionGuardError:
+ * deleting every account is only allowed on a database confirmed as not production, and
+ * nothing overrides it.
+ */
+export function clearAccountsGuardError(env: { databaseUrl: string | undefined; productionDbHost: string | undefined }): string | undefined {
+  const target = databaseTarget(env);
+  if (target === "other") return undefined;
+  if (target === "production") return "DATABASE_URL points at the production database (PRODUCTION_DB_HOST). Refusing to clear its accounts.";
+  return `Refusing to clear accounts: can't confirm DATABASE_URL isn't production (${describeTarget(env)}).`;
+}
