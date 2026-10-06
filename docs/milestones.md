@@ -11,6 +11,7 @@ Each milestone is a group of merged pull requests, recorded here with its tag an
   - Header search panel: popular searches, live suggestions with categories and "See all"; and a `/search` page with the same filters.
   - Fixes carried from M2: complete rows under "You may also like", Women and Men breadcrumbs to the landings, e2e tests no longer wait for every image.
 - **Pull requests:** [#15 M3 Find spec and plan](https://github.com/Earnstein/orra-storefront/pull/15) · [#16 Move to Cache Components](https://github.com/Earnstein/orra-storefront/pull/16) · [#17 Product search index and results query](https://github.com/Earnstein/orra-storefront/pull/17) · [#18 Filters, sort and load more on every listing](https://github.com/Earnstein/orra-storefront/pull/18) · [#19 Live search](https://github.com/Earnstein/orra-storefront/pull/19)
+- **Release:** https://github.com/Earnstein/orra-storefront/releases/tag/v0.4.0
 - **URL:** https://orra-storefront.vercel.app
 - **Budgets (measured on production; the plan said preview, which sits behind the Vercel login):**
   - `/api/products` and `/api/search/suggest` server time: 20–41 ms for queries never asked before (budget 150 ms), 17–38 ms cached (budget 50 ms).
