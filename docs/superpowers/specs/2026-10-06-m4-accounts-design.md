@@ -52,8 +52,8 @@ Settings live in `src/lib/auth.options.ts`, so `npm run auth:generate` sees ever
 |---|---|
 | Password length | 8 to 128 characters. |
 | Session length | 30 days. With "Stay signed in" off, the cookie lasts until the browser closes (Better Auth's `rememberMe: false`). |
-| Session cookie cache | On, 5 minutes, signed. Session reads from the browser skip the database while it holds. |
-| Password reset | Tokens expire after 1 hour. A reset signs out every device. |
+| Session cookie cache | On, 5 minutes, signed. Session reads from the browser skip the database while it holds. So a session revoked elsewhere (a device signed out from the account page, a password change or a reset) is still accepted by those reads for up to 5 minutes, and that browser can show itself as signed in until then. Server-side checks skip the cache (see the data access layer), so a revoked session can't use `/account`, server actions or `/api/saved`. Signing out on the device itself clears the cookies at once. |
+| Password reset | Tokens expire after 1 hour. A reset revokes every session; other devices' browser reads may still show them signed in for up to 5 minutes (cookie cache above). |
 | Account deletion | On; it needs the current password. |
 | Email verification | Not required (no sending domain yet). |
 
@@ -77,7 +77,7 @@ Settings live in `src/lib/auth.options.ts`, so `npm run auth:generate` sees ever
 **Previews start with no accounts.** After migrating and seeding, the preview build runs `scripts/clear-accounts.ts`. It deletes verification tokens, sessions, accounts, users (their saved items go with them) and rate-limit rows. It uses the seed's production-host guard, so it refuses production, and the build-steps tests pin that it runs only on previews.
 
 **Server-side session** (`src/lib/auth/session.ts`, the data access layer).
-- `getCurrentUser()` reads the session from the request headers and returns `{ id, name, email }` or nothing.
+- `getCurrentUser()` reads the session from the request headers, skipping the cookie cache so revoked sessions are refused at once, and returns `{ id, name, email }` or nothing. That's one database read per server-side check, which only `/account`, actions and route handlers make.
 - `requireUser(returnTo)` sends anyone without a session to `/sign-in?returnTo=…`.
 - Only `/account` pages (inside `<Suspense>`), server actions and route handlers use them. Every action and handler checks the session itself.
 
@@ -162,6 +162,8 @@ Protected; the content streams under `<Suspense>` with a skeleton.
 | `created_at` | Defaults to now. |
 
 The primary key is the user and product pair, with an index on `(user_id, created_at desc)`. An account can hold up to 200 saved items; the actions enforce the cap.
+- **Saving one item** on a full account removes the oldest, so the newest 200 stay.
+- **A merge never removes account items.** It adds browser items only while there's room. Items that don't fit are returned as not merged and stay in the browser's list for a later sync; the merge itself still succeeds.
 
 ### Reads and endpoints
 
@@ -185,7 +187,7 @@ The primary key is the user and product pair, with an index on `(user_id, create
 - **Signed in:** `["saved", userId]` from `/api/saved`. A toggle updates the list at once, rolls back if the action fails, then re-syncs.
 - It exposes `slugs`, `isSaved(slug)`, `toggle(slug)` and `status`. While the session or list loads, Save buttons show the browser's state and stay usable.
 
-**Merge on sign-in.** `SavedSync`, mounted in the app's providers, notices when a session appears while this browser still holds saved items. That covers sign-in, sign-up and another tab signing in. It calls `mergeSaved` once and, on success, clears the browser's list. If the merge fails, the list stays and it tries again on the next load.
+**Merge on sign-in.** `SavedSync`, mounted in the app's providers, notices when a session appears while this browser still holds saved items. That covers sign-in, sign-up and another tab signing in. It calls `mergeSaved` once with the browser's newest 200 valid slugs (the request limit, so a longer list is never rejected) and, on success, removes from the browser's list the items that were sent and merged (or no longer exist). Items that didn't fit in the account, and any beyond the first 200, stay for a later sync. If the merge fails, the list stays and it tries again on the next load.
 
 **Signing out** doesn't copy the account's items into the browser, which keeps them private on a shared computer.
 
@@ -202,7 +204,7 @@ The primary key is the user and product pair, with an index on `(user_id, create
   - Session cookies are HttpOnly, Secure and SameSite=Lax.
   - `returnTo` only allows paths on this site.
   - Passwords are never logged; reset links are logged only outside production.
-  - Deleting the account needs the password. Changing the password signs other devices out by default.
+  - Deleting the account needs the password. Changing the password signs other devices out by default; their browser reads may show them signed in for up to 5 minutes (the cookie cache), but server-side checks refuse them at once.
   - Sign-up is the only place that reveals an email has an account, and it's rate-limited.
 
 ## Modules
@@ -223,7 +225,7 @@ New dependency: `resend` (module 2). Each module is one pull request in the GitH
 | Layer | Covers |
 |---|---|
 | Unit (Vitest) | The `returnTo` sanitiser (`//evil.com`, absolute URLs, `/sign-in` loops); the auth URL per environment; user-agent labels; the form schemas; email templates; build steps (account clearing only on previews, refusing production). |
-| Database (PGlite, real migrations) | Better Auth against PGlite: sign up, sign in, password rules, the reset flow end to end with the outbox, a reset signing out every device. Deleting an account removes its saved items. Saved reads and actions with a test user: duplicates, unknown slugs, the 200 cap, merge order. Clearing accounts removes every auth row and leaves the catalogue. The migration replay covers the new tables. |
+| Database (PGlite, real migrations) | Better Auth against PGlite: sign up, sign in, password rules, the reset flow end to end with the outbox, a reset signing out every device. Deleting an account removes its saved items. Saved reads and actions with a test user: duplicates, unknown slugs, the 200 cap, merge order, a merge that doesn't fit. Clearing accounts removes every auth row and leaves the catalogue. The migration replay covers the new tables. |
 | End-to-end (Playwright, desktop and mobile) | Sign up, sign out, sign in back to the starting page; a wrong password; forgot and reset password through the file outbox; the account page (rename, change password, devices across two browser contexts, delete); saved items across two contexts and the merge on sign-in; the menu in both states; axe on `/sign-in`, `/account` and `/saved`. Each test signs up a fresh `…@example.test` user and deletes it at the end. |
 
 **Production exit check.** Tests that write accounts are tagged `@writes` and skipped against production, apart from one sign-up-then-delete smoke test, so the check doesn't fill production with test users or trip the rate limits.
