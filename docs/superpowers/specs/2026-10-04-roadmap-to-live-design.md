@@ -242,7 +242,8 @@ Tests are written first (red → green) for every behaviour a plan task introduc
 
 ## Open items (settled in the named milestone's spec)
 
-- **Email sending domain (M4).** Resend only sends to arbitrary addresses from a verified domain. If no domain is available by M4, password reset and order emails send only on previews to the owner's address, and the domain is added in M7.
+- **Email sending domain (M4): settled** in the [M4 spec](2026-10-06-m4-accounts-design.md). No domain is available yet, so emails go through Resend's test sender, which only delivers to the owner's address. Email verification isn't required at sign-up, and M7 adds a verified domain.
+- **Account data on previews (M4): settled** in the [M4 spec](2026-10-06-m4-accounts-design.md). Each preview's Neon branch is copied from production, so the preview build deletes every account after migrating; previews start with no accounts.
 - **Product photography (M2): settled** in the [M2 spec](2026-10-04-m2-browse-design.md):
   - free Unsplash photos, with plain backgrounds first;
   - each photo checked for brand marks;
