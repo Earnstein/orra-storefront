@@ -46,7 +46,7 @@ Roadmap and process: `docs/superpowers/specs/2026-10-04-roadmap-to-live-design.m
 
 ## Architecture
 
-**Env** — `src/lib/env.ts` validates with Zod. `serverEnv()` is a function that parses on call (throws if invalid); `clientEnv` holds `NEXT_PUBLIC_*` and is parsed at import. Because `src/lib/auth.ts` calls `serverEnv()` at module load, `next build` fails without server env vars — this is intentional. Copy `.env.example` → `.env.local`.
+**Env** — `src/lib/env.ts` validates with Zod. `serverEnv()` is a function that parses on call (throws if invalid). There are no `NEXT_PUBLIC_*` vars: the browser auth client calls its own origin. `authBaseUrl(env)` keeps `BETTER_AUTH_URL` on production and locally, but on Vercel previews (where `BETTER_AUTH_URL` points at production) uses `https://$VERCEL_URL`, and `trustedAuthOrigins(env)` trusts the preview's branch URL too; `BETTER_AUTH_URL` is only optional on previews. `RESEND_API_KEY` and `EMAIL_OUTBOX_DIR` are optional, and empty values count as unset. Because `src/lib/auth.ts` calls `serverEnv()` at module load, `next build` fails without server env vars — this is intentional. Copy `.env.example` → `.env.local`.
 
 **Database** — `src/db/index.ts` exports `db` (Drizzle on the Neon HTTP driver, `casing: "snake_case"`) and imports `server-only`. All table definitions live centrally in `src/db/schema/`, one file per domain, re-exported from `src/db/schema/index.ts` (drizzle-kit and the `db` client both read that barrel). Migrations output to `./drizzle` (use `db:generate` + `db:migrate`, not `push`). `drizzle.config.ts` must keep `casing: "snake_case"` to match the client. Scripts outside Next (e.g. `scripts/seed-catalog.ts`) build their own client, because `server-only` can't load there.
 

@@ -1,7 +1,5 @@
 import { createAuthClient } from "better-auth/react";
 
-import { clientEnv } from "@/lib/env";
-
-export const authClient = createAuthClient({
-  baseURL: clientEnv.NEXT_PUBLIC_APP_URL,
-});
+// No baseURL: the client calls /api/auth on whichever origin served the page, so it works on
+// production, every preview URL and localhost alike.
+export const authClient = createAuthClient();
