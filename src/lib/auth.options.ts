@@ -1,5 +1,6 @@
 import { dash } from "@better-auth/infra";
 import type { BetterAuthOptions } from "better-auth";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 
 import type { Email } from "@/lib/email/send";
@@ -35,8 +36,17 @@ export const authOptions = {
     cookieCache: { enabled: true, maxAge: 5 * 60 },
   },
   user: {
-    // Deleting needs the current password (Better Auth checks it when it's sent).
+    // Deleting needs the current password: Better Auth checks it when it's sent, and the
+    // `hooks.before` below refuses a request without one (Better Auth alone would accept a
+    // session under a day old instead).
     deleteUser: { enabled: true },
+  },
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path === "/delete-user" && !ctx.body?.password) {
+        throw new APIError("BAD_REQUEST", { code: "PASSWORD_REQUIRED", message: "Enter your password to delete your account." });
+      }
+    }),
   },
   rateLimit: {
     // Serverless instances don't share memory, so the counters live in the `rateLimit` table.
@@ -46,6 +56,9 @@ export const authOptions = {
       "/sign-in/email": { window: 60, max: 5 },
       "/sign-up/email": { window: 60, max: 3 },
       "/request-password-reset": { window: 15 * 60, max: 3 },
+      // Every page's header reads the session; with database storage the default rule would add a
+      // read and a write per page view, which the cookie cache exists to avoid.
+      "/get-session": false,
     },
   },
   plugins: [
@@ -61,7 +74,7 @@ export const authOptions = {
  * `sendEmail` and tests pass an in-memory outbox.
  */
 export function resetPasswordSender(send: (email: Email) => Promise<void>) {
-  return async ({ user, url }: { user: { email: string; name: string }; url: string }) => {
-    await send({ to: user.email, ...resetPasswordEmail({ name: user.name, url }) });
+  return async ({ user, url }: { user: { email: string }; url: string }) => {
+    await send({ to: user.email, ...resetPasswordEmail({ url }) });
   };
 }

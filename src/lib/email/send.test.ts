@@ -59,9 +59,9 @@ describe("sendEmail", () => {
     expect(resendSend).not.toHaveBeenCalled();
   });
 
-  it("never writes to the outbox on production", async () => {
+  it.each(["production", "preview"])("never writes to the outbox on Vercel (%s)", async (vercelEnv) => {
     vi.stubEnv("EMAIL_OUTBOX_DIR", outbox);
-    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("VERCEL_ENV", vercelEnv);
     await sendEmail(email);
     expect(await readdir(outbox)).toEqual([]);
   });

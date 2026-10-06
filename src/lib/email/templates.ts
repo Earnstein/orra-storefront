@@ -3,16 +3,20 @@ import { site } from "@/lib/site";
 
 type EmailContent = Omit<Email, "to">;
 
-/** The password reset email: plain HTML in the house style (monochrome, one black button), plus text. */
-export function resetPasswordEmail({ name, url }: { name: string; url: string }): EmailContent {
+/**
+ * The password reset email: plain HTML in the house style (monochrome, one black button), plus text.
+ * It holds no text a visitor chose: sign-up isn't verified, so anyone can register someone else's
+ * address with a "name" that reads as a lure and then request a reset for it.
+ */
+export function resetPasswordEmail({ url }: { url: string }): EmailContent {
   const subject = `Reset your ${site.name} password`;
   const intro = "We received a request to reset your password. The link below works once and expires in 1 hour.";
   const ignore = "If you didn't ask for this, you can ignore this email; your password won't change.";
 
-  const text = [`Hello ${name},`, "", intro, "", url, "", ignore, "", site.name].join("\n");
+  const text = ["Hello,", "", intro, "", url, "", ignore, "", site.name].join("\n");
 
   const html = layout(`
-    <p style="margin:0 0 16px">Hello ${escapeHtml(name)},</p>
+    <p style="margin:0 0 16px">Hello,</p>
     <p style="margin:0 0 24px">${intro}</p>
     <p style="margin:0 0 24px">
       <a href="${escapeHtml(url)}" style="display:inline-block;background:#000;color:#fff;text-decoration:none;padding:14px 28px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase">Reset password</a>

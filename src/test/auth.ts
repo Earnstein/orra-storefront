@@ -10,11 +10,12 @@ const TEST_PLUGINS_LEFT_OUT = new Set(["dash", "next-cookies"]);
 
 /**
  * Better Auth with the app's options on a fresh PGlite (real migrations and seed). The Infra
- * dashboard and nextCookies (which needs a Next request) are left out, rate limits are off, and
+ * dashboard and nextCookies (which needs a Next request) are left out, rate limits are off unless
+ * asked for (they then count in the database's rate_limit table, as on Vercel), and
  * emails land in `outbox` instead of being sent. Background tasks are awaited, so the outbox is
  * filled by the time a call returns.
  */
-export async function createTestAuth(db?: SeedDatabase) {
+export async function createTestAuth(db?: SeedDatabase, { rateLimit = false } = {}) {
   const database = db ?? (await createTestDb());
   const outbox: Email[] = [];
   const auth = betterAuth({
@@ -29,7 +30,7 @@ export async function createTestAuth(db?: SeedDatabase) {
         outbox.push(email);
       }),
     },
-    rateLimit: { ...authOptions.rateLimit, enabled: false },
+    rateLimit: { ...authOptions.rateLimit, enabled: rateLimit },
   });
   return { auth, db: database, outbox };
 }

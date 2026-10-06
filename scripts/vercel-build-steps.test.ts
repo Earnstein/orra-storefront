@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { buildSteps, previewGuardError } from "./vercel-build-steps";
 
 describe("buildSteps", () => {
-  it("migrates and seeds previews, then clears their accounts, before building", () => {
-    expect(buildSteps("preview")).toEqual(["db:migrate", "db:seed", "db:clear-accounts", "build"]);
+  it("migrates previews, clears their accounts (copied from production) at once, then seeds and builds", () => {
+    expect(buildSteps("preview")).toEqual(["db:migrate", "db:clear-accounts", "db:seed", "build"]);
   });
 
   it("migrates production before building", () => {

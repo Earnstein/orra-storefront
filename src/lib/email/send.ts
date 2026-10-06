@@ -16,7 +16,7 @@ export const EMAIL_FROM = `${site.name} <onboarding@resend.dev>`;
 /**
  * Sends an email, never throwing: failures are logged (without the body) so a caller such as a
  * password reset answers the same whether or not the email went out.
- * - `EMAIL_OUTBOX_DIR` set (local runs and CI, never production): writes it there as JSON instead.
+ * - `EMAIL_OUTBOX_DIR` set (local runs and CI; ignored on Vercel): writes it there as JSON instead.
  * - `RESEND_API_KEY` set: sends through Resend.
  * - Neither: logs the recipient and, outside production, the first link, so local resets work.
  */
@@ -26,7 +26,7 @@ export async function sendEmail(email: Email): Promise<void> {
     const production = env.VERCEL_ENV === "production";
     const message = { from: EMAIL_FROM, ...email };
 
-    if (env.EMAIL_OUTBOX_DIR && !production) {
+    if (env.EMAIL_OUTBOX_DIR && !env.VERCEL_ENV) {
       await mkdir(env.EMAIL_OUTBOX_DIR, { recursive: true });
       const file = path.join(env.EMAIL_OUTBOX_DIR, `${Date.now()}-${fileSafe(email.to)}.json`);
       await writeFile(file, JSON.stringify(message, null, 2));

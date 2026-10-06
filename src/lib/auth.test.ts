@@ -1,5 +1,7 @@
+import { count, like } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { rateLimit } from "@/db/schema";
 import { authOptions } from "@/lib/auth.options";
 import { cookiesFrom, createTestAuth } from "@/test/auth";
 
@@ -123,6 +125,12 @@ describe("cookie cache", () => {
 });
 
 describe("deleting an account", () => {
+  it("needs a password even on a fresh session", async () => {
+    const { cookies } = await signUp();
+    expect(await codeOf(t.auth.api.deleteUser({ body: {}, headers: cookies }))).toBe("PASSWORD_REQUIRED");
+    expect(await t.auth.api.getSession({ headers: cookies, query: { disableCookieCache: true } })).not.toBeNull();
+  });
+
   it("needs the right password", async () => {
     const { cookies } = await signUp();
     expect(await codeOf(t.auth.api.deleteUser({ body: { password: "wrong-password" }, headers: cookies }))).toBe("INVALID_PASSWORD");
@@ -141,6 +149,34 @@ describe("rate limits", () => {
       "/sign-in/email": { window: 60, max: 5 },
       "/sign-up/email": { window: 60, max: 3 },
       "/request-password-reset": { window: 900, max: 3 },
+      "/get-session": false,
     });
+  });
+
+  it("refuse a sixth sign-in a minute from one IP, counted in the database", async () => {
+    const limited = await createTestAuth(t.db, { rateLimit: true });
+    const signIn = () =>
+      limited.auth.handler(
+        new Request("http://localhost:3000/api/auth/sign-in/email", {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: "http://localhost:3000", "x-forwarded-for": "203.0.113.7" },
+          body: JSON.stringify({ email: "nobody@example.test", password: "wrong-password" }),
+        }),
+      );
+    const statuses = [];
+    for (let i = 0; i < 6; i++) statuses.push((await signIn()).status);
+    expect(statuses).toEqual([401, 401, 401, 401, 401, 429]);
+  });
+
+  it("leave session reads alone, so they don't write to the database", async () => {
+    const limited = await createTestAuth(t.db, { rateLimit: true });
+    for (let i = 0; i < 3; i++) {
+      const response = await limited.auth.handler(
+        new Request("http://localhost:3000/api/auth/get-session", { headers: { "x-forwarded-for": "203.0.113.8" } }),
+      );
+      expect(response.status).toBe(200);
+    }
+    const [{ n }] = await t.db.select({ n: count() }).from(rateLimit).where(like(rateLimit.key, "%/get-session"));
+    expect(n).toBe(0);
   });
 });

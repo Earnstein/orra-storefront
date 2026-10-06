@@ -3,14 +3,14 @@ import { endpointHost, hostOf } from "./db-target";
 /**
  * The npm scripts a Vercel build runs, by VERCEL_ENV:
  * - preview: its own Neon branch (Neon–Vercel integration) is migrated and seeded, so every
- *   preview has the catalogue, then its accounts (copied from production) are deleted. Guarded
- *   by previewGuardError() first.
+ *   preview has the catalogue. Its accounts (copied from production) are deleted straight after
+ *   migrating, so a failed seed can't leave them behind. Guarded by previewGuardError() first.
  * - production: migrated only. Never seeded (that would reset live content and stock), and its
  *   accounts are never cleared.
  * - anything else (unset, development): just the build.
  */
 export function buildSteps(vercelEnv: string | undefined): string[] {
-  if (vercelEnv === "preview") return ["db:migrate", "db:seed", "db:clear-accounts", "build"];
+  if (vercelEnv === "preview") return ["db:migrate", "db:clear-accounts", "db:seed", "build"];
   if (vercelEnv === "production") return ["db:migrate", "build"];
   return ["build"];
 }
