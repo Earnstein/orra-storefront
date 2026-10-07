@@ -3,12 +3,10 @@ import type { BetterAuthOptions } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 
+import { PASSWORD_MAX, PASSWORD_MIN } from "@/lib/auth/password";
 import type { Email } from "@/lib/email/send";
 import { resetPasswordEmail } from "@/lib/email/templates";
 
-/** Passwords are 8–128 characters (the spec); the forms' Zod schemas use the same numbers. */
-export const PASSWORD_MIN = 8;
-export const PASSWORD_MAX = 128;
 
 const DAY = 60 * 60 * 24;
 
