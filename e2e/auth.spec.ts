@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 import { deleteAccount, newUser, sessionName, signIn, signUp, type TestUser } from "./auth";
-import { gotoHydrated } from "./hydration";
+import { gotoHydrated, hydrated } from "./hydration";
+import { readResetLink } from "./outbox";
 
 // Tests that create accounts are tagged @writes: each signs up a fresh …@example.test user and
 // deletes it at the end. The production exit check skips them.
@@ -95,3 +96,66 @@ test("a hostile returnTo stays on this site", async ({ page }) => {
   await page.goto("/sign-in?returnTo=//evil.com", { waitUntil: "domcontentloaded" });
   await expect(page).toHaveURL(/\/sign-in\?returnTo=/);
 });
+
+test.describe("password reset", () => {
+  test.skip(!!process.env.E2E_BASE_URL, "reads reset links from the local server's email outbox");
+
+  test("@writes reset a forgotten password with the emailed link", async ({ page, browser, baseURL }) => {
+    created = newUser();
+    await signUp(page, created);
+
+    const context = await browser.newContext({ baseURL });
+    const visitor = await context.newPage();
+    await gotoHydrated(visitor, "/sign-in", (page) => page.getByRole("link", { name: "Forgot your password?" }));
+    await visitor.getByRole("link", { name: "Forgot your password?" }).click();
+    await expect(visitor.getByRole("heading", { name: "Forgot your password?" })).toBeVisible();
+    await hydratedButton(visitor, "Continue");
+    // The sign-in page stays mounted but hidden after the client-side navigation, so look fields
+    // up by role (which skips hidden elements), not by label.
+    await visitor.getByRole("textbox", { name: "Email" }).fill(created.email);
+    await visitor.getByRole("button", { name: "Continue" }).click();
+    await expect(visitor.getByText("If an account exists for that email, we've sent a link.")).toBeVisible();
+
+    await visitor.goto(await readResetLink(created.email), { waitUntil: "domcontentloaded" });
+    await expect(visitor).toHaveURL(/\/sign-in\/reset-password\?token=/);
+    await hydratedButton(visitor, "Change password");
+    const newPassword = `${created.password}-new`;
+    await visitor.getByRole("textbox", { name: "New password" }).fill(newPassword);
+    await visitor.getByRole("button", { name: "Change password" }).click();
+    await expect(visitor.getByText("Your password has been changed. Sign in with your new password.")).toBeVisible();
+    await context.close();
+
+    // The reset signed out every device, the old password fails and the new one works.
+    expect(await sessionName(page)).toBeNull();
+    await gotoHydrated(page, "/sign-in", (page) => page.getByRole("button", { name: "Sign in", exact: true }));
+    const form = page.getByRole("form", { name: "Sign in" });
+    await form.getByLabel("Email").fill(created.email);
+    await form.getByLabel("Password", { exact: true }).fill(created.password);
+    await form.getByRole("button", { name: "Sign in" }).click();
+    await expect(form.getByRole("alert").filter({ hasText: /\S/ })).toHaveText("That email and password don't match.");
+    created.password = newPassword;
+    await signIn(page, created);
+  });
+
+  test("a tampered link says it has expired and offers a new one", async ({ page }) => {
+    await page.goto("/api/auth/reset-password/not-a-real-token?callbackURL=%2Fsign-in%2Freset-password", {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(page).toHaveURL(/\/sign-in\/reset-password\?error=INVALID_TOKEN/);
+    await expect(page.getByText("This link has expired or was already used.")).toBeVisible();
+    await page.getByRole("link", { name: "Request a new link" }).click();
+    await expect(page).toHaveURL(/\/sign-in\/forgot-password$/);
+  });
+
+  test("an unknown email gets the same answer", async ({ page }) => {
+    await gotoHydrated(page, "/sign-in/forgot-password", (page) => page.getByRole("button", { name: "Continue" }));
+    await page.getByLabel("Email").fill("nobody-at-all@example.test");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page.getByText("If an account exists for that email, we've sent a link.")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Back to sign in" })).toBeVisible();
+  });
+});
+
+async function hydratedButton(page: import("@playwright/test").Page, name: string) {
+  await hydrated(page.getByRole("button", { name, exact: true }));
+}
