@@ -16,6 +16,10 @@ describe("database npm scripts", () => {
     expect(scripts["db:seed"]).toBe("tsx scripts/seed-catalog.ts");
   });
 
+  it("clears accounts through the guarded script", () => {
+    expect(scripts["db:clear-accounts"]).toBe("tsx scripts/clear-accounts.ts");
+  });
+
   it("makes every direct drizzle-kit command read .env.local before .env", () => {
     const direct = Object.entries(scripts).filter(([, command]) => /\bdrizzle-kit\b/.test(command));
     expect(direct.map(([name]) => name).sort()).toEqual(["db:generate", "db:push", "db:studio"]);

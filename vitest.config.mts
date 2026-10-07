@@ -16,5 +16,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
+    // Database tests build a PGlite (migrations + seed) in about a second; with every worker doing
+    // that at once, the 5 s default times out on a busy machine.
+    testTimeout: 20_000,
   },
 });

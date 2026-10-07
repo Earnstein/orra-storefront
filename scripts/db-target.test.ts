@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { databaseTarget, productionGuardError } from "./db-target";
+import { clearAccountsGuardError, databaseTarget, productionGuardError } from "./db-target";
 
 const url = (host: string) => `postgresql://u:p@${host}/neondb?sslmode=require`;
 const prod = "ep-prod-123.us-east-2.aws.neon.tech";
@@ -49,5 +49,27 @@ describe("productionGuardError", () => {
   it("never stops a Vercel production build", () => {
     expect(guard(url(prod), prod, "allow", "migrate")).toBeUndefined();
     expect(guard(url(prod), undefined, "allow", "migrate")).toBeUndefined();
+  });
+});
+
+describe("clearAccountsGuardError", () => {
+  const production = "ep-cool-name-123.us-east-2.aws.neon.tech";
+  const url = (host: string) => `postgresql://user:pass@${host}/neondb?sslmode=require`;
+
+  it("allows a database confirmed as not production", () => {
+    expect(clearAccountsGuardError({ databaseUrl: url("ep-other-456.us-east-2.aws.neon.tech"), productionDbHost: production }))
+      .toBeUndefined();
+  });
+
+  it("always refuses production, pooled or not, with no override", () => {
+    for (const host of [production, "ep-cool-name-123-pooler.us-east-2.aws.neon.tech"]) {
+      expect(clearAccountsGuardError({ databaseUrl: url(host), productionDbHost: production })).toMatch(/production/);
+    }
+  });
+
+  it("refuses when it can't tell (no PRODUCTION_DB_HOST or no DATABASE_URL)", () => {
+    expect(clearAccountsGuardError({ databaseUrl: url("ep-other-456.us-east-2.aws.neon.tech"), productionDbHost: undefined }))
+      .toMatch(/PRODUCTION_DB_HOST/);
+    expect(clearAccountsGuardError({ databaseUrl: undefined, productionDbHost: production })).toMatch(/DATABASE_URL/);
   });
 });
