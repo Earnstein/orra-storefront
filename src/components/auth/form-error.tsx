@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
  */
 export function FormError({ message, className }: { message?: string | null; className?: string }) {
   return (
-    <div role="alert" className={cn("text-caption text-destructive", className)}>
+    <div role="alert" className={cn("text-caption text-destructive not-empty:mb-4", className)}>
       {message}
     </div>
   );

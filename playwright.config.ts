@@ -16,6 +16,8 @@ export default defineConfig({
     : {
         command: "npm run start -- -p 3100",
         url: "http://localhost:3100",
+        // Better Auth only accepts requests from its base URL's origin; .env.local may point at :3000.
+        env: { BETTER_AUTH_URL: "http://localhost:3100" },
         reuseExistingServer: !ci,
         timeout: 120_000,
       },

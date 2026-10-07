@@ -36,3 +36,12 @@ test("the open search panel", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "Search" }).locator('a[href^="/products/"]').first()).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
 });
+
+test("sign in, with the create-account details shown", async ({ page }) => {
+  await gotoHydrated(page, "/sign-in", (page) => page.getByRole("button", { name: "Continue" }));
+  const create = page.getByRole("form", { name: "Create an account" });
+  await create.getByLabel("Email").fill("ada@example.test");
+  await create.getByRole("button", { name: "Continue" }).click();
+  await expect(create.getByLabel("Name")).toBeVisible();
+  expect(await seriousViolations(page)).toEqual([]);
+});
