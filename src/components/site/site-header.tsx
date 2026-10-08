@@ -1,18 +1,14 @@
 import Link from "next/link";
-import { UserIcon } from "lucide-react";
 
 import { Container } from "@/components/primitives";
 import { SearchButton } from "@/components/search/search-button";
-import { buttonVariants } from "@/components/ui/button";
 import { primaryNav, site } from "@/lib/site";
-import { cn } from "@/lib/utils";
+import { AccountMenu } from "./account-menu";
 import { BagLink } from "./bag-link";
 import { MobileNav } from "./mobile-nav";
 
-const iconLink = buttonVariants({ variant: "ghost", size: "icon" });
-
-const accountLinks = [
-  { label: "Sign in", href: "/account" },
+// Below the account links (which come from the session) in the phone menu.
+const serviceLinks = [
   { label: "Find a store", href: "/stores" },
   { label: "Contact us", href: "/help/contact" },
 ];
@@ -23,7 +19,7 @@ export function SiteHeader() {
       <Container className="grid h-header grid-cols-[1fr_auto_1fr] items-center gap-4">
         <div className="flex items-center">
           <div className="-ml-2.5 lg:hidden">
-            <MobileNav links={primaryNav} secondary={accountLinks} />
+            <MobileNav links={primaryNav} secondary={serviceLinks} />
           </div>
           <nav aria-label="Main" className="hidden items-center gap-6 lg:flex">
             {primaryNav.map((link) => (
@@ -40,9 +36,7 @@ export function SiteHeader() {
 
         <div className="-mr-2.5 flex items-center justify-end">
           <SearchButton />
-          <Link href="/account" className={cn(iconLink, "max-sm:hidden")} aria-label="Account">
-            <UserIcon />
-          </Link>
+          <AccountMenu className="max-sm:hidden" />
           <BagLink />
         </div>
       </Container>

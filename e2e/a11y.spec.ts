@@ -36,3 +36,15 @@ test("the open search panel", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "Search" }).locator('a[href^="/products/"]').first()).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
 });
+
+test("sign in", async ({ page }) => {
+  await gotoHydrated(page, "/sign-in", (page) => page.getByRole("button", { name: "Sign in", exact: true }));
+  expect(await seriousViolations(page)).toEqual([]);
+});
+
+test("sign up, with its errors shown", async ({ page }) => {
+  await gotoHydrated(page, "/sign-up", (page) => page.getByRole("button", { name: "Create account" }));
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByText("Enter your name.")).toBeVisible();
+  expect(await seriousViolations(page)).toEqual([]);
+});

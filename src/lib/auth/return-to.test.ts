@@ -16,6 +16,8 @@ describe("safeReturnTo", () => {
     ["sign-in itself", "/sign-in"],
     ["sign-in with a query", "/sign-in?x=1"],
     ["sign-in subpage", "/sign-in/forgot-password"],
+    ["sign-up", "/sign-up"],
+    ["sign-up with a query", "/sign-up?returnTo=/x"],
     ["too long", `/${"x".repeat(600)}`],
   ])("falls back to /account for %s", (_, value) => {
     expect(safeReturnTo(value)).toBe("/account");
@@ -32,6 +34,7 @@ describe("safeReturnTo", () => {
     expect(safeReturnTo("/account")).toBe("/account");
     expect(safeReturnTo("/")).toBe("/");
     expect(safeReturnTo("/sign-inside")).toBe("/sign-inside");
+    expect(safeReturnTo("/sign-ups")).toBe("/sign-ups");
   });
 });
 
