@@ -1,6 +1,6 @@
 import "server-only";
 
-import { desc, eq, inArray } from "drizzle-orm";
+import { count, desc, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/db";
 import { products, savedItems } from "@/db/schema";
@@ -18,6 +18,12 @@ export async function getSavedSlugs(userId: string): Promise<string[]> {
     .where(eq(savedItems.userId, userId))
     .orderBy(desc(savedItems.createdAt), desc(savedItems.productId));
   return rows.map((row) => row.slug);
+}
+
+/** How many items the user has saved. */
+export async function countSavedItems(userId: string): Promise<number> {
+  const [row] = await db.select({ total: count() }).from(savedItems).where(eq(savedItems.userId, userId));
+  return row.total;
 }
 
 /** Card data for `slugs`, in the order given; unknown slugs are left out. */

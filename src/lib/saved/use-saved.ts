@@ -30,6 +30,8 @@ async function unwrap(result: Promise<ActionResult<{ slugs: string[] }>>): Promi
 /**
  * The one hook for saved items (product pages, /saved, the account page).
  * - Signed out (or while the session loads): this browser's list, as before accounts.
+ * - `status` is "loading" while the session or the account's list loads, so a page that lists
+ *   items (/saved) can show a placeholder instead of the wrong list.
  * - Signed in: the account's list (`/api/saved`). A toggle changes it at once, then the server
  *   action confirms it; a failure rolls back. Toggles run one at a time in click order (one
  *   mutation scope), and the list is re-read only after the last one settles, so rapid clicks end
@@ -38,7 +40,7 @@ async function unwrap(result: Promise<ActionResult<{ slugs: string[] }>>): Promi
  */
 export function useSaved() {
   const queryClient = useQueryClient();
-  const { data: session } = authClient.useSession();
+  const { data: session, isPending: sessionPending } = authClient.useSession();
   const userId = session?.user.id;
   const bag = useBag();
 
@@ -75,7 +77,9 @@ export function useSaved() {
     },
   });
 
-  const status: SavedStatus = !userId ? "local" : account.isSuccess ? "account" : "loading";
+  // "loading" until it's known whose list this is (the session, then the account's list); toggles
+  // meanwhile still work (signed-out ones go to this browser).
+  const status: SavedStatus = userId ? (account.isSuccess ? "account" : "loading") : sessionPending ? "loading" : "local";
   const slugs = status === "account" ? account.data! : bag.saved;
 
   return {

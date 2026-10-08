@@ -64,10 +64,12 @@ test("@writes items saved before signing up move into the account", async ({ pag
 test("@writes rapid toggles on a slow network end where the last click left them", async ({ page }) => {
   created = newUser();
   await signUp(page, created, TOTE);
+  // Wait for the page to load the account's list before clicking, so every click goes to the
+  // account (clicks while the session is still loading save to this browser, merged later).
+  const listLoaded = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/saved");
   await gotoHydrated(page, TOTE, saveButton);
+  await listLoaded;
   await expect(saveButton(page)).toHaveAttribute("aria-pressed", "false");
-  // Wait for the account's list before clicking, so every click goes to the account.
-  await expect.poll(() => accountSlugs(page)).toEqual([]);
 
   // Slow every server action and saved read by 500 ms.
   await page.route(
@@ -116,4 +118,67 @@ test("@writes signing out leaves the account's items in the account", async ({ p
   await gotoHydrated(page, TOTE, saveButton);
   await expect(saveButton(page)).toHaveAttribute("aria-pressed", "false");
   expect(await browserSaved(page)).toEqual([]);
+});
+
+test("signed out, /saved lists this browser's items with a prompt to sign in", async ({ page }) => {
+  await saveOn(page, TOTE);
+  await page.goto("/saved", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { level: 1, name: "Saved items (1)" })).toBeVisible();
+  await expect(page.getByText("Sign in to keep your saved items on every device")).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: "Sign in", exact: true })).toHaveAttribute(
+    "href",
+    "/sign-in?returnTo=%2Fsaved",
+  );
+  await expect(page.getByRole("main").getByRole("listitem")).toHaveCount(1);
+  await expect(page).toHaveTitle(/Saved items/);
+});
+
+test("an empty /saved says so and offers New in", async ({ page }) => {
+  await page.goto("/saved", { waitUntil: "domcontentloaded" });
+  await expect(page.getByText("You haven't saved anything yet")).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: "New in" })).toHaveAttribute("href", "/collections/new");
+});
+
+test("removing an item updates the count", async ({ page }) => {
+  await saveOn(page, TOTE);
+  await saveOn(page, SHOE);
+  await gotoHydrated(page, "/saved", (page) => page.getByRole("button", { name: /^Remove / }).first());
+  await expect(page.getByRole("heading", { level: 1, name: "Saved items (2)" })).toBeVisible();
+  await page.getByRole("button", { name: /^Remove Leather tote/ }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Saved items (1)" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "removed from saved items" })).toHaveCount(1);
+});
+
+test("@writes saved items appear on another device (the milestone's exit test)", async ({ page, browser, baseURL }) => {
+  // Device A signs up and saves a product.
+  created = newUser();
+  await signUp(page, created, TOTE);
+  await gotoHydrated(page, TOTE, saveButton);
+  await expect.poll(() => accountSlugs(page)).toEqual([]);
+  await saveButton(page).click();
+  await expect.poll(() => accountSlugs(page), { timeout: 15_000 }).toEqual(["leather-tote-tan"]);
+
+  // The account page counts it.
+  await page.goto("/account", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("link", { name: /Saved items \(1\)/ })).toHaveAttribute("href", "/saved");
+
+  // Device B signs in: the product page shows it saved, and /saved lists it.
+  const context = await browser.newContext({ baseURL });
+  try {
+    const other = await context.newPage();
+    await signIn(other, created);
+    await gotoHydrated(other, TOTE, saveButton);
+    await expect(saveButton(other)).toHaveAttribute("aria-pressed", "true");
+    await gotoHydrated(other, "/saved", (page) => page.getByRole("button", { name: /^Remove / }).first());
+    await expect(other.getByRole("heading", { level: 1, name: "Saved items (1)" })).toBeVisible();
+
+    // B removes it; A no longer has it after a reload.
+    await other.getByRole("button", { name: /^Remove Leather tote/ }).click();
+    await expect(other.getByText("You haven't saved anything yet")).toBeVisible();
+    await expect.poll(() => accountSlugs(other), { timeout: 15_000 }).toEqual([]);
+  } finally {
+    await context.close();
+  }
+  await page.goto("/saved", { waitUntil: "domcontentloaded" });
+  await expect(page.getByText("You haven't saved anything yet")).toBeVisible({ timeout: 15_000 });
 });
