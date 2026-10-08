@@ -7,7 +7,8 @@ import { CheckIcon, HeartIcon, ShoppingBagIcon, TruckIcon } from "lucide-react";
 import { Container } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
 import { bagActions, useBag } from "@/lib/bag/store";
-import { isSaved, quantityInBag } from "@/lib/bag/rules";
+import { quantityInBag } from "@/lib/bag/rules";
+import { useSaved } from "@/lib/saved/use-saved";
 import { deliveryWindow } from "@/lib/catalog/delivery";
 import type { CatalogImage } from "@/lib/catalog/types";
 import { formatPrice } from "@/lib/format";
@@ -39,6 +40,7 @@ function useHydrated() {
  */
 export function PurchaseActions({ product }: { product: PurchasableProduct }) {
   const bag = useBag();
+  const savedItems = useSaved();
   const hydrated = useHydrated();
   const [justAdded, setJustAdded] = useState(false);
   const [announcement, setAnnouncement] = useState("");
@@ -46,7 +48,7 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
   const addButtonRef = useRef<HTMLDivElement>(null);
 
   const inBag = quantityInBag(bag, product.slug);
-  const saved = isSaved(bag, product.slug);
+  const saved = savedItems.isSaved(product.slug);
   const soldOut = product.stock <= 0;
   const allInBag = !soldOut && inBag >= product.stock;
 
@@ -77,7 +79,7 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
   }
 
   function toggleSave() {
-    bagActions.toggleSaved(product.slug);
+    savedItems.toggle(product.slug);
     setAnnouncement(saved ? `${product.name} removed from saved items.` : `${product.name} saved for later.`);
   }
 
