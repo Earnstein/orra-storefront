@@ -37,6 +37,15 @@ test("@writes sign in from the account menu, create an account and come back to 
   await expect(signedIn.getByText(`Hello, ${created.name}`)).toBeVisible();
 });
 
+test("the account menu's Sign in comes back to this page with its query", async ({ page, isMobile }) => {
+  await page.goto("/collections/women?colour=black", { waitUntil: "domcontentloaded" });
+  const menu = await openAccountMenu(page, isMobile);
+  await expect(accountLink(menu, "Sign in", isMobile)).toHaveAttribute(
+    "href",
+    "/sign-in?returnTo=%2Fcollections%2Fwomen%3Fcolour%3Dblack",
+  );
+});
+
 test("@writes the account menu signs out to the homepage, and signing in again works", async ({ page, isMobile }) => {
   created = newUser();
   await signUp(page, created, "/stories");
@@ -119,7 +128,7 @@ test("@writes an email that already has an account offers to sign in with it", a
   await expect(other).toHaveURL((url) => url.pathname === "/sign-in" && url.search === "?returnTo=%2Fstories");
   const signInForm = other.getByRole("form", { name: "Sign in" });
   await expect(signInForm.getByRole("textbox", { name: "Email" })).toHaveValue(created.email);
-  await expect(signInForm.getByRole("textbox", { name: "Password" })).toBeFocused();
+  await expect(signInForm.getByLabel("Password", { exact: true })).toBeFocused();
   await context.close();
 });
 

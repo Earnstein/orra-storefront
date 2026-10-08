@@ -1,20 +1,16 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
 import { authClient } from "@/lib/auth-client";
-import { isAuthPage, signInPath } from "@/lib/auth/return-to";
 
 /**
  * The header's view of the account: who is signed in (read in the browser, so pages stay static;
- * signed-out until the session arrives) and where Sign in should come back to.
+ * signed-out until the session arrives). Where Sign in comes back to is `SignInHref`.
  */
 export function useAccount() {
   const { data } = authClient.useSession();
-  const pathname = usePathname();
-  const signInHref = isAuthPage(pathname) ? "/sign-in" : signInPath(pathname);
-  return { user: data?.user ?? null, signInHref };
+  return { user: data?.user ?? null };
 }
 
 const SIGNED_OUT_AT = "orra:signed-out-at";

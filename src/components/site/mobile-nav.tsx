@@ -8,6 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import type { NavLink } from "@/lib/site";
+import { SignInHref } from "./sign-in-href";
 import { signOutToHome, useAccount } from "./use-account";
 
 type Props = { links: NavLink[]; secondary: NavLink[] };
@@ -21,16 +22,11 @@ const quietLink = "text-muted-foreground link-quiet hover:text-foreground";
  */
 export function MobileNav({ links, secondary }: Props) {
   const [open, setOpen] = useState(false);
-  const { user, signInHref } = useAccount();
-  const accountLinks: NavLink[] = user
-    ? [
-        { label: "My account", href: "/account" },
-        { label: "Saved items", href: "/saved" },
-      ]
-    : [
-        { label: "Sign in", href: signInHref },
-        { label: "Saved items", href: "/saved" },
-      ];
+  const { user } = useAccount();
+  const accountLinks: NavLink[] = [
+    ...(user ? [{ label: "My account", href: "/account" }] : []),
+    { label: "Saved items", href: "/saved" },
+  ];
   const close = () => setOpen(false);
 
   return (
@@ -51,6 +47,15 @@ export function MobileNav({ links, secondary }: Props) {
         <Separator />
         <nav aria-label="Account" className="flex flex-col gap-3 px-gutter py-block">
           {user && <p className="truncate text-caption text-muted-foreground">Hello, {user.name}</p>}
+          {!user && (
+            <SignInHref>
+              {(href) => (
+                <Link href={href} onClick={close} className={quietLink}>
+                  Sign in
+                </Link>
+              )}
+            </SignInHref>
+          )}
           {[...accountLinks, ...secondary].map((link) => (
             <Link key={link.label} href={link.href} onClick={close} className={quietLink}>
               {link.label}

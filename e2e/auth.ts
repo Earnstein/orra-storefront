@@ -25,15 +25,15 @@ export async function signUp(page: Page, user: TestUser, returnTo = "/account") 
 }
 
 /**
- * Fills and submits the /sign-up form on the current page (by role, which skips the hidden page a
- * client-side navigation leaves mounted).
+ * Fills and submits the /sign-up form on the current page. Fields are looked up inside the form
+ * (found by role, which skips the hidden page a client-side navigation leaves mounted).
  */
 export async function fillSignUp(page: Page, user: Pick<TestUser, "name" | "email" | "password">) {
   const form = page.getByRole("form", { name: "Create an account" });
   await hydrated(form.getByRole("button", { name: "Create account" }));
   await form.getByRole("textbox", { name: "Name" }).fill(user.name);
   await form.getByRole("textbox", { name: "Email" }).fill(user.email);
-  await form.getByRole("textbox", { name: "Password" }).fill(user.password);
+  await form.getByLabel("Password", { exact: true }).fill(user.password);
   await form.getByRole("button", { name: "Create account" }).click();
 }
 
@@ -77,7 +77,6 @@ export async function deleteTestUser(browser: Browser, baseURL: string, user: Te
     await context.close();
   }
 }
-
 
 /**
  * Opens the account links: the header's Account menu on desktop, the phone menu's Account section
