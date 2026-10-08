@@ -2,6 +2,8 @@ import { ArrowRightIcon } from "lucide-react";
 import Link from "next/link";
 
 import { AccountSection } from "@/components/account/account-section";
+import { DevicesList } from "@/components/account/devices-list";
+import { PasswordForm } from "@/components/account/password-form";
 import { ProfileForm } from "@/components/account/profile-form";
 import type { CurrentUser } from "@/lib/auth/session";
 
@@ -33,6 +35,12 @@ export function AccountOverview({ user }: { user: CurrentUser }) {
       <div>
         <AccountSection id="profile-heading" title="Profile" description="Your name as it appears on your account and in the menu.">
           <ProfileForm name={user.name} email={user.email} />
+        </AccountSection>
+        <AccountSection id="password-heading" title="Password" description="Use at least 8 characters. Changing it signs your other devices out unless you untick the box.">
+          <PasswordForm />
+        </AccountSection>
+        <AccountSection id="devices-heading" title="Signed-in devices" description="Where your account is signed in. Sign out anything you don't recognise.">
+          <DevicesList />
         </AccountSection>
       </div>
     </div>
