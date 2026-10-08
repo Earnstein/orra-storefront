@@ -33,6 +33,13 @@ export function toggleSaved(state: BagState, slug: string): BagState {
   return { ...state, saved };
 }
 
+/** Removes saved slugs (after they've been merged into an account), keeping the bag lines. */
+export function removeSaved(state: BagState, slugs: readonly string[]): BagState {
+  const remove = new Set(slugs);
+  const saved = state.saved.filter((slug) => !remove.has(slug));
+  return saved.length === state.saved.length ? state : { ...state, saved };
+}
+
 /** Accepts anything read back from storage and returns a well-formed state. */
 export function parseBagState(value: unknown): BagState {
   if (!value || typeof value !== "object") return EMPTY_BAG;

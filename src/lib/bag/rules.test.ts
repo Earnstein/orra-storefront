@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { addToBag, bagCount, EMPTY_BAG, isSaved, parseBagState, quantityInBag, toggleSaved } from "./rules";
+import { addToBag, bagCount, EMPTY_BAG, isSaved, parseBagState, quantityInBag, removeSaved, toggleSaved } from "./rules";
 
 describe("addToBag", () => {
   it("adds one unit of a new product", () => {
@@ -55,5 +55,17 @@ describe("parseBagState", () => {
 
   it("ignores lines and saved values that aren't arrays", () => {
     expect(parseBagState({ lines: "nope", saved: {} })).toEqual(EMPTY_BAG);
+  });
+});
+
+describe("removeSaved", () => {
+  it("removes the given saved slugs and keeps the rest, and the bag lines", () => {
+    const state = { lines: [{ slug: "tote", quantity: 2 }], saved: ["a", "b", "c"] };
+    expect(removeSaved(state, ["a", "c", "nope"])).toEqual({ lines: [{ slug: "tote", quantity: 2 }], saved: ["b"] });
+  });
+
+  it("returns the same state when nothing is removed", () => {
+    const state = { lines: [], saved: ["a"] };
+    expect(removeSaved(state, [])).toBe(state);
   });
 });
