@@ -37,11 +37,14 @@ test("the open search panel", async ({ page }) => {
   expect(await seriousViolations(page)).toEqual([]);
 });
 
-test("sign in, with the create-account details shown", async ({ page }) => {
-  await gotoHydrated(page, "/sign-in", (page) => page.getByRole("button", { name: "Continue" }));
-  const create = page.getByRole("form", { name: "Create an account" });
-  await create.getByLabel("Email").fill("ada@example.test");
-  await create.getByRole("button", { name: "Continue" }).click();
-  await expect(create.getByLabel("Name")).toBeVisible();
+test("sign in", async ({ page }) => {
+  await gotoHydrated(page, "/sign-in", (page) => page.getByRole("button", { name: "Sign in", exact: true }));
+  expect(await seriousViolations(page)).toEqual([]);
+});
+
+test("sign up, with its errors shown", async ({ page }) => {
+  await gotoHydrated(page, "/sign-up", (page) => page.getByRole("button", { name: "Create account" }));
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByText("Enter your name.")).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
 });

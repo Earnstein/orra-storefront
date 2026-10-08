@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { accountLink, deleteTestUser, newUser, openAccountMenu, sessionName, signIn, signUp, type TestUser } from "./auth";
+import { accountLink, deleteTestUser, fillSignUp, newUser, openAccountMenu, sessionName, signIn, signUp, type TestUser } from "./auth";
 import { gotoHydrated, hydrated } from "./hydration";
 import { readResetLink } from "./outbox";
 
@@ -25,13 +25,12 @@ test("@writes sign in from the account menu, create an account and come back to 
   await signInLink.click();
 
   await expect(page).toHaveURL(/\/sign-in\?returnTo=/);
-  const create = page.getByRole("form", { name: "Create an account" });
-  await hydrated(create.getByRole("button", { name: "Continue" }));
-  await create.getByRole("textbox", { name: "Email" }).fill(created.email);
-  await create.getByRole("button", { name: "Continue" }).click();
-  await create.getByRole("textbox", { name: "Name" }).fill(created.name);
-  await create.getByRole("textbox", { name: "Password" }).fill(created.password);
-  await create.getByRole("button", { name: "Create account" }).click();
+  // /sign-in links to /sign-up, keeping where to come back to.
+  const createLink = page.getByRole("link", { name: "Create an account" });
+  await expect(createLink).toHaveAttribute("href", "/sign-up?returnTo=%2Fproducts%2Fleather-tote-tan");
+  await createLink.click();
+  await expect(page).toHaveURL(/\/sign-up\?returnTo=/);
+  await fillSignUp(page, created);
   await expect(page).toHaveURL((url) => url.pathname === "/products/leather-tote-tan", { timeout: 15_000 });
 
   const signedIn = await openAccountMenu(page, isMobile);
@@ -78,17 +77,30 @@ test("a wrong email or password says so", async ({ page }) => {
 });
 
 test("fields explain what's wrong and take focus", async ({ page }) => {
-  await gotoHydrated(page, "/sign-in", (page) => page.getByRole("button", { name: "Continue" }));
-  const create = page.getByRole("form", { name: "Create an account" });
-  await create.getByLabel("Email").fill("a@b");
-  await create.getByRole("button", { name: "Continue" }).click();
-  await expect(create.getByText("Enter a valid email address.")).toBeVisible();
-  await expect(create.getByLabel("Email")).toBeFocused();
+  await gotoHydrated(page, "/sign-up", (page) => page.getByRole("button", { name: "Create account" }));
+  const form = page.getByRole("form", { name: "Create an account" });
+  await expect(form.getByText("At least 8 characters")).toBeVisible();
+  // No errors before the first submit.
+  await form.getByRole("textbox", { name: "Email" }).fill("a@b");
+  await form.getByRole("textbox", { name: "Name" }).focus();
+  await expect(form.getByText("Enter a valid email address.")).toHaveCount(0);
 
-  await create.getByLabel("Email").fill("ada@example.test");
-  await create.getByRole("button", { name: "Continue" }).click();
-  await expect(create.getByLabel("Name")).toBeFocused();
-  await expect(create.getByText("At least 8 characters")).toBeVisible();
+  await form.getByRole("button", { name: "Create account" }).click();
+  await expect(form.getByText("Enter your name.")).toBeVisible();
+  await expect(form.getByText("Enter a valid email address.")).toBeVisible();
+  await expect(form.getByText("Use at least 8 characters.")).toBeVisible();
+  await expect(form.getByRole("textbox", { name: "Name" })).toBeFocused();
+
+  // Then they follow typing.
+  await form.getByRole("textbox", { name: "Name" }).fill("Ada");
+  await expect(form.getByText("Enter your name.")).toHaveCount(0);
+});
+
+test("sign in and sign up link to each other, keeping where to come back to", async ({ page }) => {
+  await gotoHydrated(page, "/sign-up?returnTo=%2Fstories", (page) => page.getByRole("link", { name: "Sign in", exact: true }).last());
+  await expect(page.getByRole("main").getByRole("link", { name: "Sign in", exact: true })).toHaveAttribute("href", "/sign-in?returnTo=%2Fstories");
+  await page.goto("/sign-in?returnTo=//evil.com", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("link", { name: "Create an account" })).toHaveAttribute("href", "/sign-up");
 });
 
 test("@writes an email that already has an account offers to sign in with it", async ({ page, browser, baseURL }) => {
@@ -97,19 +109,17 @@ test("@writes an email that already has an account offers to sign in with it", a
 
   const context = await browser.newContext({ baseURL });
   const other = await context.newPage();
-  await gotoHydrated(other, "/sign-in", (page) => page.getByRole("button", { name: "Continue" }));
+  await other.goto("/sign-up?returnTo=%2Fstories", { waitUntil: "domcontentloaded" });
+  await fillSignUp(other, { name: "Someone else", email: created.email, password: "another-password" });
   const create = other.getByRole("form", { name: "Create an account" });
-  await create.getByLabel("Email").fill(created.email);
-  await create.getByRole("button", { name: "Continue" }).click();
-  await create.getByLabel("Name").fill("Someone else");
-  await create.getByLabel("Password", { exact: true }).fill("another-password");
-  await create.getByRole("button", { name: "Create account" }).click();
   await expect(create.getByRole("alert").filter({ hasText: /\S/ })).toHaveText("An account with this email already exists.");
 
-  await create.getByRole("button", { name: "Sign in with this email" }).click();
+  // "Sign in instead" carries the email over (not in the URL) and keeps returnTo.
+  await create.getByRole("button", { name: "Sign in instead" }).click();
+  await expect(other).toHaveURL((url) => url.pathname === "/sign-in" && url.search === "?returnTo=%2Fstories");
   const signInForm = other.getByRole("form", { name: "Sign in" });
-  await expect(signInForm.getByLabel("Email")).toHaveValue(created.email);
-  await expect(signInForm.getByLabel("Password", { exact: true })).toBeFocused();
+  await expect(signInForm.getByRole("textbox", { name: "Email" })).toHaveValue(created.email);
+  await expect(signInForm.getByRole("textbox", { name: "Password" })).toBeFocused();
   await context.close();
 });
 

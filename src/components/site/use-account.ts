@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
 import { authClient } from "@/lib/auth-client";
-import { signInPath } from "@/lib/auth/return-to";
+import { isAuthPage, signInPath } from "@/lib/auth/return-to";
 
 /**
  * The header's view of the account: who is signed in (read in the browser, so pages stay static;
@@ -13,7 +13,7 @@ import { signInPath } from "@/lib/auth/return-to";
 export function useAccount() {
   const { data } = authClient.useSession();
   const pathname = usePathname();
-  const signInHref = pathname.startsWith("/sign-in") ? "/sign-in" : signInPath(pathname);
+  const signInHref = isAuthPage(pathname) ? "/sign-in" : signInPath(pathname);
   return { user: data?.user ?? null, signInHref };
 }
 

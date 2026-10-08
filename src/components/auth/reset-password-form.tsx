@@ -9,7 +9,8 @@ import { z } from "zod";
 import { describedBy, focusFirstInvalid, hasErrors, shownErrors } from "@/components/auth/field-errors";
 import { FormError } from "@/components/auth/form-error";
 import { PasswordInput } from "@/components/auth/password-input";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth/errors";
@@ -63,9 +64,9 @@ export function ResetPasswordForm() {
         <p role="status" className="text-body">
           Your password has been changed. Sign in with your new password.
         </p>
-        <Button render={<Link href="/sign-in" />} nativeButton={false} className="w-full">
+        <Link href="/sign-in" className={cn(buttonVariants(), "w-full")}>
           Sign in
-        </Button>
+        </Link>
       </div>
     );
   }

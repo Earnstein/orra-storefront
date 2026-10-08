@@ -15,19 +15,26 @@ export function newUser(): TestUser {
   return { name: `Ada ${id}`, email: `e2e-${id}@example.test`, password: `correct-horse-${id}` };
 }
 
-/** Creates an account through /sign-in and waits to land on `returnTo`. */
+/** Creates an account through /sign-up and waits to land on `returnTo`. */
 export async function signUp(page: Page, user: TestUser, returnTo = "/account") {
-  await page.goto(`/sign-in?returnTo=${encodeURIComponent(returnTo)}`, { waitUntil: "domcontentloaded" });
-  const create = page.getByRole("form", { name: "Create an account" });
-  await hydrated(create.getByRole("button", { name: "Continue" }));
-  await create.getByLabel("Email").fill(user.email);
-  await create.getByRole("button", { name: "Continue" }).click();
-  await create.getByLabel("Name").fill(user.name);
-  await create.getByLabel("Password", { exact: true }).fill(user.password);
-  await create.getByRole("button", { name: "Create account" }).click();
+  await page.goto(`/sign-up?returnTo=${encodeURIComponent(returnTo)}`, { waitUntil: "domcontentloaded" });
+  await fillSignUp(page, user);
   // Signing up makes several database round trips (1–2 s against Neon from a laptop, more when
   // tests run in parallel), then a full page load.
   await expect(page).toHaveURL((url) => url.pathname === returnTo, { timeout: AUTH_TIMEOUT });
+}
+
+/**
+ * Fills and submits the /sign-up form on the current page (by role, which skips the hidden page a
+ * client-side navigation leaves mounted).
+ */
+export async function fillSignUp(page: Page, user: Pick<TestUser, "name" | "email" | "password">) {
+  const form = page.getByRole("form", { name: "Create an account" });
+  await hydrated(form.getByRole("button", { name: "Create account" }));
+  await form.getByRole("textbox", { name: "Name" }).fill(user.name);
+  await form.getByRole("textbox", { name: "Email" }).fill(user.email);
+  await form.getByRole("textbox", { name: "Password" }).fill(user.password);
+  await form.getByRole("button", { name: "Create account" }).click();
 }
 
 /** Signs in through /sign-in and waits to leave it. */

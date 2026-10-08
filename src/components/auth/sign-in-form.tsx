@@ -4,6 +4,7 @@ import { useForm, useStore } from "@tanstack/react-form";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { takeHandedOffEmail } from "@/components/auth/email-handoff";
 import { describedBy, focusFirstInvalid, hasErrors, leaveSignIn, shownErrors } from "@/components/auth/field-errors";
 import { FormError } from "@/components/auth/form-error";
 import { PasswordInput } from "@/components/auth/password-input";
@@ -15,15 +16,12 @@ import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth/errors";
 import { signInSchema } from "@/lib/auth/schemas";
 
-/** Set by "Sign in instead" in the create-account form: fills the email and moves to the password. */
-export type SignInPrefill = { email: string; key: number };
-
 const FIELDS: [string, string][] = [
   ["email", "sign-in-email"],
   ["password", "sign-in-password"],
 ];
 
-export function SignInForm({ prefill }: { prefill?: SignInPrefill }) {
+export function SignInForm() {
   // Stays true while the full page load after success is under way, so the button stays disabled.
   const [leaving, setLeaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -50,11 +48,13 @@ export function SignInForm({ prefill }: { prefill?: SignInPrefill }) {
   });
   const submitted = useStore(form.store, (state) => state.submissionAttempts > 0);
 
+  // "Sign in instead" on /sign-up hands the email over: fill it in and move on to the password.
   useEffect(() => {
-    if (!prefill) return;
-    form.setFieldValue("email", prefill.email);
+    const email = takeHandedOffEmail();
+    if (!email) return;
+    form.setFieldValue("email", email);
     document.getElementById("sign-in-password")?.focus();
-  }, [prefill, form]);
+  }, [form]);
 
   return (
     <form
@@ -69,9 +69,6 @@ export function SignInForm({ prefill }: { prefill?: SignInPrefill }) {
       }}
       className="flex flex-col gap-block"
     >
-      <h1 id="sign-in-heading" className="text-title uppercase">
-        Sign in
-      </h1>
       <FieldGroup>
         <form.Field name="email">
           {(field) => {

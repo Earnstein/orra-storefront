@@ -22,7 +22,7 @@
 | Ways to sign in | **Email and password only.** No Google, passkeys or Apple in M4. |
 | Where saved items live | **A `/saved` page for everyone**, like Gucci's "My Saved Items": signed out it shows this browser's list with a prompt to sign in; signed in, the account's list. The account page links to it. |
 | What the account page does | **All of:** edit name, change password, list and sign out devices, delete the account. Changing the email waits for M7's domain (it needs a confirmation email). |
-| Sign-in layout | **One page, like Gucci:** Sign in and Create an account side by side, stacked on phones. |
+| Sign-in layout | **Two pages** (changed on 2026-10-08 at the user's request, from "one page, like Gucci"): `/sign-in` and `/sign-up`, each a single centred column that links to the other. Gucci stays the reference for style; sign-up is one step instead of Gucci's email-first two steps. |
 | Account data on previews (carried from M3) | **Cleared.** Each preview's Neon branch is copied from production, so the preview build deletes every account right after migrating. Previews start with no accounts. |
 | Session state and saved items | **The session is read in the browser; saved items go through a small API.** Pages stay static and cached. Signed in, saved items come from a private endpoint and change through server actions with optimistic updates (TanStack Query). TanStack DB was considered and left for M5's bag and M6's admin, where several views share the same rows. Reading the session on the server for every page was rejected: it would make every page partly dynamic and give up M3's caching. |
 
@@ -89,23 +89,26 @@ Settings live in `src/lib/auth.options.ts`, so `npm run auth:generate` sees ever
 
 Monochrome, using the design system's tokens and primitives, with forms in TanStack Form and shadcn `Field` on Base UI. Inputs are underlined, buttons full-width and black, as on Gucci UK.
 
-### `/sign-in`
+### `/sign-in` and `/sign-up`
 
-Two blocks side by side from `md`, stacked on phones with Sign in first.
-- **Sign in:**
+Two pages, each a single centred column (the prose width), that link to each other and keep `?returnTo`.
+- **`/sign-in`:**
+  - the heading and one line ("Welcome back…");
   - underlined Email and Password, with a show/hide control on the password;
   - "Stay signed in", on by default, and "Forgot your password?";
-  - a full-width Sign in button.
+  - a full-width Sign in button;
+  - then "New to Orra?" with a line on the benefits and an outlined "Create an account".
   - A wrong email or password shows one message: "That email and password don't match."
-- **Create an account:**
-  - an email field and Continue, then Name and Password ("At least 8 characters") and Create account;
-  - the benefits that exist today: saved items on every device, and managing the account (M5 adds orders).
-  - If the email already has an account, it says so and links to Sign in. That reveals the email is registered, which is standard, and sign-up is rate-limited.
+- **`/sign-up`:**
+  - the heading and the benefits that exist today: saved items on every device, and managing the account (M5 adds orders);
+  - Name, Email and Password ("At least 8 characters") and Create account, in one step;
+  - then "Already have an account?" with an outlined "Sign in".
+  - If the email already has an account, it says so and offers "Sign in instead", which carries the email to `/sign-in` for this tab (session storage, never the URL). That reveals the email is registered, which is standard, and sign-up is rate-limited.
 - **Behaviour:**
   - Zod checks each field; errors sit with their fields, and form errors are announced.
   - Buttons read "Signing in…" and "Creating account…" while submitting.
-  - Afterwards the visitor goes to `?returnTo` when it's a path on this site, otherwise to `/account`. A path must start with a single `/` and never points back to `/sign-in`.
-  - A signed-in visitor opening `/sign-in` goes straight on.
+  - Afterwards the visitor goes to `?returnTo` when it's a path on this site, otherwise to `/account`. A path must start with a single `/` and never points back to `/sign-in` or `/sign-up`.
+  - A signed-in visitor opening either page goes straight on.
 
 ### Password reset
 
@@ -146,7 +149,7 @@ Protected; the content streams under `<Suspense>` with a skeleton.
 
 ### Everywhere
 
-- `/sign-in`, `/account` and `/saved` pages are `noindex`.
+- `/sign-in`, `/sign-up`, `/account` and `/saved` pages are `noindex`.
 - Browser-checked at 375, 1024, 1280 and 1440 px.
 
 ## Saved items (module 5)
