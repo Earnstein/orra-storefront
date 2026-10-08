@@ -5,3 +5,5 @@
 export function cacheTag(): void {}
 export function cacheLife(): void {}
 export function revalidateTag(): void {}
+export function updateTag(): void {}
+export function refresh(): void {}
