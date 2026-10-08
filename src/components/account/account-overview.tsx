@@ -2,6 +2,7 @@ import { ArrowRightIcon } from "lucide-react";
 import Link from "next/link";
 
 import { AccountSection } from "@/components/account/account-section";
+import { DeleteAccount } from "@/components/account/delete-account";
 import { DevicesList } from "@/components/account/devices-list";
 import { PasswordForm } from "@/components/account/password-form";
 import { ProfileForm } from "@/components/account/profile-form";
@@ -41,6 +42,9 @@ export function AccountOverview({ user }: { user: CurrentUser }) {
         </AccountSection>
         <AccountSection id="devices-heading" title="Signed-in devices" description="Where your account is signed in. Sign out anything you don't recognise.">
           <DevicesList />
+        </AccountSection>
+        <AccountSection id="delete-heading" title="Delete account" description="Permanently remove your account. You can create a new one at any time.">
+          <DeleteAccount />
         </AccountSection>
       </div>
     </div>

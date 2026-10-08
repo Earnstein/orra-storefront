@@ -94,7 +94,7 @@ export function DevicesList() {
   const others = list.filter((session) => session.token !== currentToken);
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col">
       <ul className="flex flex-col divide-y border-y">
         {list.map((session) => {
           const isCurrent = session.token === currentToken;
@@ -127,15 +127,15 @@ export function DevicesList() {
         <Button
           type="button"
           variant="link"
-          className="self-start"
+          className="mt-6 self-start"
           disabled={revokeOthers.isPending}
           onClick={() => revokeOthers.mutate()}
         >
           Sign out of all other devices
         </Button>
       )}
-      <FormError message={error} />
-      <p role="status" className="text-caption">
+      <FormError message={error} className="not-empty:mt-4 not-empty:mb-0" />
+      <p role="status" className="text-caption not-empty:mt-4">
         {status}
       </p>
     </div>

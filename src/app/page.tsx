@@ -1,3 +1,4 @@
+import { AccountDeletedNotice } from "@/components/home/account-deleted-notice";
 import { FeaturedCollections } from "@/components/home/featured-collections";
 import { HomeHero } from "@/components/home/home-hero";
 import { HomeIntro } from "@/components/home/home-intro";
@@ -11,6 +12,7 @@ import { StoryBand } from "@/components/home/story-band";
 export default function HomePage() {
   return (
     <>
+      <AccountDeletedNotice />
       <HomeHero />
       <HomeIntro />
       <FeaturedCollections />

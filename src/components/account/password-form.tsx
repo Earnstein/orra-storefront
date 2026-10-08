@@ -122,7 +122,7 @@ export function PasswordForm() {
           )}
         </form.Field>
       </FieldGroup>
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col">
         <FormError message={formError} />
         <form.Subscribe selector={(state) => state.isSubmitting}>
           {(isSubmitting) => (
@@ -131,7 +131,7 @@ export function PasswordForm() {
             </Button>
           )}
         </form.Subscribe>
-        <p role="status" className="text-caption">
+        <p role="status" className="text-caption not-empty:mt-4">
           {status}
         </p>
       </div>

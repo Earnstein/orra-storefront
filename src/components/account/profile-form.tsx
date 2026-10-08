@@ -58,7 +58,7 @@ export function ProfileForm({ name: initialName, email }: { name: string; email:
   }
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col">
       <dl className="flex flex-col gap-6">
         <div className="flex flex-col gap-1">
           <dt className="text-caption text-muted-foreground">Name</dt>
@@ -128,7 +128,7 @@ export function ProfileForm({ name: initialName, email }: { name: string; email:
           </dd>
         </div>
       </dl>
-      <p role="status" className="text-caption">
+      <p role="status" className="text-caption not-empty:mt-4">
         {status}
       </p>
     </div>

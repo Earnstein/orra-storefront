@@ -161,3 +161,42 @@ test("@writes the devices list signs another device out", async ({ page, browser
   expect(await canOpenAccount(other.page)).toBe(false);
   await other.context.close();
 });
+
+async function openDeleteDialog(page: import("@playwright/test").Page) {
+  const trigger = page.getByRole("region", { name: "Delete account" }).getByRole("button", { name: "Delete account" });
+  await hydrated(trigger);
+  await trigger.click();
+  return page.getByRole("alertdialog", { name: "Delete your account?" });
+}
+
+test("@writes deleting with the wrong password keeps the account", async ({ page }) => {
+  created = newUser();
+  await signUp(page, created);
+  const dialog = await openDeleteDialog(page);
+  await expect(dialog.getByLabel("Password", { exact: true })).toBeFocused();
+  await dialog.getByLabel("Password", { exact: true }).fill("not-my-password");
+  await dialog.getByRole("button", { name: "Delete account" }).click();
+  await expect(dialog.getByRole("alert").filter({ hasText: /\S/ })).toHaveText("That password isn't right.");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toBeHidden();
+  expect(await canOpenAccount(page)).toBe(true);
+});
+
+test("@writes deleting the account signs out, says so, and the account is gone", async ({ page }) => {
+  created = newUser();
+  const user = created;
+  await signUp(page, user);
+  const dialog = await openDeleteDialog(page);
+  await dialog.getByLabel("Password", { exact: true }).fill(user.password);
+  await dialog.getByRole("button", { name: "Delete account" }).click();
+
+  await expect(page.getByRole("status").filter({ hasText: "Your account has been deleted." })).toBeVisible({ timeout: 15_000 });
+  await expect(page).toHaveURL((url) => url.pathname === "/" && url.search === "");
+  created = undefined; // nothing left to clean up
+
+  const response = await page.request.post("/api/auth/sign-in/email", {
+    data: { email: user.email, password: user.password },
+    headers: { origin: new URL(page.url()).origin },
+  });
+  expect(response.status()).toBe(401);
+});
