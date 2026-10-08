@@ -75,3 +75,16 @@ describe("M3 migrations on a database that predates them", () => {
     expect(columns.rows.map((c) => c.is_nullable)).toEqual(["NO", "NO"]);
   });
 });
+
+describe("M4 migrations", () => {
+  it("add saved_items, keyed by user and product", async () => {
+    const client = createPGlite();
+    const tags = migrationTags();
+    expect(tags).toContain("0006_saved_items");
+    await applyMigrations(client, tags);
+    const { rows } = await client.query<{ column_name: string }>(
+      "select column_name from information_schema.columns where table_name = 'saved_items' order by ordinal_position",
+    );
+    expect(rows.map((row) => row.column_name)).toEqual(["user_id", "product_id", "created_at"]);
+  });
+});
