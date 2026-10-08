@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { deleteAccount, newUser, sessionName, signIn, signUp, type TestUser } from "./auth";
+import { accountLink, deleteAccount, newUser, openAccountMenu, sessionName, signIn, signUp, type TestUser } from "./auth";
 import { gotoHydrated, hydrated } from "./hydration";
 import { readResetLink } from "./outbox";
 
@@ -19,9 +19,43 @@ test.afterEach(async ({ browser, baseURL }) => {
   created = undefined;
 });
 
-test("@writes create an account and come back to where you were", async ({ page }) => {
+test("@writes sign in from the account menu, create an account and come back to where you were", async ({ page, isMobile }) => {
   created = newUser();
-  await signUp(page, created, "/products/leather-tote-tan");
+  await page.goto("/products/leather-tote-tan", { waitUntil: "domcontentloaded" });
+  const menu = await openAccountMenu(page, isMobile);
+  const signInLink = accountLink(menu, "Sign in", isMobile);
+  await expect(signInLink).toHaveAttribute("href", "/sign-in?returnTo=%2Fproducts%2Fleather-tote-tan");
+  await expect(accountLink(menu, "Saved items", isMobile)).toHaveAttribute("href", "/saved");
+  await signInLink.click();
+
+  await expect(page).toHaveURL(/\/sign-in\?returnTo=/);
+  const create = page.getByRole("form", { name: "Create an account" });
+  await hydrated(create.getByRole("button", { name: "Continue" }));
+  await create.getByRole("textbox", { name: "Email" }).fill(created.email);
+  await create.getByRole("button", { name: "Continue" }).click();
+  await create.getByRole("textbox", { name: "Name" }).fill(created.name);
+  await create.getByRole("textbox", { name: "Password" }).fill(created.password);
+  await create.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL((url) => url.pathname === "/products/leather-tote-tan", { timeout: 15_000 });
+
+  const signedIn = await openAccountMenu(page, isMobile);
+  await expect(signedIn.getByText(`Hello, ${created.name}`)).toBeVisible();
+});
+
+test("@writes the account menu signs out to the homepage, and signing in again works", async ({ page, isMobile }) => {
+  created = newUser();
+  await signUp(page, created, "/stories");
+  const menu = await openAccountMenu(page, isMobile);
+  await expect(accountLink(menu, "My account", isMobile)).toHaveAttribute("href", "/account");
+  await expect(accountLink(menu, "Saved items", isMobile)).toHaveAttribute("href", "/saved");
+  await menu.getByRole(isMobile ? "button" : "menuitem", { name: "Sign out" }).click();
+
+  await expect(page).toHaveURL((url) => url.pathname === "/");
+  expect(await sessionName(page)).toBeNull();
+  const signedOut = await openAccountMenu(page, isMobile);
+  await expect(accountLink(signedOut, "Sign in", isMobile)).toHaveAttribute("href", "/sign-in?returnTo=%2F");
+
+  await signIn(page, created);
   expect(await sessionName(page)).toBe(created.name);
 });
 

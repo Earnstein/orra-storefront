@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 import { hydrated } from "./hydration";
 
@@ -53,4 +53,26 @@ export async function deleteAccount(page: Page, password: string) {
   const origin = new URL(page.url()).origin;
   const response = await page.request.post("/api/auth/delete-user", { data: { password }, headers: { origin } });
   expect(response.ok(), await response.text()).toBe(true);
+}
+
+/**
+ * Opens the account links: the header's Account menu on desktop, the phone menu's Account section
+ * on mobile. Returns the container to look for links in.
+ */
+export async function openAccountMenu(page: Page, isMobile: boolean): Promise<Locator> {
+  if (isMobile) {
+    const button = page.getByRole("button", { name: "Open menu" });
+    await hydrated(button);
+    await button.click();
+    return page.getByRole("dialog", { name: "Menu" }).getByRole("navigation", { name: "Account" });
+  }
+  const button = page.getByRole("button", { name: "Account" });
+  await hydrated(button);
+  await button.click();
+  return page.getByRole("menu");
+}
+
+/** A link in the account menu: a menu item on desktop, a plain link in the phone menu. */
+export function accountLink(menu: Locator, name: string, isMobile: boolean): Locator {
+  return menu.getByRole(isMobile ? "link" : "menuitem", { name, exact: true });
 }
