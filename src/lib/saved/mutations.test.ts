@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { db } from "@/db";
@@ -118,5 +118,28 @@ describe("mergeBatch", () => {
 
   it("drops duplicates (keeping the newest) and slugs that aren't slugs", () => {
     expect(mergeBatch(["a", "Bad Slug", "b", "a", "x".repeat(101), "c"])).toEqual(["b", "a", "c"]);
+  });
+});
+
+describe("concurrent writes", () => {
+  it("two merges at once (two tabs at sign-in) add each item once", async () => {
+    const userId = await newUser();
+    const slugs = ["leather-tote-tan", "double-monk-shoe"];
+    await Promise.all([mergeSlugs(userId, slugs), mergeSlugs(userId, slugs)]);
+    expect(await getSavedSlugs(userId)).toHaveLength(2);
+  });
+
+  it("a save during a merge never shows more than SAVED_LIMIT", async () => {
+    const userId = await newUser();
+    await fill(userId, SAVED_LIMIT - 1);
+    const [merging] = await extraProducts("race-merge", 1);
+    const [saving] = await extraProducts("race-save", 1);
+    const [merged] = await Promise.all([mergeSlugs(userId, [merging]), saveSlugs(userId, [saving])]);
+    expect(merged.slugs.length).toBeLessThanOrEqual(SAVED_LIMIT);
+    expect((await getSavedSlugs(userId)).length).toBeLessThanOrEqual(SAVED_LIMIT);
+    // The next save trims anything a race left over.
+    await saveSlugs(userId, [saving]);
+    const [{ total }] = await db.select({ total: count() }).from(savedItems).where(eq(savedItems.userId, userId));
+    expect(total).toBeLessThanOrEqual(SAVED_LIMIT);
   });
 });

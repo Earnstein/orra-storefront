@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { SAVED_LIMIT } from "@/lib/saved/limits";
 import { addToBag, bagCount, EMPTY_BAG, isSaved, parseBagState, quantityInBag, removeSaved, toggleSaved } from "./rules";
 
 describe("addToBag", () => {
@@ -67,5 +68,15 @@ describe("removeSaved", () => {
   it("returns the same state when nothing is removed", () => {
     const state = { lines: [], saved: ["a"] };
     expect(removeSaved(state, [])).toBe(state);
+  });
+});
+
+describe("toggleSaved cap", () => {
+  it("keeps at most SAVED_LIMIT saved slugs in the browser, dropping the oldest", () => {
+    const full = { lines: [], saved: Array.from({ length: SAVED_LIMIT }, (_, i) => `p-${i}`) };
+    const next = toggleSaved(full, "new-one");
+    expect(next.saved).toHaveLength(SAVED_LIMIT);
+    expect(next.saved[0]).toBe("p-1");
+    expect(next.saved.at(-1)).toBe("new-one");
   });
 });

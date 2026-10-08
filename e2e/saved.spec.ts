@@ -92,14 +92,21 @@ test("@writes rapid toggles on a slow network end where the last click left them
 test("@writes a failed save rolls back", async ({ page }) => {
   created = newUser();
   await signUp(page, created, TOTE);
+  const listLoaded = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/saved");
   await gotoHydrated(page, TOTE, saveButton);
-  await expect.poll(() => accountSlugs(page)).toEqual([]);
+  await listLoaded;
 
+  // The action answers slowly and then fails: the button shows Saved at once, then goes back.
   await page.route(
     (url) => url.pathname === TOTE,
-    (route) => (route.request().method() === "POST" ? route.fulfill({ status: 500, body: "" }) : route.continue()),
+    async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      await route.fulfill({ status: 500, body: "" });
+    },
   );
   await saveButton(page).click();
+  await expect(saveButton(page)).toHaveAttribute("aria-pressed", "true");
   await expect(saveButton(page)).toHaveAttribute("aria-pressed", "false", { timeout: 15_000 });
   expect(await accountSlugs(page)).toEqual([]);
 });
@@ -144,9 +151,25 @@ test("removing an item updates the count", async ({ page }) => {
   await saveOn(page, SHOE);
   await gotoHydrated(page, "/saved", (page) => page.getByRole("button", { name: /^Remove / }).first());
   await expect(page.getByRole("heading", { level: 1, name: "Saved items (2)" })).toBeVisible();
-  await page.getByRole("button", { name: /^Remove Leather tote/ }).click();
+  // Newest first: the shoe, then the tote. Removing the shoe moves focus to the tote's Remove.
+  await page.getByRole("button", { name: /^Remove Double-monk shoe/ }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Saved items (1)" })).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: "removed from saved items" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /^Remove Leather tote/ })).toBeFocused();
+  // Removing the last one moves focus to the heading.
+  await page.getByRole("button", { name: /^Remove Leather tote/ }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
+});
+
+test("/saved offers to try again when the cards can't load", async ({ page }) => {
+  await saveOn(page, TOTE);
+  let fail = true;
+  await page.route("**/api/products/summaries?**", (route) => (fail ? route.fulfill({ status: 500, body: "" }) : route.continue()));
+  await page.goto("/saved", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("alert").filter({ hasText: "We couldn't load your saved items." })).toBeVisible({ timeout: 15_000 });
+  fail = false;
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Saved items (1)" })).toBeVisible();
 });
 
 test("@writes saved items appear on another device (the milestone's exit test)", async ({ page, browser, baseURL }) => {
@@ -181,4 +204,25 @@ test("@writes saved items appear on another device (the milestone's exit test)",
   }
   await page.goto("/saved", { waitUntil: "domcontentloaded" });
   await expect(page.getByText("You haven't saved anything yet")).toBeVisible({ timeout: 15_000 });
+});
+
+test("@writes a session revoked elsewhere falls back to this browser's list", async ({ page, browser, baseURL }) => {
+  created = newUser();
+  await signUp(page, created, "/");
+  // Another device signs this one out; this browser still holds the 5-minute cookie cache.
+  const context = await browser.newContext({ baseURL });
+  try {
+    const other = await context.newPage();
+    await signIn(other, created);
+    const revoke = await other.request.post("/api/auth/revoke-other-sessions", {
+      data: {},
+      headers: { origin: new URL(other.url()).origin },
+    });
+    expect(revoke.ok(), await revoke.text()).toBe(true);
+  } finally {
+    await context.close();
+  }
+
+  await page.goto("/saved", { waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Sign in to keep your saved items on every device")).toBeVisible({ timeout: 15_000 });
 });

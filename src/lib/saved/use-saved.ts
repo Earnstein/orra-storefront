@@ -1,12 +1,14 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 
 import type { ActionResult } from "@/lib/account/actions";
 import { authClient } from "@/lib/auth-client";
 import { isSaved as isSavedLocally } from "@/lib/bag/rules";
 import { bagActions, useBag } from "@/lib/bag/store";
 import { saveItem, unsaveItem } from "@/lib/saved/actions";
+import { SAVED_LIMIT } from "@/lib/saved/limits";
 
 export type SavedStatus = "local" | "loading" | "account";
 
@@ -19,6 +21,16 @@ async function fetchSaved(): Promise<string[]> {
   if (response.status === 401) throw new Error(SIGNED_OUT);
   if (!response.ok) throw new Error(`saved: ${response.status}`);
   return ((await response.json()) as { slugs: string[] }).slugs;
+}
+
+/**
+ * The server said "signed out" while the browser still thinks it's signed in (a session revoked
+ * elsewhere, within the 5-minute cookie cache). Re-read the session without the cache, which also
+ * clears the stale cookies, then tell the session store, so saving goes back to this browser.
+ */
+async function recheckSession() {
+  await authClient.getSession({ query: { disableCookieCache: true } }).catch(() => undefined);
+  authClient.$store.notify("$sessionSignal");
 }
 
 async function unwrap(result: Promise<ActionResult<{ slugs: string[] }>>): Promise<string[]> {
@@ -50,6 +62,10 @@ export function useSaved() {
     enabled: Boolean(userId),
     retry: (failures, failure) => failure.message !== SIGNED_OUT && failures < 2,
   });
+  const listSignedOut = account.error?.message === SIGNED_OUT;
+  useEffect(() => {
+    if (listSignedOut) void recheckSession();
+  }, [listSignedOut]);
 
   const toggleMutation = useMutation({
     mutationKey: ["saved"],
@@ -66,8 +82,7 @@ export function useSaved() {
     },
     onError: (failure, _variables, context) => {
       if (context?.previous) queryClient.setQueryData(context.key, context.previous);
-      // The session ended: re-read it, so saving goes back to this browser.
-      if (failure.message === SIGNED_OUT) authClient.$store.notify("$sessionSignal");
+      if (failure.message === SIGNED_OUT) void recheckSession();
     },
     onSettled: (_data, _error, _variables, context) => {
       // Only once the last queued toggle has settled, so an earlier answer can't undo a later click.
@@ -80,11 +95,15 @@ export function useSaved() {
   // "loading" until it's known whose list this is (the session, then the account's list); toggles
   // meanwhile still work (signed-out ones go to this browser).
   const status: SavedStatus = userId ? (account.isSuccess ? "account" : "loading") : sessionPending ? "loading" : "local";
-  const slugs = status === "account" ? account.data! : bag.saved;
+  // Newest first either way (the browser's list is stored oldest first), and never over the cap.
+  const slugs = status === "account" ? account.data! : [...bag.saved].reverse().slice(0, SAVED_LIMIT);
 
   return {
     slugs,
     status,
+    /** The account's list couldn't be loaded (not because the session ended). */
+    failed: account.isError && !listSignedOut,
+    retry: () => void account.refetch(),
     isSaved: (slug: string) => (status === "account" ? slugs.includes(slug) : isSavedLocally(bag, slug)),
     toggle: (slug: string) => {
       if (!userId) return bagActions.toggleSaved(slug);

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, count, desc, eq, inArray, notInArray } from "drizzle-orm";
+import { and, count, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { products, savedItems } from "@/db/schema";
@@ -8,9 +8,14 @@ import { SAVED_LIMIT } from "@/lib/saved/limits";
 import { getSavedSlugs } from "@/lib/saved/queries";
 
 // Writes to a user's saved items. Callers check the session and validate the slugs first
-// (src/lib/saved/actions.ts). The Neon HTTP driver has no interactive transactions, so each step is
-// its own statement; every step is safe to repeat, so concurrent requests (two tabs) can't
-// duplicate rows, and the cap is re-applied after each save.
+// (src/lib/saved/actions.ts). The Neon HTTP driver has no interactive transactions (and PGlite in
+// tests has no batch), so each step is its own statement. Every step is safe to repeat, so
+// concurrent requests (two tabs) can't duplicate rows; the cap is re-applied after each save, and
+// reads never return more than SAVED_LIMIT, so a save racing a merge can at most leave one hidden
+// extra row until the next save. Times come from the database clock, so servers can't disagree.
+
+/** `now()` plus `i` milliseconds: keeps the given order within one insert. */
+const nowPlus = (i: number) => sql<Date>`now() + ${i} * interval '1 millisecond'`;
 
 /** Product ids for `slugs`, in the order given; unknown slugs are left out. */
 async function productIds(slugs: string[]): Promise<{ slug: string; id: number }[]> {
@@ -27,10 +32,9 @@ async function productIds(slugs: string[]): Promise<{ slug: string; id: number }
 export async function saveSlugs(userId: string, slugs: string[]): Promise<string[]> {
   const found = await productIds(slugs);
   if (found.length > 0) {
-    const now = Date.now();
     await db
       .insert(savedItems)
-      .values(found.map(({ id }, i) => ({ userId, productId: id, createdAt: new Date(now + i) })))
+      .values(found.map(({ id }, i) => ({ userId, productId: id, createdAt: nowPlus(i) })))
       .onConflictDoNothing();
     const keep = db
       .select({ productId: savedItems.productId })
@@ -72,10 +76,9 @@ export async function mergeSlugs(userId: string, slugs: string[]): Promise<{ slu
   const fits = fresh.slice(0, room);
   if (fits.length > 0) {
     // Newer than everything already saved, keeping the browser's order (its newest last).
-    const now = Date.now();
     await db
       .insert(savedItems)
-      .values(fits.map(({ id }, i) => ({ userId, productId: id, createdAt: new Date(now + i) })))
+      .values(fits.map(({ id }, i) => ({ userId, productId: id, createdAt: nowPlus(i) })))
       .onConflictDoNothing();
   }
   return { slugs: await getSavedSlugs(userId), unmerged: fresh.slice(room).map(({ slug }) => slug) };

@@ -44,11 +44,14 @@ export function SavedSync() {
       if (attempt < RETRIES) window.setTimeout(() => setAttempt((count) => count + 1), RETRY_MS);
     };
     void mergeSaved(batch)
-      .then((result) => {
-        if (!result.ok) return retry();
+      .then(async (result) => {
+        // Only a server failure is worth trying again; "invalid" or "signed-out" won't change.
+        if (!result.ok) return result.error === "failed" ? retry() : undefined;
         const inBatch = new Set(batch);
         const keep = new Set([...result.data.unmerged, ...local.filter((slug) => isSlug(slug) && !inBatch.has(slug))]);
         bagActions.removeSaved(local.filter((slug) => !keep.has(slug)));
+        // A list read that started before the merge mustn't overwrite its result.
+        await queryClient.cancelQueries({ queryKey: savedQueryKey(userId) });
         queryClient.setQueryData(savedQueryKey(userId), result.data.slugs);
       })
       .catch(retry);

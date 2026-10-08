@@ -1,6 +1,8 @@
 // Pure bag/saved-items rules. No storage or React here, so they're easy to test and to
 // move server-side when the cart gets a backend.
 
+import { SAVED_LIMIT } from "@/lib/saved/limits";
+
 export type BagLine = { slug: string; quantity: number };
 export type BagState = { lines: BagLine[]; saved: string[] };
 
@@ -28,8 +30,9 @@ export function isSaved(state: BagState, slug: string): boolean {
   return state.saved.includes(slug);
 }
 
+/** Saves or unsaves `slug`. The browser keeps at most SAVED_LIMIT (the account's cap), dropping the oldest. */
 export function toggleSaved(state: BagState, slug: string): BagState {
-  const saved = isSaved(state, slug) ? state.saved.filter((s) => s !== slug) : [...state.saved, slug];
+  const saved = isSaved(state, slug) ? state.saved.filter((s) => s !== slug) : [...state.saved, slug].slice(-SAVED_LIMIT);
   return { ...state, saved };
 }
 
