@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SignInHref } from "./sign-in-href";
 import { signOutToHome, useAccount, useReloadAfterSignOut } from "./use-account";
 
 const item = "rounded-none px-4 py-2.5 text-body";
@@ -23,7 +24,7 @@ const item = "rounded-none px-4 py-2.5 text-body";
  * both states, so nothing shifts while the session loads.
  */
 export function AccountMenu({ className }: { className?: string }) {
-  const { user, signInHref } = useAccount();
+  const { user } = useAccount();
   useReloadAfterSignOut();
   return (
     <DropdownMenu>
@@ -49,9 +50,13 @@ export function AccountMenu({ className }: { className?: string }) {
           </>
         ) : (
           <DropdownMenuGroup>
-            <DropdownMenuItem className={item} render={<Link href={signInHref} />}>
-              Sign in
-            </DropdownMenuItem>
+            <SignInHref>
+              {(href) => (
+                <DropdownMenuItem className={item} render={<Link href={href} />}>
+                  Sign in
+                </DropdownMenuItem>
+              )}
+            </SignInHref>
             <DropdownMenuItem className={item} render={<Link href="/saved" />}>
               Saved items
             </DropdownMenuItem>
