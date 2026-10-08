@@ -89,7 +89,7 @@ export async function openAccountMenu(page: Page, isMobile: boolean): Promise<Lo
     await button.click();
     return page.getByRole("dialog", { name: "Menu" }).getByRole("navigation", { name: "Account" });
   }
-  const button = page.getByRole("button", { name: "Account" });
+  const button = page.getByRole("button", { name: "Account", exact: true });
   await hydrated(button);
   await button.click();
   return page.getByRole("menu");

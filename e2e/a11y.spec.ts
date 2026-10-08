@@ -1,7 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-import { gotoHydrated } from "./hydration";
+import { deleteTestUser, newUser, signUp } from "./auth";
+import { gotoHydrated, hydrated } from "./hydration";
 
 // No serious or critical axe violations on a listing, with and without the filter sheet open, and
 // with the search panel open.
@@ -47,4 +48,23 @@ test("sign up, with its errors shown", async ({ page }) => {
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByText("Enter your name.")).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
+});
+
+test("@writes the account page and the delete dialog", async ({ page, browser, baseURL }) => {
+  const user = newUser();
+  try {
+    await signUp(page, user);
+    await expect(page.getByRole("region", { name: "Signed-in devices" }).getByRole("listitem")).toHaveCount(1);
+    expect(await seriousViolations(page)).toEqual([]);
+
+    const trigger = page.getByRole("region", { name: "Delete account" }).getByRole("button", { name: "Delete account" });
+    await hydrated(trigger);
+    await trigger.click();
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    // Measure contrast once the dialog has finished fading in.
+    await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running"));
+    expect(await seriousViolations(page)).toEqual([]);
+  } finally {
+    await deleteTestUser(browser, baseURL!, user);
+  }
 });

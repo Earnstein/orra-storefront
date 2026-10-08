@@ -53,6 +53,9 @@ export const authOptions = {
       "/sign-in/email": { window: 60, max: 5 },
       "/sign-up/email": { window: 60, max: 3 },
       "/request-password-reset": { window: 15 * 60, max: 3 },
+      // Both check the current password, so a stolen session cookie can't guess it quickly.
+      "/change-password": { window: 60, max: 5 },
+      "/delete-user": { window: 60, max: 5 },
       // Every page's header reads the session; with database storage the default rule would add a
       // read and a write per page view, which the cookie cache exists to avoid.
       "/get-session": false,

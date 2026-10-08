@@ -16,11 +16,14 @@ export type CurrentUser = { id: string; name: string; email: string };
  * another device (or by a password change or reset) is refused at once, at the cost of one
  * database read. Deduplicated per request.
  */
-export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => (await getCurrentSession())?.user ?? null);
+
+/** The signed-in user and this request's session id (to tell this device from others), or null. */
+export const getCurrentSession = cache(async (): Promise<{ user: CurrentUser; sessionId: string } | null> => {
   const session = await auth.api.getSession({ headers: await headers(), query: { disableCookieCache: true } });
   if (!session) return null;
   const { id, name, email } = session.user;
-  return { id, name, email };
+  return { user: { id, name, email }, sessionId: session.session.id };
 });
 
 /** The signed-in user, or a redirect to sign in that comes back to `returnTo`. */
