@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { updateName } from "@/lib/account/actions";
+import { authClient } from "@/lib/auth-client";
 import { goToSignIn } from "@/lib/account/signed-out";
 import { nameSchema } from "@/lib/auth/schemas";
 
@@ -25,6 +26,8 @@ export function ProfileForm({ name: initialName, email }: { name: string; email:
   const [status, setStatus] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const editButton = useRef<HTMLButtonElement>(null);
+  // The header reads the session in the browser; a server action doesn't tell it to refetch.
+  const { refetch: refetchSession } = authClient.useSession();
 
   const form = useForm({
     defaultValues: { name },
@@ -39,6 +42,7 @@ export function ProfileForm({ name: initialName, email }: { name: string; email:
       }
       setName(result.data.name);
       setStatus("Name updated.");
+      void refetchSession();
       close();
     },
   });

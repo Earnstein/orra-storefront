@@ -1,4 +1,5 @@
 import { signInPath } from "@/lib/auth/return-to";
+import { markSignedOut } from "@/lib/auth/signed-out-marker";
 
 /**
  * When an account action answers "signed-out" (signed out in another tab, revoked from another
@@ -6,5 +7,6 @@ import { signInPath } from "@/lib/auth/return-to";
  * session stays in memory.
  */
 export function goToSignIn(returnTo = "/account") {
+  markSignedOut();
   window.location.replace(signInPath(returnTo));
 }

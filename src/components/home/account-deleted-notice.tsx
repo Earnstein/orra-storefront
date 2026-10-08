@@ -1,15 +1,17 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import { Container } from "@/components/primitives";
+import { takeAccountDeletedFlag } from "@/lib/account/deleted-flag";
 
 /**
  * After an account is deleted, the homepage opens with `?deleted=1`: say so in a polite live
- * region, then drop the parameter so a reload or a shared link doesn't repeat it. The region is
- * in the prerendered HTML and the message is added to it once the URL is read (under <Suspense>,
- * since the homepage is static), so screen readers announce it.
+ * region, then drop the parameter so a reload or a shared link doesn't repeat it. The notice also
+ * needs the session-storage flag the deletion set, so a crafted link alone can't show it. The
+ * region is in the prerendered HTML and the message is added once the URL is read (under
+ * <Suspense>, so this part renders only in the browser), so screen readers announce it.
  */
 export function AccountDeletedNotice() {
   return (
@@ -23,12 +25,12 @@ export function AccountDeletedNotice() {
 
 function Notice() {
   const params = useSearchParams();
-  const router = useRouter();
-  const [show] = useState(() => params.get("deleted") === "1");
+  const [show] = useState(() => params.get("deleted") === "1" && takeAccountDeletedFlag());
 
   useEffect(() => {
-    if (params.has("deleted")) router.replace("/", { scroll: false });
-  }, [params, router]);
+    // Plain history (Next keeps it in sync) rather than router.replace, which would refetch the page.
+    if (params.has("deleted")) window.history.replaceState(null, "", "/");
+  }, [params]);
 
   if (!show) return null;
   return (

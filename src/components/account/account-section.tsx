@@ -14,7 +14,7 @@ export function AccountSection({
   children: React.ReactNode;
 }) {
   return (
-    <section aria-labelledby={id} className="grid gap-6 border-t py-block md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:gap-16">
+    <section aria-labelledby={id} className="grid gap-6 border-t py-block md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:gap-x-block">
       <div className="flex flex-col gap-2">
         <h2 id={id} className="eyebrow">
           {title}

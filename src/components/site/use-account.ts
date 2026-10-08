@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { authClient } from "@/lib/auth-client";
+import { lastSignedOutAt, markSignedOut } from "@/lib/auth/signed-out-marker";
 
 /**
  * The header's view of the account: who is signed in (read in the browser, so pages stay static;
@@ -12,8 +13,6 @@ export function useAccount() {
   const { data } = authClient.useSession();
   return { user: data?.user ?? null };
 }
-
-const SIGNED_OUT_AT = "orra:signed-out-at";
 
 /**
  * Signs out, then loads the homepage in full (not a client navigation): the client router may hold
@@ -27,11 +26,7 @@ export async function signOutToHome() {
     window.alert("We couldn't sign you out. Check your connection and try again.");
     return;
   }
-  try {
-    localStorage.setItem(SIGNED_OUT_AT, String(Date.now()));
-  } catch {
-    // Private mode or blocked storage: the back/forward cache check below just won't fire.
-  }
+  markSignedOut();
   window.location.replace("/");
 }
 
@@ -44,14 +39,7 @@ export function useReloadAfterSignOut() {
   useEffect(() => {
     const loadedAt = Date.now();
     const onPageShow = (event: PageTransitionEvent) => {
-      if (!event.persisted) return;
-      let signedOutAt = 0;
-      try {
-        signedOutAt = Number(localStorage.getItem(SIGNED_OUT_AT)) || 0;
-      } catch {
-        return;
-      }
-      if (signedOutAt > loadedAt) window.location.reload();
+      if (event.persisted && lastSignedOutAt() > loadedAt) window.location.reload();
     };
     window.addEventListener("pageshow", onPageShow);
     return () => window.removeEventListener("pageshow", onPageShow);

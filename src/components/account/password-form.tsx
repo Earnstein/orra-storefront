@@ -49,7 +49,7 @@ export function PasswordForm() {
       }
       formApi.reset();
       setStatus(value.revokeOtherSessions ? "Password changed. Your other devices have been signed out." : "Password changed.");
-      void queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      void queryClient.invalidateQueries({ queryKey: ["devices"] });
     },
   });
   const submitted = useStore(form.store, (state) => state.submissionAttempts > 0);

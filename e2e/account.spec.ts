@@ -49,7 +49,7 @@ test("@writes renaming updates the page and the menu", async ({ page, isMobile }
   await expect(page.getByRole("heading", { level: 1, name: `Hello, ${newName}` })).toBeVisible();
   created = { ...created, name: newName };
 
-  await page.reload({ waitUntil: "domcontentloaded" });
+  // The header follows without a reload.
   const menu = await openAccountMenu(page, isMobile);
   await expect(menu.getByText(`Hello, ${newName}`)).toBeVisible();
 });
@@ -125,41 +125,68 @@ test("@writes changing the password signs out other devices", async ({ page, bro
   created = newUser();
   await signUp(page, created);
   const other = await signInElsewhere(browser, baseURL!, created);
+  try {
+    const form = page.getByRole("form", { name: "Change your password" });
+    await hydrated(form.getByRole("button", { name: "Change password" }));
+    const newPassword = `${created.password}-new`;
+    created = { ...created, password: newPassword, oldPasswords: [created.password] };
+    await form.getByLabel("Current password", { exact: true }).fill(created.oldPasswords![0]);
+    await form.getByLabel("New password", { exact: true }).fill(newPassword);
+    await expect(form.getByRole("checkbox", { name: "Sign out of other devices" })).toBeChecked();
+    await form.getByRole("button", { name: "Change password" }).click();
+    await expect(form.getByRole("status")).toHaveText("Password changed. Your other devices have been signed out.");
 
-  const form = page.getByRole("form", { name: "Change your password" });
-  await hydrated(form.getByRole("button", { name: "Change password" }));
-  const newPassword = `${created.password}-new`;
-  created = { ...created, password: newPassword, oldPasswords: [created.password] };
-  await form.getByLabel("Current password", { exact: true }).fill(created.oldPasswords![0]);
-  await form.getByLabel("New password", { exact: true }).fill(newPassword);
-  await expect(form.getByRole("checkbox", { name: "Sign out of other devices" })).toBeChecked();
-  await form.getByRole("button", { name: "Change password" }).click();
-  await expect(form.getByRole("status")).toHaveText("Password changed. Your other devices have been signed out.");
-
-  expect(await canOpenAccount(page)).toBe(true);
-  expect(await canOpenAccount(other.page)).toBe(false);
-  await other.context.close();
+    expect(await canOpenAccount(page)).toBe(true);
+    expect(await canOpenAccount(other.page)).toBe(false);
+  } finally {
+    await other.context.close();
+  }
 });
 
 test("@writes the devices list signs another device out", async ({ page, browser, baseURL }) => {
   created = newUser();
   await signUp(page, created);
   const other = await signInElsewhere(browser, baseURL!, created);
-  await page.reload({ waitUntil: "domcontentloaded" });
+  try {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    const devices = page.getByRole("region", { name: "Signed-in devices" });
+    const items = devices.getByRole("listitem");
+    await expect(items).toHaveCount(2);
+    await expect(items.first()).toContainText("This device");
+    const signOut = devices.getByRole("button", { name: /^Sign out .+, active/ });
+    await hydrated(signOut);
+    await signOut.click();
+    await expect(devices.getByRole("status")).toHaveText("Device signed out.");
+    await expect(items).toHaveCount(1);
+    await expect(devices.getByRole("button", { name: "Sign out of all other devices" })).toHaveCount(0);
 
-  const devices = page.getByRole("region", { name: "Signed-in devices" });
-  const items = devices.getByRole("listitem");
-  await expect(items).toHaveCount(2);
-  await expect(items.first()).toContainText("This device");
-  const signOut = devices.getByRole("button", { name: /^Sign out .+, active/ });
-  await hydrated(signOut);
-  await signOut.click();
-  await expect(devices.getByRole("status")).toHaveText("Device signed out.");
-  await expect(items).toHaveCount(1);
-  await expect(devices.getByRole("button", { name: "Sign out of all other devices" })).toHaveCount(0);
+    expect(await canOpenAccount(other.page)).toBe(false);
+  } finally {
+    await other.context.close();
+  }
+});
 
-  expect(await canOpenAccount(other.page)).toBe(false);
-  await other.context.close();
+test("@writes the devices list signs out all other devices at once", async ({ page, browser, baseURL }) => {
+  created = newUser();
+  await signUp(page, created);
+  const first = await signInElsewhere(browser, baseURL!, created);
+  const second = await signInElsewhere(browser, baseURL!, created);
+  try {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    const devices = page.getByRole("region", { name: "Signed-in devices" });
+    await expect(devices.getByRole("listitem")).toHaveCount(3);
+    const all = devices.getByRole("button", { name: "Sign out of all other devices" });
+    await hydrated(all);
+    await all.click();
+    await expect(devices.getByRole("status")).toHaveText("All other devices signed out.");
+    await expect(devices.getByRole("listitem")).toHaveCount(1);
+    expect(await canOpenAccount(first.page)).toBe(false);
+    expect(await canOpenAccount(second.page)).toBe(false);
+    expect(await canOpenAccount(page)).toBe(true);
+  } finally {
+    await first.context.close();
+    await second.context.close();
+  }
 });
 
 async function openDeleteDialog(page: import("@playwright/test").Page) {

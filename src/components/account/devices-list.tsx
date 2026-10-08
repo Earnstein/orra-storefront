@@ -6,80 +6,80 @@ import { useEffect, useState } from "react";
 import { FormError } from "@/components/auth/form-error";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { deviceLabel } from "@/lib/account/device-label";
+import { signOutDevice, signOutOtherDevices, type ActionResult } from "@/lib/account/actions";
+import type { Device } from "@/lib/account/devices";
 import { goToSignIn } from "@/lib/account/signed-out";
-import { authClient } from "@/lib/auth-client";
-import { authErrorMessage, type AuthError } from "@/lib/auth/errors";
 
-type DeviceSession = { token: string; userAgent?: string | null; updatedAt: Date | string };
+const SIGNED_OUT = "signed-out";
 
-/** Thrown by the queries below so a 401 (the session ended) can send the visitor to sign in. */
-class AuthCallError extends Error {
-  constructor(readonly error: AuthError) {
-    super(error.code ?? `status ${error.status}`);
-  }
+async function fetchDevices(): Promise<Device[]> {
+  const response = await fetch("/api/account/devices", { cache: "no-store" });
+  if (response.status === 401) throw new Error(SIGNED_OUT);
+  if (!response.ok) throw new Error(`devices: ${response.status}`);
+  return ((await response.json()) as { devices: Device[] }).devices;
 }
 
-async function call<T>(request: Promise<{ data: T | null; error: (AuthError & object) | null }>): Promise<T> {
-  const { data, error } = await request;
-  if (error) throw new AuthCallError(error);
-  return data as T;
+/** Turns an action's typed failure into a thrown error, so mutations handle both the same way. */
+async function unwrap(result: Promise<ActionResult>) {
+  const outcome = await result;
+  if (!outcome.ok) throw new Error(outcome.error === "signed-out" ? SIGNED_OUT : outcome.message);
 }
 
 const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
 /** "Active today", "Active yesterday", "Active 3 days ago"… from the session's last refresh. */
-function lastActive(updatedAt: Date | string): string {
+function lastActive(updatedAt: string): string {
   const days = Math.round((new Date(updatedAt).getTime() - Date.now()) / 86_400_000);
-  if (days === 0) return "Active today";
-  const text = relative.format(days, "day");
-  return `Active ${text}`;
+  return days === 0 ? "Active today" : `Active ${relative.format(days, "day")}`;
 }
 
 /**
  * The account's signed-in devices: each with its browser and system and when it was last active;
  * this device first and marked, the others with a Sign out button, then "Sign out of all other
- * devices". A device signed out here is refused by the account page and actions at once; its
- * header may still greet it for up to 5 minutes (the cookie cache).
+ * devices". The list comes from /api/account/devices and changes go through server actions, both
+ * checked on the server, so no session token reaches the browser. A device signed out here is
+ * refused by the account page and actions at once; its header may still greet it for up to
+ * 5 minutes (the cookie cache).
  */
 export function DevicesList() {
   const queryClient = useQueryClient();
-  const { data: current } = authClient.useSession();
   const [status, setStatus] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const sessions = useQuery({
-    queryKey: ["sessions"],
-    queryFn: () => call<DeviceSession[]>(authClient.listSessions()),
+  const devices = useQuery({
+    queryKey: ["devices"],
+    queryFn: fetchDevices,
+    // A signed-out answer won't change on retry; go to sign in at once.
+    retry: (failures, failure) => failure.message !== SIGNED_OUT && failures < 2,
   });
 
-  // The list failing because the session ended sends the visitor to sign in (an effect, not render).
   useEffect(() => {
-    if (sessions.error instanceof AuthCallError && sessions.error.error.status === 401) goToSignIn();
-  }, [sessions.error]);
+    if (devices.error?.message === SIGNED_OUT) goToSignIn();
+  }, [devices.error]);
 
-  const onError = (failure: unknown) => {
-    if (failure instanceof AuthCallError && failure.error.status === 401) return goToSignIn();
-    setError(authErrorMessage(failure instanceof AuthCallError ? failure.error : null));
+  const mutationOptions = {
+    onMutate: () => {
+      setError(null);
+      setStatus("");
+    },
+    onError: (failure: Error) => {
+      if (failure.message === SIGNED_OUT) return goToSignIn();
+      setError(failure.message || "Something went wrong. Try again.");
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["devices"] }),
   };
-  const onSettled = () => queryClient.invalidateQueries({ queryKey: ["sessions"] });
-
   const revokeOne = useMutation({
-    mutationFn: (token: string) => call(authClient.revokeSession({ token })),
-    onMutate: () => setError(null),
+    mutationFn: (id: string) => unwrap(signOutDevice(id)),
     onSuccess: () => setStatus("Device signed out."),
-    onError,
-    onSettled,
+    ...mutationOptions,
   });
   const revokeOthers = useMutation({
-    mutationFn: () => call(authClient.revokeOtherSessions()),
-    onMutate: () => setError(null),
+    mutationFn: () => unwrap(signOutOtherDevices()),
     onSuccess: () => setStatus("All other devices signed out."),
-    onError,
-    onSettled,
+    ...mutationOptions,
   });
 
-  if (sessions.isPending) {
+  if (devices.isPending) {
     return (
       <div aria-hidden className="flex flex-col gap-4">
         <Skeleton className="h-12 bg-surface" />
@@ -87,41 +87,35 @@ export function DevicesList() {
       </div>
     );
   }
-  if (sessions.isError) return <FormError message="We couldn't load your devices. Try again later." />;
+  if (devices.isError) return <FormError message="We couldn't load your devices. Try again later." />;
 
-  const currentToken = current?.session.token;
-  const list = [...sessions.data].sort((a, b) => Number(b.token === currentToken) - Number(a.token === currentToken));
-  const others = list.filter((session) => session.token !== currentToken);
+  const others = devices.data.filter((device) => !device.current);
 
   return (
     <div className="flex flex-col">
       <ul className="flex flex-col divide-y border-y">
-        {list.map((session) => {
-          const isCurrent = session.token === currentToken;
-          const label = deviceLabel(session.userAgent);
-          return (
-            <li key={session.token} className="flex items-center justify-between gap-4 py-4">
-              <div className="flex min-w-0 flex-col gap-1">
-                <span className="text-body">{label}</span>
-                <span className="text-caption text-muted-foreground">
-                  {isCurrent ? "This device" : lastActive(session.updatedAt)}
-                </span>
-              </div>
-              {!isCurrent && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={revokeOne.isPending && revokeOne.variables === session.token}
-                  onClick={() => revokeOne.mutate(session.token)}
-                  aria-label={`Sign out ${label}, ${lastActive(session.updatedAt).toLowerCase()}`}
-                >
-                  Sign out
-                </Button>
-              )}
-            </li>
-          );
-        })}
+        {devices.data.map((device) => (
+          <li key={device.id} className="flex items-center justify-between gap-4 py-4">
+            <div className="flex min-w-0 flex-col gap-1">
+              <span className="text-body">{device.label}</span>
+              <span className="text-caption text-muted-foreground">
+                {device.current ? "This device" : lastActive(device.updatedAt)}
+              </span>
+            </div>
+            {!device.current && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={revokeOne.isPending && revokeOne.variables === device.id}
+                onClick={() => revokeOne.mutate(device.id)}
+                aria-label={`Sign out ${device.label}, ${lastActive(device.updatedAt).toLowerCase()}`}
+              >
+                Sign out
+              </Button>
+            )}
+          </li>
+        ))}
       </ul>
       {others.length > 0 && (
         <Button
