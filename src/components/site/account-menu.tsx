@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { signOutToHome, useAccount } from "./use-account";
+import { signOutToHome, useAccount, useReloadAfterSignOut } from "./use-account";
 
 const item = "rounded-none px-4 py-2.5 text-body";
 
@@ -24,6 +24,7 @@ const item = "rounded-none px-4 py-2.5 text-body";
  */
 export function AccountMenu({ className }: { className?: string }) {
   const { user, signInHref } = useAccount();
+  useReloadAfterSignOut();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className={buttonVariants({ variant: "ghost", size: "icon", className })} aria-label="Account">

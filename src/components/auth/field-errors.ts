@@ -22,6 +22,12 @@ export function leaveSignIn() {
   window.location.replace(safeReturnTo(new URLSearchParams(window.location.search).get("returnTo")));
 }
 
+/** An aria-describedby value from the ids that apply (hint, error), or undefined when none do. */
+export function describedBy(...ids: (string | false | undefined)[]): string | undefined {
+  const present = ids.filter(Boolean);
+  return present.length > 0 ? present.join(" ") : undefined;
+}
+
 /** Whether a field's last validation failed (TanStack Form field meta; undefined before it mounts). */
 export function hasErrors(meta: { errors: unknown[] } | undefined): boolean {
   return (meta?.errors.length ?? 0) > 0;

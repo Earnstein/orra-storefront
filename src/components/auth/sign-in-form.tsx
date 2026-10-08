@@ -4,7 +4,7 @@ import { useForm, useStore } from "@tanstack/react-form";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { focusFirstInvalid, hasErrors, leaveSignIn, shownErrors } from "@/components/auth/field-errors";
+import { describedBy, focusFirstInvalid, hasErrors, leaveSignIn, shownErrors } from "@/components/auth/field-errors";
 import { FormError } from "@/components/auth/form-error";
 import { PasswordInput } from "@/components/auth/password-input";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,8 @@ const FIELDS: [string, string][] = [
 ];
 
 export function SignInForm({ prefill }: { prefill?: SignInPrefill }) {
+  // Stays true while the full page load after success is under way, so the button stays disabled.
+  const [leaving, setLeaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const form = useForm({
@@ -42,6 +44,7 @@ export function SignInForm({ prefill }: { prefill?: SignInPrefill }) {
         setFormError(authErrorMessage(null));
         return;
       }
+      setLeaving(true);
       leaveSignIn();
     },
   });
@@ -84,8 +87,9 @@ export function SignInForm({ prefill }: { prefill?: SignInPrefill }) {
                   onChange={(event) => field.handleChange(event.target.value)}
                   onBlur={field.handleBlur}
                   aria-invalid={errors.length > 0 || undefined}
+                  aria-describedby={describedBy(errors.length > 0 && "sign-in-email-error")}
                 />
-                <FieldError errors={errors} />
+                <FieldError id="sign-in-email-error" errors={errors} />
               </Field>
             );
           }}
@@ -103,8 +107,9 @@ export function SignInForm({ prefill }: { prefill?: SignInPrefill }) {
                   onChange={(event) => field.handleChange(event.target.value)}
                   onBlur={field.handleBlur}
                   aria-invalid={errors.length > 0 || undefined}
+                  aria-describedby={describedBy(errors.length > 0 && "sign-in-password-error")}
                 />
-                <FieldError errors={errors} />
+                <FieldError id="sign-in-password-error" errors={errors} />
               </Field>
             );
           }}
@@ -131,7 +136,7 @@ export function SignInForm({ prefill }: { prefill?: SignInPrefill }) {
       </FieldGroup>
       <div>
         <FormError message={formError} />
-        <form.Subscribe selector={(state) => state.isSubmitting}>
+        <form.Subscribe selector={(state) => state.isSubmitting || leaving}>
           {(isSubmitting) => (
             <Button type="submit" className="w-full" disabled={isSubmitting}>
               {isSubmitting ? "Signing in…" : "Sign in"}

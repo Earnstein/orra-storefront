@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 
-import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, type Browser, type Locator, type Page } from "@playwright/test";
 
 import { hydrated } from "./hydration";
 
-export type TestUser = { name: string; email: string; password: string };
+/** `oldPasswords` keeps any password a test changed away from, so clean-up can still sign in. */
+export type TestUser = { name: string; email: string; password: string; oldPasswords?: string[] };
 
 const AUTH_TIMEOUT = 15_000;
 
@@ -48,12 +49,28 @@ export async function sessionName(page: Page): Promise<string | null> {
   return body?.user?.name ?? null;
 }
 
-/** Deletes the account signed in in this page's browser context (Better Auth's endpoint, with its cookies). */
-export async function deleteAccount(page: Page, password: string) {
-  const origin = new URL(page.url()).origin;
-  const response = await page.request.post("/api/auth/delete-user", { data: { password }, headers: { origin } });
-  expect(response.ok(), await response.text()).toBe(true);
+/**
+ * Deletes a test user through Better Auth's API in a throwaway context, trying each password the
+ * test used. Never throws: clean-up mustn't hide the test's own failure, and an account that was
+ * never created (the test failed before signing up) is fine.
+ */
+export async function deleteTestUser(browser: Browser, baseURL: string, user: TestUser) {
+  const context = await browser.newContext({ baseURL });
+  const headers = { origin: new URL(baseURL).origin };
+  try {
+    for (const password of [user.password, ...(user.oldPasswords ?? [])]) {
+      const signIn = await context.request.post("/api/auth/sign-in/email", { data: { email: user.email, password }, headers });
+      if (!signIn.ok()) continue;
+      await context.request.post("/api/auth/delete-user", { data: { password }, headers });
+      return;
+    }
+  } catch (error) {
+    console.warn(`[e2e] couldn't delete ${user.email}:`, error);
+  } finally {
+    await context.close();
+  }
 }
+
 
 /**
  * Opens the account links: the header's Account menu on desktop, the phone menu's Account section

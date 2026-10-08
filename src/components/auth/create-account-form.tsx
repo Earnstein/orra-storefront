@@ -4,7 +4,7 @@ import { useForm, useStore } from "@tanstack/react-form";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 
-import { focusFirstInvalid, hasErrors, leaveSignIn, shownErrors } from "@/components/auth/field-errors";
+import { describedBy, focusFirstInvalid, hasErrors, leaveSignIn, shownErrors } from "@/components/auth/field-errors";
 import { FormError } from "@/components/auth/form-error";
 import { PasswordInput } from "@/components/auth/password-input";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,8 @@ const FIELDS: [string, string][] = [
 
 export function CreateAccountForm({ onSignInInstead }: { onSignInInstead: (email: string) => void }) {
   const [step, setStep] = useState<"email" | "details">("email");
+  // Stays true while the full page load after success is under way, so the button stays disabled.
+  const [leaving, setLeaving] = useState(false);
   const [formError, setFormError] = useState<{ message: string; exists: boolean } | null>(null);
   // Name and password show their errors once the details step has been submitted; the Continue
   // click on the email step doesn't count for them.
@@ -61,6 +63,7 @@ export function CreateAccountForm({ onSignInInstead }: { onSignInInstead: (email
         setFormError({ message: authErrorMessage(null), exists: false });
         return;
       }
+      setLeaving(true);
       leaveSignIn();
     },
   });
@@ -104,8 +107,9 @@ export function CreateAccountForm({ onSignInInstead }: { onSignInInstead: (email
                     onChange={(event) => field.handleChange(event.target.value)}
                     onBlur={field.handleBlur}
                     aria-invalid={errors.length > 0 || undefined}
+                    aria-describedby={describedBy(errors.length > 0 && "create-email-error")}
                   />
-                  <FieldError errors={errors} />
+                  <FieldError id="create-email-error" errors={errors} />
                 </Field>
               );
             }}
@@ -125,8 +129,9 @@ export function CreateAccountForm({ onSignInInstead }: { onSignInInstead: (email
                         onChange={(event) => field.handleChange(event.target.value)}
                         onBlur={field.handleBlur}
                         aria-invalid={errors.length > 0 || undefined}
+                        aria-describedby={describedBy(errors.length > 0 && "create-name-error")}
                       />
-                      <FieldError errors={errors} />
+                      <FieldError id="create-name-error" errors={errors} />
                     </Field>
                   );
                 }}
@@ -144,10 +149,10 @@ export function CreateAccountForm({ onSignInInstead }: { onSignInInstead: (email
                         onChange={(event) => field.handleChange(event.target.value)}
                         onBlur={field.handleBlur}
                         aria-invalid={errors.length > 0 || undefined}
-                        aria-describedby="create-password-hint"
+                        aria-describedby={describedBy("create-password-hint", errors.length > 0 && "create-password-error")}
                       />
                       <FieldDescription id="create-password-hint">At least {PASSWORD_MIN} characters</FieldDescription>
-                      <FieldError errors={errors} />
+                      <FieldError id="create-password-error" errors={errors} />
                     </Field>
                   );
                 }}
@@ -167,7 +172,7 @@ export function CreateAccountForm({ onSignInInstead }: { onSignInInstead: (email
               Sign in with this email
             </Button>
           )}
-          <form.Subscribe selector={(state) => state.isSubmitting}>
+          <form.Subscribe selector={(state) => state.isSubmitting || leaving}>
             {(isSubmitting) => (
               <Button type="submit" className="w-full" disabled={isSubmitting}>
                 {step === "email" ? "Continue" : isSubmitting ? "Creating account…" : "Create account"}

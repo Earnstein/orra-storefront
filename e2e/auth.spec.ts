@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { accountLink, deleteAccount, newUser, openAccountMenu, sessionName, signIn, signUp, type TestUser } from "./auth";
+import { accountLink, deleteTestUser, newUser, openAccountMenu, sessionName, signIn, signUp, type TestUser } from "./auth";
 import { gotoHydrated, hydrated } from "./hydration";
 import { readResetLink } from "./outbox";
 
@@ -11,11 +11,7 @@ let created: TestUser | undefined;
 
 test.afterEach(async ({ browser, baseURL }) => {
   if (!created) return;
-  const context = await browser.newContext({ baseURL });
-  const page = await context.newPage();
-  await signIn(page, created);
-  await deleteAccount(page, created.password);
-  await context.close();
+  await deleteTestUser(browser, baseURL!, created);
   created = undefined;
 });
 
@@ -117,11 +113,15 @@ test("@writes an email that already has an account offers to sign in with it", a
   await context.close();
 });
 
-test("@writes a signed-in visitor opening /sign-in goes straight on", async ({ page }) => {
+test("@writes a signed-in visitor opening /sign-in goes straight on", async ({ page, baseURL }) => {
   created = newUser();
   await signUp(page, created, "/");
   await page.goto("/sign-in?returnTo=/stories", { waitUntil: "domcontentloaded" });
-  await expect(page).toHaveURL((url) => url.pathname === "/stories");
+  await expect(page).toHaveURL((url) => url.pathname === "/stories", { timeout: 15_000 });
+
+  // A hostile returnTo falls back to /account on this site.
+  await page.goto("/sign-in?returnTo=//evil.com", { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveURL(new URL("/account", baseURL).href, { timeout: 15_000 });
 });
 
 test("a hostile returnTo stays on this site", async ({ page }) => {
@@ -154,20 +154,33 @@ test.describe("password reset", () => {
     await expect(visitor).toHaveURL(/\/sign-in\/reset-password\?token=/);
     await hydratedButton(visitor, "Change password");
     const newPassword = `${created.password}-new`;
+    const oldPassword = created.password;
+    // Recorded before submitting, so clean-up can sign in whichever password is current.
+    created = { ...created, password: newPassword, oldPasswords: [oldPassword] };
     await visitor.getByRole("textbox", { name: "New password" }).fill(newPassword);
     await visitor.getByRole("button", { name: "Change password" }).click();
     await expect(visitor.getByText("Your password has been changed. Sign in with your new password.")).toBeVisible();
     await context.close();
 
-    // The reset signed out every device, the old password fails and the new one works.
+    // The reset revoked every session, but this browser still holds the 5-minute cookie cache.
+    // /sign-in must confirm the session without the cache (clearing the stale cookies) and stay,
+    // not bounce to /account and back.
+    await page.goto("/sign-in", { waitUntil: "domcontentloaded" });
+    await expect
+      .poll(async () => (await page.context().cookies()).some((cookie) => cookie.name.endsWith("session_token")), {
+        timeout: 15_000,
+      })
+      .toBe(false);
+    await expect(page).toHaveURL((url) => url.pathname === "/sign-in");
+
+    // Signed out everywhere: the old password fails and the new one works.
     expect(await sessionName(page)).toBeNull();
     await gotoHydrated(page, "/sign-in", (page) => page.getByRole("button", { name: "Sign in", exact: true }));
     const form = page.getByRole("form", { name: "Sign in" });
     await form.getByLabel("Email").fill(created.email);
-    await form.getByLabel("Password", { exact: true }).fill(created.password);
+    await form.getByLabel("Password", { exact: true }).fill(oldPassword);
     await form.getByRole("button", { name: "Sign in" }).click();
     await expect(form.getByRole("alert").filter({ hasText: /\S/ })).toHaveText("That email and password don't match.");
-    created.password = newPassword;
     await signIn(page, created);
   });
 

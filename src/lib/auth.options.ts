@@ -7,7 +7,6 @@ import { PASSWORD_MAX, PASSWORD_MIN } from "@/lib/auth/password";
 import type { Email } from "@/lib/email/send";
 import { resetPasswordEmail } from "@/lib/email/templates";
 
-
 const DAY = 60 * 60 * 24;
 
 /**

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { z } from "zod";
 
-import { focusFirstInvalid, hasErrors, shownErrors } from "@/components/auth/field-errors";
+import { describedBy, focusFirstInvalid, hasErrors, shownErrors } from "@/components/auth/field-errors";
 import { FormError } from "@/components/auth/form-error";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -38,6 +38,8 @@ export function ForgotPasswordForm() {
           setFormError(authErrorMessage(error));
           return;
         }
+        // Anything else still shows the neutral answer, but shouldn't fail silently.
+        if (error) console.error("[auth] password reset request failed:", error.status, error.code);
       } catch {
         setFormError(authErrorMessage(null));
         return;
@@ -86,8 +88,9 @@ export function ForgotPasswordForm() {
                   onChange={(event) => field.handleChange(event.target.value)}
                   onBlur={field.handleBlur}
                   aria-invalid={errors.length > 0 || undefined}
+                  aria-describedby={describedBy(errors.length > 0 && "forgot-email-error")}
                 />
-                <FieldError errors={errors} />
+                <FieldError id="forgot-email-error" errors={errors} />
               </Field>
             );
           }}

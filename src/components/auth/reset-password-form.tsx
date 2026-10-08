@@ -3,10 +3,10 @@
 import { useForm, useStore } from "@tanstack/react-form";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 
-import { focusFirstInvalid, hasErrors, shownErrors } from "@/components/auth/field-errors";
+import { describedBy, focusFirstInvalid, hasErrors, shownErrors } from "@/components/auth/field-errors";
 import { FormError } from "@/components/auth/form-error";
 import { PasswordInput } from "@/components/auth/password-input";
 import { Button } from "@/components/ui/button";
@@ -24,8 +24,13 @@ const schema = z.object({ password: passwordSchema });
  */
 export function ResetPasswordForm() {
   const params = useSearchParams();
-  const token = params.get("token");
+  // Read once, then dropped from the address bar and history: an unused token stays valid for an
+  // hour, and the URL shouldn't hand it to the next person at a shared computer.
+  const [token] = useState(() => params.get("token"));
   const [state, setState] = useState<"form" | "done" | "expired">(token && !params.get("error") ? "form" : "expired");
+  useEffect(() => {
+    if (params.has("token")) window.history.replaceState(null, "", "/sign-in/reset-password");
+  }, [params]);
   const [formError, setFormError] = useState<string | null>(null);
 
   const form = useForm({
@@ -103,10 +108,10 @@ export function ResetPasswordForm() {
                   onChange={(event) => field.handleChange(event.target.value)}
                   onBlur={field.handleBlur}
                   aria-invalid={errors.length > 0 || undefined}
-                  aria-describedby="reset-password-hint"
+                  aria-describedby={describedBy("reset-password-hint", errors.length > 0 && "reset-password-error")}
                 />
                 <FieldDescription id="reset-password-hint">At least {PASSWORD_MIN} characters</FieldDescription>
-                <FieldError errors={errors} />
+                <FieldError id="reset-password-error" errors={errors} />
               </Field>
             );
           }}
