@@ -5,6 +5,7 @@ import { AccountOverview } from "@/components/account/account-overview";
 import { Container } from "@/components/primitives";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/lib/auth/session";
+import { countSavedItems } from "@/lib/saved/queries";
 
 export const metadata: Metadata = {
   title: "My account",
@@ -26,7 +27,7 @@ export default function AccountPage() {
 
 async function Account() {
   const user = await requireUser("/account");
-  return <AccountOverview user={user} />;
+  return <AccountOverview user={user} savedCount={await countSavedItems(user.id)} />;
 }
 
 function AccountSkeleton() {

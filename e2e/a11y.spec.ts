@@ -68,3 +68,11 @@ test("@writes the account page and the delete dialog", async ({ page, browser, b
     await deleteTestUser(browser, baseURL!, user);
   }
 });
+
+test("saved items", async ({ page }) => {
+  await gotoHydrated(page, "/products/leather-tote-tan", (page) => page.getByRole("button", { name: "Save for later" }));
+  await page.getByRole("button", { name: "Save for later" }).click();
+  await page.goto("/saved", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { level: 1, name: "Saved items (1)" })).toBeVisible();
+  expect(await seriousViolations(page)).toEqual([]);
+});

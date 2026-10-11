@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 
-import { addToBag, EMPTY_BAG, parseBagState, toggleSaved, type BagState } from "./rules";
+import { addToBag, EMPTY_BAG, parseBagState, removeSaved, toggleSaved, type BagState } from "./rules";
 
 // Browser-only bag and saved items until the cart has a backend. Persisted to localStorage
 // and synced across tabs; the server always renders the empty state.
@@ -70,5 +70,11 @@ export const bagActions = {
   toggleSaved(slug: string) {
     ensureLoaded();
     commit(toggleSaved(state, slug));
+  },
+  /** Drops saved slugs that now live in the account (SavedSync, after a merge). */
+  removeSaved(slugs: readonly string[]) {
+    ensureLoaded();
+    const next = removeSaved(state, slugs);
+    if (next !== state) commit(next);
   },
 };

@@ -3,7 +3,7 @@ import type { SeedDatabase } from "@/db/seed";
 
 /**
  * Deletes every account: verification tokens, sessions, linked accounts, rate-limit counters and
- * users (anything referencing a user, such as saved items, goes with it by cascade). The catalogue
+ * users (their saved items go with them by cascade). The catalogue
  * is untouched. Run by preview builds (`npm run db:clear-accounts`), whose Neon branch starts as a
  * copy of production's, so previews never hold real shoppers' data.
  */
