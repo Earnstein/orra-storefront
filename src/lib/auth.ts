@@ -26,6 +26,7 @@ export const auth = betterAuth({
     enabled: env.VERCEL_ENV === "production" || env.VERCEL_ENV === "preview",
   },
   advanced: {
+    ...authOptions.advanced,
     // Work Better Auth defers (such as sending the reset email) runs after the response is sent,
     // so a reset request answers as fast for unknown emails as for real ones. `after` keeps the
     // function alive until it finishes; a bare promise could be cut off on serverless.

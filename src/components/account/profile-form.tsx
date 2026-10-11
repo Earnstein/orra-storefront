@@ -1,6 +1,7 @@
 "use client";
 
 import { useForm, useStore } from "@tanstack/react-form";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { z } from "zod";
 
@@ -10,8 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { updateName } from "@/lib/account/actions";
-import { authClient } from "@/lib/auth-client";
 import { goToSignIn } from "@/lib/account/signed-out";
+import { announceSessionChange, sessionQueryKey } from "@/lib/auth/browser-session";
 import { nameSchema } from "@/lib/auth/schemas";
 
 const schema = z.object({ name: nameSchema });
@@ -27,7 +28,11 @@ export function ProfileForm({ name: initialName, email }: { name: string; email:
   const [formError, setFormError] = useState<string | null>(null);
   const editButton = useRef<HTMLButtonElement>(null);
   // The header reads the session in the browser; a server action doesn't tell it to refetch.
-  const { refetch: refetchSession } = authClient.useSession();
+  const queryClient = useQueryClient();
+  const refetchSession = () => {
+    announceSessionChange();
+    return queryClient.invalidateQueries({ queryKey: sessionQueryKey });
+  };
 
   const form = useForm({
     defaultValues: { name },

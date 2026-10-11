@@ -1,5 +1,5 @@
 import { count, like } from "drizzle-orm";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { rateLimit } from "@/db/schema";
 import { authOptions } from "@/lib/auth.options";
@@ -121,6 +121,19 @@ describe("cookie cache", () => {
     expect(await t.auth.api.getSession({ headers: cookies })).not.toBeNull();
     // ...and what getCurrentUser() does instead.
     expect(await t.auth.api.getSession({ headers: cookies, query: { disableCookieCache: true } })).toBeNull();
+  });
+
+  it("checks a session without the cache in one database query (session and user joined)", async () => {
+    const { cookies, user } = await signUp();
+    const client = (t.db as unknown as { $client: { query: (...args: unknown[]) => unknown } }).$client;
+    const query = vi.spyOn(client, "query");
+    try {
+      const session = await t.auth.api.getSession({ headers: cookies, query: { disableCookieCache: true } });
+      expect(session?.user.id).toBe(user.id);
+      expect(query).toHaveBeenCalledTimes(1);
+    } finally {
+      query.mockRestore();
+    }
   });
 });
 

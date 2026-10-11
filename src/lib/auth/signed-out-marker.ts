@@ -1,6 +1,7 @@
 // Records when this browser last signed out (or deleted its account), so pages restored from the
-// back/forward cache that were left while signed in can reload themselves (useReloadAfterSignOut).
-const SIGNED_OUT_AT = "orra:signed-out-at";
+// back/forward cache that were left while signed in can reload themselves (useReloadAfterSignOut),
+// and other open tabs re-read the session (useBrowserSession listens for the change).
+export const SIGNED_OUT_AT = "orra:signed-out-at";
 
 export function markSignedOut() {
   try {
