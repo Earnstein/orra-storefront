@@ -16,6 +16,14 @@ export const savedQueryKey = (userId: string) => ["saved", userId] as const;
 
 const SIGNED_OUT = "signed-out";
 
+/**
+ * What the queued toggles will leave each slug as, set the moment a click lands. A click must flip
+ * the previous click, but the optimistic list reaches React only after `onMutate`'s await and a
+ * render, so two quick clicks would both read the old list and both save. Shared by every `useSaved`
+ * (a product page has two Save buttons); cleared once the last queued toggle settles.
+ */
+const pendingIntents = new Map<string, boolean>();
+
 async function fetchSaved(): Promise<string[]> {
   const response = await fetch("/api/saved", { cache: "no-store" });
   if (response.status === 401) throw new Error(SIGNED_OUT);
@@ -80,15 +88,16 @@ export function useSaved() {
       }
       return { previous, key };
     },
-    onError: (failure, _variables, context) => {
+    onError: (failure, { slug }, context) => {
+      pendingIntents.delete(slug);
       if (context?.previous) queryClient.setQueryData(context.key, context.previous);
       if (failure.message === SIGNED_OUT) void recheckSession();
     },
     onSettled: (_data, _error, _variables, context) => {
       // Only once the last queued toggle has settled, so an earlier answer can't undo a later click.
-      if (context && queryClient.isMutating({ mutationKey: ["saved"] }) <= 1) {
-        void queryClient.invalidateQueries({ queryKey: context.key });
-      }
+      if (queryClient.isMutating({ mutationKey: ["saved"] }) > 1) return;
+      pendingIntents.clear();
+      if (context) void queryClient.invalidateQueries({ queryKey: context.key });
     },
   });
 
@@ -107,7 +116,8 @@ export function useSaved() {
     isSaved: (slug: string) => (status === "account" ? slugs.includes(slug) : isSavedLocally(bag, slug)),
     toggle: (slug: string) => {
       if (!userId) return bagActions.toggleSaved(slug);
-      const shown = status === "account" ? slugs.includes(slug) : isSavedLocally(bag, slug);
+      const shown = pendingIntents.get(slug) ?? (status === "account" ? slugs.includes(slug) : isSavedLocally(bag, slug));
+      pendingIntents.set(slug, !shown);
       toggleMutation.mutate({ slug, save: !shown });
     },
   };

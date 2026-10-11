@@ -89,6 +89,32 @@ test("@writes rapid toggles on a slow network end where the last click left them
   await expect(saveButton(page)).toHaveAttribute("aria-pressed", "true");
 });
 
+test("@writes two clicks before the page re-renders save then unsave", async ({ page }) => {
+  created = newUser();
+  await signUp(page, created, TOTE);
+  const listLoaded = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/saved");
+  await gotoHydrated(page, TOTE, saveButton);
+  await listLoaded;
+  await expect(saveButton(page)).toHaveAttribute("aria-pressed", "false");
+
+  let actions = 0;
+  const bothActions = page.waitForResponse(
+    (response) => response.request().method() === "POST" && new URL(response.url()).pathname === TOTE && ++actions === 2,
+    { timeout: 15_000 },
+  );
+  const reread = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/saved", { timeout: 15_000 });
+  // Both clicks in one task: the second runs before React has rendered the first.
+  await saveButton(page).evaluate((button: HTMLButtonElement) => {
+    button.click();
+    button.click();
+  });
+  await bothActions;
+  await reread;
+
+  await expect(saveButton(page)).toHaveAttribute("aria-pressed", "false");
+  expect(await accountSlugs(page)).toEqual([]);
+});
+
 test("@writes a failed save rolls back", async ({ page }) => {
   created = newUser();
   await signUp(page, created, TOTE);
