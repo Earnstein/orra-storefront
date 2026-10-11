@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 
 import { leaveSignIn } from "@/components/auth/field-errors";
-import { authClient } from "@/lib/auth-client";
+import { fetchSessionUser, useBrowserSession } from "@/lib/auth/browser-session";
 
 /**
  * Sends a signed-in visitor on from /sign-in and /sign-up (to `?returnTo`, else /account). The pages
@@ -15,21 +15,20 @@ import { authClient } from "@/lib/auth-client";
  * The uncached read also clears the stale cookies.
  */
 export function LeaveWhenSignedIn() {
-  const { data: session } = authClient.useSession();
+  const { user } = useBrowserSession();
 
   useEffect(() => {
-    if (!session) return;
+    if (!user) return;
     let cancelled = false;
-    void authClient
-      .getSession({ query: { disableCookieCache: true } })
-      .then(({ data }) => {
-        if (data && !cancelled) leaveSignIn();
+    void fetchSessionUser({ uncached: true })
+      .then((confirmed) => {
+        if (confirmed && !cancelled) leaveSignIn();
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [session]);
+  }, [user]);
 
   return null;
 }

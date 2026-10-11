@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-import { authClient } from "@/lib/auth-client";
+import { useBrowserSession } from "@/lib/auth/browser-session";
 import { lastSignedOutAt, markSignedOut } from "@/lib/auth/signed-out-marker";
 
 /**
@@ -10,18 +10,20 @@ import { lastSignedOutAt, markSignedOut } from "@/lib/auth/signed-out-marker";
  * signed-out until the session arrives). Where Sign in comes back to is `SignInHref`.
  */
 export function useAccount() {
-  const { data } = authClient.useSession();
-  return { user: data?.user ?? null };
+  return { user: useBrowserSession().user };
 }
 
 /**
  * Signs out, then loads the homepage in full (not a client navigation): the client router may hold
  * pages rendered for the signed-in user, such as a prefetched /account, which mustn't outlive the
  * session on a shared computer. If signing out fails, says so and stays, so nobody walks away from
- * a computer believing they're signed out when they aren't.
+ * a computer believing they're signed out when they aren't. Better Auth's client is loaded only
+ * here, on demand, so it isn't part of every page.
  */
 export async function signOutToHome() {
-  const { error } = await authClient.signOut().catch(() => ({ error: true }));
+  const { error } = await import("@/lib/auth-client")
+    .then(({ authClient }) => authClient.signOut())
+    .catch(() => ({ error: true }));
   if (error) {
     window.alert("We couldn't sign you out. Check your connection and try again.");
     return;

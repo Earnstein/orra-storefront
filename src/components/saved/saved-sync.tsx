@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { authClient } from "@/lib/auth-client";
+import { useBrowserSession } from "@/lib/auth/browser-session";
 import { isAuthPage } from "@/lib/auth/return-to";
 import { bagActions, useBag } from "@/lib/bag/store";
 import { mergeSaved } from "@/lib/saved/actions";
@@ -29,8 +29,7 @@ const RETRY_MS = 2_000;
  */
 export function SavedSync() {
   const queryClient = useQueryClient();
-  const { data: session } = authClient.useSession();
-  const userId = session?.user.id;
+  const userId = useBrowserSession().user?.id;
   const local = useBag().saved;
   const leaving = isAuthPage(usePathname());
   const [attempt, setAttempt] = useState(0);

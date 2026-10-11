@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import type { ActionResult } from "@/lib/account/actions";
-import { authClient } from "@/lib/auth-client";
+import { recheckSession, useBrowserSession } from "@/lib/auth/browser-session";
 import { isSaved as isSavedLocally } from "@/lib/bag/rules";
 import { bagActions, useBag } from "@/lib/bag/store";
 import { saveItem, unsaveItem } from "@/lib/saved/actions";
@@ -31,16 +31,6 @@ async function fetchSaved(): Promise<string[]> {
   return ((await response.json()) as { slugs: string[] }).slugs;
 }
 
-/**
- * The server said "signed out" while the browser still thinks it's signed in (a session revoked
- * elsewhere, within the 5-minute cookie cache). Re-read the session without the cache, which also
- * clears the stale cookies, then tell the session store, so saving goes back to this browser.
- */
-async function recheckSession() {
-  await authClient.getSession({ query: { disableCookieCache: true } }).catch(() => undefined);
-  authClient.$store.notify("$sessionSignal");
-}
-
 async function unwrap(result: Promise<ActionResult<{ slugs: string[] }>>): Promise<string[]> {
   const outcome = await result;
   if (!outcome.ok) throw new Error(outcome.error === "signed-out" ? SIGNED_OUT : outcome.message);
@@ -60,8 +50,8 @@ async function unwrap(result: Promise<ActionResult<{ slugs: string[] }>>): Promi
  */
 export function useSaved() {
   const queryClient = useQueryClient();
-  const { data: session, isPending: sessionPending } = authClient.useSession();
-  const userId = session?.user.id;
+  const { user, isPending: sessionPending } = useBrowserSession();
+  const userId = user?.id;
   const bag = useBag();
 
   const account = useQuery({
@@ -71,9 +61,12 @@ export function useSaved() {
     retry: (failures, failure) => failure.message !== SIGNED_OUT && failures < 2,
   });
   const listSignedOut = account.error?.message === SIGNED_OUT;
+  // The server said "signed out" while the browser still looks signed in (a session revoked
+  // elsewhere, within the 5-minute cookie cache): re-read the session without the cache (which also
+  // clears the stale cookies), so saving goes back to this browser.
   useEffect(() => {
-    if (listSignedOut) void recheckSession();
-  }, [listSignedOut]);
+    if (listSignedOut) void recheckSession(queryClient);
+  }, [listSignedOut, queryClient]);
 
   const toggleMutation = useMutation({
     mutationKey: ["saved"],
@@ -91,7 +84,7 @@ export function useSaved() {
     onError: (failure, { slug }, context) => {
       pendingIntents.delete(slug);
       if (context?.previous) queryClient.setQueryData(context.key, context.previous);
-      if (failure.message === SIGNED_OUT) void recheckSession();
+      if (failure.message === SIGNED_OUT) void recheckSession(queryClient);
     },
     onSettled: (_data, _error, _variables, context) => {
       // Only once the last queued toggle has settled, so an earlier answer can't undo a later click.

@@ -61,6 +61,11 @@ export const authOptions = {
       "/get-session": false,
     },
   },
+  advanced: {
+    // Read a session and its user in one query (a join) instead of two: every server-side session
+    // check skips the cookie cache (getCurrentUser), so this halves its database round trips.
+    database: { joins: true },
+  },
   plugins: [
     // Better Auth Infra dashboard; reads BETTER_AUTH_API_KEY from the environment.
     dash(),
