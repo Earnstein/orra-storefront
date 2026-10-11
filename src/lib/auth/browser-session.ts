@@ -32,6 +32,16 @@ export function announceSessionChange() {
   }
 }
 
+// Advanced each time another tab changes the session, so a recheck that started earlier knows its
+// answer may be older than the read that change started.
+let generation = 0;
+
+/** Another tab signed out or renamed: re-read the session, superseding any recheck under way. */
+export function sessionChangedElsewhere(queryClient: QueryClient) {
+  generation += 1;
+  void queryClient.invalidateQueries({ queryKey: sessionQueryKey });
+}
+
 /**
  * The session as every page reads it in the browser (pages stay static). One TanStack query instead
  * of Better Auth's client, which only the sign-in and account forms need and load on their own pages:
@@ -50,9 +60,7 @@ export function useBrowserSession() {
   });
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
-      if (event.key === SESSION_CHANGED_AT || event.key === SIGNED_OUT_AT) {
-        void queryClient.invalidateQueries({ queryKey: sessionQueryKey });
-      }
+      if (event.key === SESSION_CHANGED_AT || event.key === SIGNED_OUT_AT) sessionChangedElsewhere(queryClient);
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -62,12 +70,14 @@ export function useBrowserSession() {
 
 /**
  * Re-reads the session without the cookie cache and updates every reader (a read already under way,
- * which may have used the stale cookie, is cancelled first). Resolves to the user, null when signed
- * out, or undefined when the check itself failed (the session is then left as it was).
+ * which may have used the stale cookie, is cancelled first). If another tab changed the session
+ * meanwhile, the read that started is newer, so this answer is dropped. Resolves to the user, null
+ * when signed out, or undefined when the check itself failed (the session is then left as it was).
  */
 export async function recheckSession(queryClient: QueryClient) {
+  const startedAt = generation;
   const user = await fetchSessionUser({ uncached: true }).catch(() => undefined);
-  if (user !== undefined) {
+  if (user !== undefined && generation === startedAt) {
     await queryClient.cancelQueries({ queryKey: sessionQueryKey });
     queryClient.setQueryData(sessionQueryKey, user);
   }

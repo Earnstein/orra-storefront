@@ -1,7 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchSessionUser, recheckSession, sessionQueryKey } from "./browser-session";
+import { fetchSessionUser, recheckSession, sessionChangedElsewhere, sessionQueryKey } from "./browser-session";
 
 const ada = { id: "u1", name: "Ada", email: "ada@example.test", emailVerified: false, image: null };
 
@@ -46,6 +46,23 @@ describe("recheckSession", () => {
     answer(null);
     await recheckSession(queryClient);
     expect(queryClient.getQueryData(sessionQueryKey)).toBeNull();
+  });
+
+  it("doesn't overwrite a newer read started because another tab changed the session", async () => {
+    const queryClient = new QueryClient();
+    const renamed = { id: "u1", name: "Ada L.", email: "ada@example.test" };
+    queryClient.setQueryData(sessionQueryKey, { id: "u1", name: "Ada", email: "ada@example.test" });
+    let answerRecheck!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => (answerRecheck = resolve))));
+
+    const recheck = recheckSession(queryClient);
+    // Another tab renames while the uncached check is under way; that read lands first.
+    sessionChangedElsewhere(queryClient);
+    queryClient.setQueryData(sessionQueryKey, renamed);
+    answerRecheck(new Response(JSON.stringify({ user: { ...renamed, name: "Ada" } })));
+    await recheck;
+
+    expect(queryClient.getQueryData(sessionQueryKey)).toEqual(renamed);
   });
 
   it("leaves the session alone when the check fails", async () => {
