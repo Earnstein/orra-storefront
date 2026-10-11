@@ -2,6 +2,43 @@
 
 Each milestone is a group of merged pull requests, recorded here with its tag and GitHub Release when the last one merges. Newest first. Process: see "How we ship" in `CLAUDE.md` and the roadmap spec in `docs/superpowers/specs/`.
 
+## v0.5.0 — Accounts · 2026-10-11
+- **Scope:**
+  - Better Auth with email and password on separate `/sign-in` and `/sign-up` pages, and password reset by email (Resend's test sender until M7 adds a domain).
+  - Session and safety rules: 30-day sessions with a 5-minute cookie cache, rate limits stored in the database, and deleting an account always asks for the password.
+  - Header account menu. `/account` holds the profile (name), password change, signed-in devices (sign out one or all others) and account deletion.
+  - Saved items across devices: they're kept in the account when signed in, the browser's items merge in on sign-in, and `/saved` lists them. Saves update on screen at once and stay in click order.
+  - Environments: previews delete the accounts they copy from production. Production is migrated but never seeded.
+  - Speed: pages read the session without Better Auth's browser client, the account menu loads on first use, and a server-side session check is one database query.
+- **Pull requests:** [#22 M4 Accounts spec and plan](https://github.com/Earnstein/orra-storefront/pull/22) · [#23 Auth foundation](https://github.com/Earnstein/orra-storefront/pull/23) · [#24 Sign in, sign up, password reset and the account menu](https://github.com/Earnstein/orra-storefront/pull/24) · [#25 Keep the query in Sign in's returnTo](https://github.com/Earnstein/orra-storefront/pull/25) · [#26 Account page](https://github.com/Earnstein/orra-storefront/pull/26) · [#27 Saved items across devices](https://github.com/Earnstein/orra-storefront/pull/27) · [#28 Page-speed budget](https://github.com/Earnstein/orra-storefront/pull/28)
+- **URL:** https://orra-storefront.vercel.app
+- **Budgets (measured on production; LCP on local builds, as in M3):**
+  - `/api/products/summaries` server time: 18–20 ms for sets never asked before (one sample 87 ms); repeats are served by the CDN (budget 50 ms).
+  - `/api/saved` server time: about 35 ms (budget 50 ms), down from 56 ms before #28 joined the session and user into one query. It sends no `Server-Timing`, so this is signed-in minus signed-out time over 40 interleaved pairs.
+  - Header session check: no database read while the cookie cache holds (`get-session` answers about 20 ms faster from the cookie).
+  - LCP, mobile emulation with 4× CPU and 1.6 Mbps / 150 ms, 5 runs each against `v0.4.0` (budget: no worse):
+    - `/collections/women`: 1,168 against 1,152 ms.
+    - `/products/leather-tote-tan`: 4,004–4,012 against 3,960–3,980 ms. That's about 1% behind, down from 288 ms behind before #28. The remaining 13 KB of JavaScript per page is the session read and saved-items sync that accounts need.
+- **Exit check:**
+  - The e2e suite against production passed: 147 tests, without the `@writes` tests that create accounts. The 4 password-reset tests skip there because they read the local email outbox.
+  - One sign-up-then-delete smoke test passed.
+  - The menu-fallback test first failed on production because it blocked chunks under `/_next/static/chunks/`, while Vercel serves them from `/_next/static/immutable/chunks/`. This PR fixes the test.
+- **Carried forward:**
+  - Rotate the Neon production database password, and add an email sending domain (both before v1.0.0).
+  - From M3: narrow the search triggers before M5 writes stock; keep the endpoints' CDN caching from lagging the catalogue cache when M6 adds admin edits; at a much larger catalogue, keyset pagination and an index-friendly typo match; not-found pages have no `<title>`.
+  - Saved items:
+    - A product page shows "Save for later" for a moment while a signed-in visitor's list loads.
+    - A full account merges the browser's oldest items first.
+    - Each removal on `/saved` re-reads the cards.
+    - `/api/saved` has no `Server-Timing`.
+  - Auth:
+    - No e2e coverage for a session ending during a password change, the devices list or deletion.
+    - `auth.ts`'s wiring isn't unit-tested.
+    - Production logs include the reset email's recipient.
+    - Visitors behind a proxy chain share one rate-limit bucket.
+    - A preview's two URLs keep separate cookies.
+    - `safeReturnTo` doesn't decode percent-encoded paths.
+
 ## v0.4.0 — Find · 2026-10-05
 - **Scope:**
   - Cache Components: cached catalogue reads with one `catalog` tag; listings and search stream their results.

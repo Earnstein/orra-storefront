@@ -89,8 +89,9 @@ test("@writes signing out in one tab updates the account menu in another", async
 test("the account menu falls back to the account page when its code can't load", async ({ page, isMobile }) => {
   test.skip(isMobile, "the phone menu is a sheet that doesn't load separately");
   await gotoHydrated(page, "/stories", (p) => p.getByRole("button", { name: "Account", exact: true }));
-  // As after a deploy that removed this page's chunks, or with no connection.
-  await page.route("**/_next/static/chunks/**", (route) => route.abort());
+  // As after a deploy that removed this page's chunks, or with no connection. (Vercel serves them
+  // from /_next/static/immutable/chunks/, next start from /_next/static/chunks/.)
+  await page.route("**/_next/static/**", (route) => route.abort());
   await page.getByRole("button", { name: "Account", exact: true }).click();
   await expect(page).toHaveURL(/\/sign-in\?returnTo=%2Faccount/);
 });
