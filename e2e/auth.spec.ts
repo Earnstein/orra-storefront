@@ -63,6 +63,38 @@ test("@writes the account menu signs out to the homepage, and signing in again w
   expect(await sessionName(page)).toBe(created.name);
 });
 
+test("@writes signing out in one tab updates the account menu in another", async ({ page, context, isMobile }) => {
+  created = newUser();
+  await signUp(page, created, "/stories");
+  const other = await context.newPage();
+  await gotoHydrated(other, "/stories", (p) => p.getByRole("button", { name: isMobile ? "Open menu" : "Account", exact: true }));
+  await expect(accountLink(await openAccountMenu(other, isMobile), "My account", isMobile)).toBeVisible();
+  await other.keyboard.press("Escape");
+
+  const menu = await openAccountMenu(page, isMobile);
+  await menu.getByRole(isMobile ? "button" : "menuitem", { name: "Sign out" }).click();
+  await expect(page).toHaveURL((url) => url.pathname === "/");
+
+  // The other tab hears about it without being reloaded or refocused.
+  await expect(async () => {
+    const otherMenu = await openAccountMenu(other, isMobile);
+    try {
+      await expect(accountLink(otherMenu, "Sign in", isMobile)).toBeVisible({ timeout: 1_000 });
+    } finally {
+      await other.keyboard.press("Escape");
+    }
+  }).toPass({ timeout: 10_000 });
+});
+
+test("the account menu falls back to the account page when its code can't load", async ({ page, isMobile }) => {
+  test.skip(isMobile, "the phone menu is a sheet that doesn't load separately");
+  await gotoHydrated(page, "/stories", (p) => p.getByRole("button", { name: "Account", exact: true }));
+  // As after a deploy that removed this page's chunks, or with no connection.
+  await page.route("**/_next/static/chunks/**", (route) => route.abort());
+  await page.getByRole("button", { name: "Account", exact: true }).click();
+  await expect(page).toHaveURL(/\/sign-in\?returnTo=%2Faccount/);
+});
+
 test("@writes sign in without staying signed in uses a browser-session cookie", async ({ page, browser, baseURL }) => {
   created = newUser();
   await signUp(page, created);

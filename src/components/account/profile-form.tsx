@@ -12,7 +12,7 @@ import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { updateName } from "@/lib/account/actions";
 import { goToSignIn } from "@/lib/account/signed-out";
-import { sessionQueryKey } from "@/lib/auth/browser-session";
+import { announceSessionChange, sessionQueryKey } from "@/lib/auth/browser-session";
 import { nameSchema } from "@/lib/auth/schemas";
 
 const schema = z.object({ name: nameSchema });
@@ -29,7 +29,10 @@ export function ProfileForm({ name: initialName, email }: { name: string; email:
   const editButton = useRef<HTMLButtonElement>(null);
   // The header reads the session in the browser; a server action doesn't tell it to refetch.
   const queryClient = useQueryClient();
-  const refetchSession = () => queryClient.invalidateQueries({ queryKey: sessionQueryKey });
+  const refetchSession = () => {
+    announceSessionChange();
+    return queryClient.invalidateQueries({ queryKey: sessionQueryKey });
+  };
 
   const form = useForm({
     defaultValues: { name },

@@ -1,4 +1,7 @@
-import { useQuery, type QueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
+
+import { SIGNED_OUT_AT } from "./signed-out-marker";
 
 export type BrowserUser = { id: string; name: string; email: string };
 
@@ -16,20 +19,57 @@ export async function fetchSessionUser({ uncached = false } = {}): Promise<Brows
   return data?.user ? { id: data.user.id, name: data.user.name, email: data.user.email } : null;
 }
 
+// Written when this tab changes the user (a rename), so other tabs re-read the session. Signing out
+// writes SIGNED_OUT_AT. (Better Auth's client only broadcasts while its own session store is in use.)
+const SESSION_CHANGED_AT = "orra:session-changed-at";
+
+/** Tells this browser's other tabs to re-read the session. */
+export function announceSessionChange() {
+  try {
+    localStorage.setItem(SESSION_CHANGED_AT, String(Date.now()));
+  } catch {
+    // Private mode or blocked storage: other tabs catch up when they regain focus.
+  }
+}
+
 /**
  * The session as every page reads it in the browser (pages stay static). One TanStack query instead
  * of Better Auth's client, which only the sign-in and account forms need and load on their own pages:
- * keeping it out of every page saves its weight before the page's main image. Re-read when the tab
- * regains focus (another tab may have signed in or out).
+ * keeping it out of every page saves its weight before the page's main image. Read once per page
+ * load (not again for each component that mounts), and again when the tab regains focus or another
+ * tab signs out (another tab may have signed in or out).
  */
 export function useBrowserSession() {
-  const query = useQuery({ queryKey: sessionQueryKey, queryFn: () => fetchSessionUser(), staleTime: 5_000, retry: 1 });
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: sessionQueryKey,
+    queryFn: () => fetchSessionUser(),
+    staleTime: 5_000,
+    refetchOnMount: false,
+    retry: 1,
+  });
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === SESSION_CHANGED_AT || event.key === SIGNED_OUT_AT) {
+        void queryClient.invalidateQueries({ queryKey: sessionQueryKey });
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [queryClient]);
   return { user: query.data ?? null, isPending: query.isPending };
 }
 
-/** Re-reads the session without the cookie cache and updates every reader. */
+/**
+ * Re-reads the session without the cookie cache and updates every reader (a read already under way,
+ * which may have used the stale cookie, is cancelled first). Resolves to the user, null when signed
+ * out, or undefined when the check itself failed (the session is then left as it was).
+ */
 export async function recheckSession(queryClient: QueryClient) {
   const user = await fetchSessionUser({ uncached: true }).catch(() => undefined);
-  if (user !== undefined) queryClient.setQueryData(sessionQueryKey, user);
+  if (user !== undefined) {
+    await queryClient.cancelQueries({ queryKey: sessionQueryKey });
+    queryClient.setQueryData(sessionQueryKey, user);
+  }
   return user;
 }
