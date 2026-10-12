@@ -2,10 +2,11 @@
 
 import { useSyncExternalStore } from "react";
 
-import { addToBag, EMPTY_BAG, parseBagState, removeSaved, toggleSaved, type BagState } from "./rules";
+import { addSaved, EMPTY_BAG, parseBagState, removeSaved, toggleSaved, withoutLines, type BagState } from "./rules";
 
-// Browser-only bag and saved items until the cart has a backend. Persisted to localStorage
-// and synced across tabs; the server always renders the empty state.
+// What this browser keeps in localStorage (synced across tabs; the server renders the empty
+// state): saved items while signed out, and bag lines from before M5 until BagImport moves them
+// to the server. The bag itself lives on the server (useBag in use-bag.ts).
 
 const STORAGE_KEY = "orra:bag:v1";
 const listeners = new Set<() => void>();
@@ -55,17 +56,26 @@ function getSnapshot() {
 
 const getServerSnapshot = () => EMPTY_BAG;
 
-export function useBag(): BagState {
+export function useBrowserBag(): BagState {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
 
 export const bagActions = {
-  /** Returns false when every unit in stock is already in the bag. */
-  add(slug: string, stock: number): boolean {
+  /** The old bag lines, for BagImport; `clearLines` drops them once the server has them. */
+  lines() {
     ensureLoaded();
-    const result = addToBag(state, slug, stock);
-    if (result.added) commit(result.state);
-    return result.added;
+    return state.lines;
+  },
+  clearLines() {
+    ensureLoaded();
+    const next = withoutLines(state);
+    if (next !== state) commit(next);
+  },
+  /** Move to saved items, signed out. */
+  addSaved(slug: string) {
+    ensureLoaded();
+    const next = addSaved(state, slug);
+    if (next !== state) commit(next);
   },
   toggleSaved(slug: string) {
     ensureLoaded();

@@ -6,8 +6,7 @@ import { CheckIcon, HeartIcon, ShoppingBagIcon, TruckIcon } from "lucide-react";
 
 import { Container } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
-import { bagActions, useBag } from "@/lib/bag/store";
-import { quantityInBag } from "@/lib/bag/rules";
+import { useBag } from "@/lib/bag/use-bag";
 import { useSaved } from "@/lib/saved/use-saved";
 import { deliveryWindow } from "@/lib/catalog/delivery";
 import type { CatalogImage } from "@/lib/catalog/types";
@@ -39,7 +38,12 @@ function useHydrated() {
  * button scrolls out of view.
  */
 export function PurchaseActions({ product }: { product: PurchasableProduct }) {
-  const bag = useBag();
+  // No bag read on load (a request per product view); each add's answer says what's in the bag.
+  const bag = useBag({ load: false });
+  const [inBag, setInBag] = useState(0);
+  const [allInBag, setAllInBag] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [soldOutSince, setSoldOutSince] = useState(false);
   const savedItems = useSaved();
   const hydrated = useHydrated();
   const [justAdded, setJustAdded] = useState(false);
@@ -47,10 +51,8 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
   const [showBar, setShowBar] = useState(false);
   const addButtonRef = useRef<HTMLDivElement>(null);
 
-  const inBag = quantityInBag(bag, product.slug);
   const saved = savedItems.isSaved(product.slug);
-  const soldOut = product.stock <= 0;
-  const allInBag = !soldOut && inBag >= product.stock;
+  const soldOut = product.stock <= 0 || soldOutSince;
 
   useEffect(() => {
     if (!justAdded) return;
@@ -71,10 +73,26 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
     return () => observer.disconnect();
   }, []);
 
-  function add() {
-    if (bagActions.add(product.slug, product.stock)) {
-      setJustAdded(true);
-      setAnnouncement(`${product.name} added to your bag.`);
+  async function add() {
+    if (adding) return;
+    setAdding(true);
+    try {
+      const { bag: next, capped } = await bag.add(product.slug);
+      const line = next.lines.find((l) => l.slug === product.slug);
+      setInBag(line?.quantity ?? 0);
+      // The server caps at live stock, which may be lower than this (cached) page says.
+      if (!line) setSoldOutSince(true);
+      setAllInBag(line ? capped || line.quantity >= line.stock : false);
+      if (!capped) {
+        setJustAdded(true);
+        setAnnouncement(`${product.name} added to your bag.`);
+      } else {
+        setAnnouncement(line ? `All available ${product.name} are in your bag.` : `${product.name} is sold out.`);
+      }
+    } catch {
+      setAnnouncement(`${product.name} couldn't be added. Try again.`);
+    } finally {
+      setAdding(false);
     }
   }
 
@@ -83,9 +101,9 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
     setAnnouncement(saved ? `${product.name} removed from saved items.` : `${product.name} saved for later.`);
   }
 
-  const addLabel = soldOut ? "Sold out" : allInBag ? "All available in your bag" : justAdded ? "Added to bag" : "Add to bag";
+  const addLabel = soldOut ? "Sold out" : allInBag ? "All available in your bag" : adding ? "Adding…" : justAdded ? "Added to bag" : "Add to bag";
   const addIcon = justAdded ? <CheckIcon data-icon="inline-start" /> : <ShoppingBagIcon data-icon="inline-start" />;
-  const compactLabel = soldOut ? "Sold out" : allInBag ? "In your bag" : justAdded ? "Added" : "Add to bag";
+  const compactLabel = soldOut ? "Sold out" : allInBag ? "In your bag" : adding ? "Adding…" : justAdded ? "Added" : "Add to bag";
   const delivery = hydrated ? deliveryWindow(new Date()) : null;
 
   return (

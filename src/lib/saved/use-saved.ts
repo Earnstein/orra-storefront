@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import type { ActionResult } from "@/lib/account/actions";
 import { recheckSession, useBrowserSession } from "@/lib/auth/browser-session";
 import { isSaved as isSavedLocally } from "@/lib/bag/rules";
-import { bagActions, useBag } from "@/lib/bag/store";
+import { bagActions, useBrowserBag } from "@/lib/bag/store";
 import { saveItem, unsaveItem } from "@/lib/saved/actions";
 import { SAVED_LIMIT } from "@/lib/saved/limits";
 
@@ -52,7 +52,7 @@ export function useSaved() {
   const queryClient = useQueryClient();
   const { user, isPending: sessionPending } = useBrowserSession();
   const userId = user?.id;
-  const bag = useBag();
+  const bag = useBrowserBag();
 
   const account = useQuery({
     queryKey: savedQueryKey(userId ?? ""),
