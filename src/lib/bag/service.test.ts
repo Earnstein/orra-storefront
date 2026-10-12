@@ -2,10 +2,10 @@ import { eq } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { db } from "@/db";
-import { products } from "@/db/schema";
+import { carts, products } from "@/db/schema";
 import { cookiesFrom, createTestAuth } from "@/test/auth";
 
-// The bag actions and GET /api/bag run for real on PGlite with a test Better Auth; only Next's
+// POST and GET /api/bag run for real on PGlite with a test Better Auth; only Next's
 // request scope is stood in for: `headers()` returns the test's session cookies, and `cookies()`
 // is a jar the test can read.
 vi.mock("@/db", async () => ({ db: await (await import("@/test/db")).createTestDb() }));
@@ -31,8 +31,19 @@ vi.stubEnv("DATABASE_URL", "postgres://test@localhost/test");
 vi.stubEnv("BETTER_AUTH_SECRET", "test-secret-that-is-at-least-32-characters");
 vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000");
 
-const { addToBag, importLines, moveToSaved, removeFromBag, setQuantity } = await import("@/lib/bag/actions");
-const { GET } = await import("@/app/api/bag/route");
+const { GET, POST } = await import("@/app/api/bag/route");
+
+type Result = import("@/lib/bag/service").BagResult;
+
+async function post(body: unknown, origin = "http://localhost:3000"): Promise<Result> {
+  const response = await POST(new Request("http://localhost:3000/api/bag", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify(body) }));
+  return (await response.json()) as Result;
+}
+const addToBag = (slug: string, quantity?: number) => post({ kind: "add", slug, quantity });
+const setQuantity = (slug: string, quantity: number) => post({ kind: "set", slug, quantity });
+const removeFromBag = (slug: string) => post({ kind: "remove", slug });
+const moveToSaved = (slug: string) => post({ kind: "move", slug });
+const importLines = (lines: { slug: string; quantity: number }[]) => post({ kind: "import", lines });
 const { getSavedSlugs } = await import("@/lib/saved/queries");
 
 let next = 0;
@@ -78,7 +89,7 @@ describe("as a guest", () => {
     const real = request.jar.get("orra_cart")!.value;
     request.jar = new Map([["orra_cart", { value: `${real.slice(0, 36)}.forged` }]]);
     const result = await addToBag("double-monk-shoe");
-    expect(result.ok && result.data.bag.lines.map((line) => line.slug)).toEqual(["double-monk-shoe"]);
+    expect(result.ok && result.data.bag.lines.map((line: { slug: string; quantity: number }) => line.slug)).toEqual(["double-monk-shoe"]);
     expect(request.jar.get("orra_cart")?.value).not.toContain("forged");
   });
 
@@ -110,7 +121,7 @@ describe("importLines", () => {
       { slug: "no-such-product", quantity: 1 },
       { slug: "double-monk-shoe", quantity: 5 },
     ]);
-    expect(result.ok && Object.fromEntries(result.data.bag.lines.map((line) => [line.slug, line.quantity]))).toEqual({
+    expect(result.ok && Object.fromEntries(result.data.bag.lines.map((line: { slug: string; quantity: number }) => [line.slug, line.quantity]))).toEqual({
       "leather-tote-tan": 1,
       "double-monk-shoe": 2,
     });
@@ -121,6 +132,36 @@ describe("importLines", () => {
   it("refuses more lines than a bag holds", async () => {
     const lines = Array.from({ length: 51 }, () => ({ slug: "leather-tote-tan", quantity: 1 }));
     expect(await importLines(lines)).toMatchObject({ ok: false, error: "invalid" });
+  });
+});
+
+describe("POST /api/bag", () => {
+  it("refuses another origin", async () => {
+    expect(await post({ kind: "add", slug: "leather-tote-tan" }, "https://evil.example")).toMatchObject({ ok: false, error: "invalid" });
+    expect(request.jar.has("orra_cart")).toBe(false);
+  });
+
+  it("re-sets the guest cookie on every write, so it expires 30 days after the last change", async () => {
+    await addToBag("leather-tote-tan");
+    const first = request.jar.get("orra_cart")!.value;
+    request.jar.delete("orra_cart");
+    request.jar.set("orra_cart", { value: first });
+    await setQuantity("leather-tote-tan", 2);
+    expect(request.jar.get("orra_cart")?.options).toMatchObject({ maxAge: 60 * 60 * 24 * 30 });
+    expect(request.jar.get("orra_cart")?.value).toBe(first);
+  });
+
+  it("leaves no cart behind when the first add is for an unknown product", async () => {
+    const before = (await db.select().from(carts)).length;
+    expect(await addToBag("no-such-product")).toMatchObject({ ok: false, error: "invalid" });
+    expect((await db.select().from(carts)).length).toBe(before);
+    expect(request.jar.has("orra_cart")).toBe(false);
+  });
+
+  it("imports the same old lines twice without doubling them", async () => {
+    await importLines([{ slug: "leather-tote-tan", quantity: 2 }]);
+    const again = await importLines([{ slug: "leather-tote-tan", quantity: 2 }]);
+    expect(again.ok && again.data.bag.lines[0].quantity).toBe(2);
   });
 });
 

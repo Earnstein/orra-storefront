@@ -2,13 +2,12 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { addToBag, moveToSaved, removeFromBag, setQuantity, type BagResult } from "./actions";
+import { bagQueryKey } from "./bag-query";
+import { postBag } from "./client";
 import { applyChange, type BagChangeRequest } from "./optimistic";
 import { bagActions } from "./store";
 import type { Bag } from "./types";
 import { notifyBagCount } from "./use-bag-count";
-
-export const bagQueryKey = ["bag"] as const;
 
 async function fetchBag(): Promise<Bag> {
   const response = await fetch("/api/bag", { cache: "no-store" });
@@ -16,18 +15,7 @@ async function fetchBag(): Promise<Bag> {
   return (await response.json()) as Bag;
 }
 
-function send(change: BagChangeRequest): Promise<BagResult> {
-  switch (change.kind) {
-    case "add":
-      return addToBag(change.slug, change.quantity);
-    case "set":
-      return setQuantity(change.slug, change.quantity);
-    case "remove":
-      return removeFromBag(change.slug);
-    case "move":
-      return moveToSaved(change.slug);
-  }
-}
+export { bagQueryKey };
 
 export type BagChangeResult = { bag: Bag; capped: boolean };
 
@@ -45,7 +33,7 @@ export function useBag({ load = true }: { load?: boolean } = {}) {
     mutationKey: ["bag"],
     scope: { id: "bag" },
     mutationFn: async (change: BagChangeRequest): Promise<BagChangeResult & { saveLocally?: string }> => {
-      const result = await send(change);
+      const result = await postBag(change);
       if (!result.ok) throw new Error(result.message);
       return result.data;
     },
@@ -57,6 +45,9 @@ export function useBag({ load = true }: { load?: boolean } = {}) {
     },
     onError: (_error, _change, context) => {
       if (context?.previous) queryClient.setQueryData(bagQueryKey, context.previous);
+      // An earlier change's answer may have been skipped while this one was queued, so the rollback
+      // can be stale: re-read the bag once nothing else is pending.
+      if (queryClient.isMutating({ mutationKey: ["bag"] }) <= 1) void queryClient.invalidateQueries({ queryKey: bagQueryKey });
     },
     onSuccess: (data) => {
       if (data.saveLocally) bagActions.addSaved(data.saveLocally);

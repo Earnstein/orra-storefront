@@ -13,12 +13,14 @@ import { readBag } from "./queries";
  * Moves a guest bag into a user's bag in one statement, then deletes the guest cart. Lines for the
  * same product are summed (capped at stock and MAX_QUANTITY); new lines are added newest first while
  * the bag has room for them (BAG_LINE_LIMIT); sold-out ones are dropped. Only a guest cart (no
- * user) is merged, so a cookie naming someone's account cart moves nothing. Safe to repeat.
+ * user) is merged, so a cookie naming someone's account cart moves nothing. The guest cart is
+ * deleted first and its lines read from the statement's snapshot: a second sign-in at the same
+ * moment waits on that row, then finds it gone and merges nothing, so lines are never added twice.
  */
 export async function mergeGuestCart(db: SeedDatabase, { guestCartId, userId }: { guestCartId: string; userId: string }): Promise<{ cartId: string }> {
   const target = await ensureCart(db, { userId, guestCartId: null });
   await db.execute(sql`
-    with guest as (select id from carts where id = ${guestCartId} and user_id is null),
+    with guest as (delete from carts where id = ${guestCartId} and user_id is null returning id),
     candidates as (
       select gi.product_id, least(gi.quantity, p.stock, ${MAX_QUANTITY}) as quantity, gi.added_at,
         exists (select 1 from cart_items ui where ui.cart_id = ${target.id} and ui.product_id = gi.product_id) as existing
@@ -33,9 +35,8 @@ export async function mergeGuestCart(db: SeedDatabase, { guestCartId, userId }: 
       on conflict (cart_id, product_id) do update
         set quantity = least(cart_items.quantity + excluded.quantity, (select stock from products where id = excluded.product_id), ${MAX_QUANTITY})
       returning product_id
-    ),
-    removed as (delete from carts where id = (select id from guest) returning id)
-    select (select count(*) from merged) as merged, (select count(*) from removed) as removed`);
+    )
+    select (select count(*) from merged) as merged`);
   return { cartId: target.id };
 }
 

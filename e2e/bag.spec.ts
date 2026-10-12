@@ -23,7 +23,7 @@ const bagLink = (page: Page) => page.getByRole("link", { name: /^Bag(, \d+ items
 
 async function add(page: Page, path: string) {
   await gotoHydrated(page, path, addButton);
-  const answered = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === path);
+  const answered = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/bag");
   await addButton(page).click();
   await answered;
 }
@@ -34,7 +34,14 @@ async function serverBag(page: Page): Promise<Record<string, number>> {
 }
 
 test("Add to bag puts the item in the server bag and the header count follows, with no bag request on later pages", async ({ page }) => {
+  // Adding mustn't make the page refetch itself (a cookie set in a server action would).
+  const refetches: string[] = [];
+  page.on("request", (request) => {
+    if (request.headers()["rsc"] === "1" || new URL(request.url()).searchParams.has("_rsc")) refetches.push(request.url());
+  });
   await add(page, TOTE);
+  await page.waitForTimeout(500);
+  expect(refetches.filter((url) => new URL(url).pathname === TOTE)).toEqual([]);
   await expect(bagLink(page)).toHaveAccessibleName("Bag, 1 item");
   expect(await serverBag(page)).toEqual({ "leather-tote-tan": 1 });
 

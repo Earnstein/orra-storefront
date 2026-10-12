@@ -3,10 +3,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
-import { importLines } from "@/lib/bag/actions";
-import { MAX_QUANTITY, BAG_LINE_LIMIT } from "@/lib/bag/limits";
+import { bagQueryKey } from "@/lib/bag/bag-query";
+import { postBag } from "@/lib/bag/client";
+import { BAG_LINE_LIMIT, MAX_QUANTITY } from "@/lib/bag/limits";
 import { bagActions } from "@/lib/bag/store";
-import { bagQueryKey } from "@/lib/bag/use-bag";
+import { isSlug } from "@/lib/saved/limits";
 import { notifyBagCount } from "@/lib/bag/use-bag-count";
 
 let started = false;
@@ -22,8 +23,14 @@ export function BagImport() {
     const lines = bagActions.lines();
     if (started || lines.length === 0) return;
     started = true;
-    const batch = lines.slice(0, BAG_LINE_LIMIT).map((line) => ({ slug: line.slug, quantity: Math.min(line.quantity, MAX_QUANTITY) }));
-    void importLines(batch)
+    // Old data may hold slugs that no longer validate; one bad line mustn't refuse the rest.
+    const batch = lines
+      .filter((line) => isSlug(line.slug))
+      .slice(0, BAG_LINE_LIMIT)
+      .map((line) => ({ slug: line.slug, quantity: Math.min(line.quantity, MAX_QUANTITY) }));
+    if (batch.length === 0) return bagActions.clearLines();
+    // Two tabs restored at once may both import; the server keeps the larger quantity, so nothing doubles.
+    void postBag({ kind: "import", lines: batch })
       .then((result) => {
         // Invalid input (old data that no longer validates) can't succeed later either.
         if (!result.ok && result.error === "failed") return void (started = false);

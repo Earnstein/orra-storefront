@@ -23,14 +23,13 @@ export async function readCartRef(): Promise<CartRef> {
 }
 
 /**
- * Writes the count cookie and, for a guest whose cart was just created, the signed cart cookie.
- * Only server actions and route handlers may call this (Next refuses cookie writes while rendering).
+ * Writes the count cookie and, for a guest, the signed cart cookie (re-set on every write, so it
+ * expires 30 days after the bag was last changed). Only route handlers (and the sign-in hook) call
+ * this: a cookie set in a server action makes Next refetch the page.
  */
-export async function writeBagCookies({ newGuestCartId, count }: { newGuestCartId?: string; count: number }) {
+export async function writeBagCookies({ guestCartId, count }: { guestCartId?: string; count: number }) {
   const { secure, secret } = cookieConfig();
   const jar = await cookies();
-  if (newGuestCartId) {
-    jar.set(cartCookieName(secure), signCartId(newGuestCartId, secret), cartCookieOptions(secure));
-  }
+  if (guestCartId) jar.set(cartCookieName(secure), signCartId(guestCartId, secret), cartCookieOptions(secure));
   jar.set(BAG_COUNT_COOKIE, String(Math.min(Math.max(count, 0), 999)), countCookieOptions(secure));
 }
