@@ -4,7 +4,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { XIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Media } from "@/components/primitives";
 import { buttonVariants } from "@/components/ui/button";
@@ -41,14 +41,6 @@ export function AddedPanel({ item, onClose, returnFocus }: { item: AddedItem | n
   const [shown, setShown] = useState(item);
   if (item && item !== shown) setShown(item);
   const current = item ?? shown;
-  const popup = useRef<HTMLDivElement>(null);
-
-  // Checked as the panel closes: a click or Tab that took focus elsewhere on the page keeps it there.
-  function finalFocus() {
-    const active = document.activeElement;
-    if (active && active !== document.body && !popup.current?.contains(active)) return false;
-    return returnFocus();
-  }
 
   const line = current?.line;
   const message = current ? cappedMessage(current) : null;
@@ -56,8 +48,8 @@ export function AddedPanel({ item, onClose, returnFocus }: { item: AddedItem | n
     <Dialog.Root open={item !== null} onOpenChange={(open) => !open && onClose()} onOpenChangeComplete={(open) => !open && setShown(null)} modal={false}>
       <Dialog.Portal>
         <Dialog.Popup
-          ref={popup}
-          finalFocus={finalFocus}
+          // Checked as it closes; Base UI leaves focus alone when a click or Tab already moved it.
+          finalFocus={returnFocus}
           className="fixed inset-x-0 top-header z-40 flex flex-col gap-5 border-b border-border bg-background p-6 shadow-sm transition duration-200 ease-out-strong data-ending-style:-translate-y-2 data-ending-style:opacity-0 data-starting-style:-translate-y-2 data-starting-style:opacity-0 motion-reduce:transition-none md:left-auto md:right-gutter md:w-[400px] md:border-x"
         >
           <div className="flex items-center justify-between gap-4">

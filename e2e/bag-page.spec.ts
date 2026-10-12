@@ -157,14 +157,16 @@ test("a failed change keeps the bag on screen and says what went wrong", async (
   await add(page, TOTE);
   await openBag(page);
   // The change fails, and so does the re-read that follows it.
-  await page.route("**/api/bag", (route) =>
-    route.request().method() === "POST"
-      ? route.fulfill({ status: 500, json: { ok: false, error: "failed", message: "Something went wrong. Try again." } })
-      : route.fulfill({ status: 500, body: "" }),
-  );
-  const reread = page.waitForResponse((response) => response.request().method() === "GET" && new URL(response.url()).pathname === "/api/bag");
+  let reads = 0;
+  await page.route("**/api/bag", (route) => {
+    if (route.request().method() === "POST") return route.fulfill({ status: 500, json: { ok: false, error: "failed", message: "Something went wrong. Try again." } });
+    reads += 1;
+    return route.fulfill({ status: 500, body: "" });
+  });
   await line(page, "Leather tote").getByRole("combobox", { name: "Quantity" }).selectOption("2");
-  await reread;
+  // The re-read and its one retry both fail; then give React a couple of frames to show the result.
+  await expect.poll(() => reads, { timeout: 10_000 }).toBe(2);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await expect(page.getByRole("main").getByRole("alert")).toHaveText("Something went wrong. Try again.");
   await expect(line(page, "Leather tote").getByRole("combobox", { name: "Quantity" })).toHaveValue("1");
   await expect(page.getByText("We couldn't load your bag.")).toHaveCount(0);

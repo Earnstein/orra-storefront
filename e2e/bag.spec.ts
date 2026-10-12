@@ -195,6 +195,9 @@ test("clicking elsewhere on the page closes the panel and leaves focus there", a
   const thumbnail = page.getByRole("button", { name: /^Show image 2 of/ });
   await thumbnail.click();
   await expect(panel(page)).toBeHidden();
+  // Focus would be pulled back once the panel has finished closing.
+  await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running"));
+  await expect(page.locator("[data-base-ui-portal], [role=dialog]")).toHaveCount(0);
   await expect(thumbnail).toBeFocused();
 });
 
@@ -207,4 +210,10 @@ test("the compact bar's Add to bag opens the panel too", async ({ page }) => {
   await compact.click();
   await answered;
   await expect(panel(page)).toBeVisible();
+  // Back at the top the compact bar has slid away (inert), so closing returns focus to the main button.
+  await page.mouse.wheel(0, -3000);
+  await expect(compact).not.toBeInViewport();
+  await page.keyboard.press("Escape");
+  await expect(panel(page)).toBeHidden();
+  await expect(addButton(page)).toBeFocused();
 });
