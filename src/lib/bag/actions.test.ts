@@ -31,7 +31,7 @@ vi.stubEnv("DATABASE_URL", "postgres://test@localhost/test");
 vi.stubEnv("BETTER_AUTH_SECRET", "test-secret-that-is-at-least-32-characters");
 vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000");
 
-const { addToBag, moveToSaved, removeFromBag, setQuantity } = await import("@/lib/bag/actions");
+const { addToBag, importLines, moveToSaved, removeFromBag, setQuantity } = await import("@/lib/bag/actions");
 const { GET } = await import("@/app/api/bag/route");
 const { getSavedSlugs } = await import("@/lib/saved/queries");
 
@@ -99,6 +99,28 @@ describe("as a guest", () => {
     const result = await removeFromBag("leather-tote-tan");
     expect(result).toEqual({ ok: true, data: { bag: { lines: [], count: 0, subtotal: 0, currency: "USD" }, capped: false } });
     expect(request.jar.has("orra_cart")).toBe(false);
+  });
+});
+
+describe("importLines", () => {
+  it("moves an old browser bag to the server, capping quantities and skipping unknown products", async () => {
+    await db.update(products).set({ stock: 2 }).where(eq(products.slug, "double-monk-shoe"));
+    const result = await importLines([
+      { slug: "leather-tote-tan", quantity: 1 },
+      { slug: "no-such-product", quantity: 1 },
+      { slug: "double-monk-shoe", quantity: 5 },
+    ]);
+    expect(result.ok && Object.fromEntries(result.data.bag.lines.map((line) => [line.slug, line.quantity]))).toEqual({
+      "leather-tote-tan": 1,
+      "double-monk-shoe": 2,
+    });
+    expect(request.jar.get("orra_bag_count")?.value).toBe("3");
+    expect(request.jar.get("orra_cart")).toBeDefined();
+  });
+
+  it("refuses more lines than a bag holds", async () => {
+    const lines = Array.from({ length: 51 }, () => ({ slug: "leather-tote-tan", quantity: 1 }));
+    expect(await importLines(lines)).toMatchObject({ ok: false, error: "invalid" });
   });
 });
 

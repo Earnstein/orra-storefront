@@ -7,8 +7,9 @@ import type { ActionResult } from "@/lib/account/actions";
 import { isSlug } from "@/lib/saved/limits";
 import { saveSlugs } from "@/lib/saved/mutations";
 import { ensureCart, findCart, type CartRef } from "./cart";
-import { MAX_QUANTITY } from "./limits";
+import { BAG_LINE_LIMIT, MAX_QUANTITY } from "./limits";
 import { addLine, BagError, removeLine, setLineQuantity, type BagChange } from "./mutations";
+import { readBag } from "./queries";
 import { EMPTY_BAG, type Bag } from "./types";
 import { readCartRef, writeBagCookies } from "./request";
 
@@ -78,5 +79,25 @@ export async function moveToSaved(slug: string): Promise<BagResult> {
       return result;
     }
     return { ...result, saveLocally: slug };
+  });
+}
+
+const importSchema = z.array(z.object({ slug: slugSchema, quantity: quantitySchema })).max(BAG_LINE_LIMIT);
+
+/**
+ * Moves a bag kept in this browser before M5 (`orra:bag:v1` lines) to the server, once. Each line
+ * is added with the usual caps; unknown products are skipped, and lines past a full bag are dropped.
+ */
+export async function importLines(lines: { slug: string; quantity: number }[]): Promise<BagResult> {
+  return change(lines, importSchema, { create: true }, async (cartId) => {
+    for (const line of lines) {
+      try {
+        await addLine(db, cartId, line.slug, line.quantity);
+      } catch (error) {
+        if (!(error instanceof BagError)) throw error;
+        if (error.code === "full") break;
+      }
+    }
+    return { bag: await readBag(db, cartId), capped: false };
   });
 }

@@ -5,6 +5,7 @@ import { after } from "next/server";
 
 import { db } from "@/db";
 import { authOptions, resetPasswordSender } from "@/lib/auth.options";
+import { bagMergeHook } from "@/lib/bag/merge";
 import { sendEmail } from "@/lib/email/send";
 import { authBaseUrl, serverEnv, trustedAuthOrigins } from "@/lib/env";
 
@@ -19,6 +20,11 @@ export const auth = betterAuth({
   emailAndPassword: {
     ...authOptions.emailAndPassword,
     sendResetPassword: resetPasswordSender(sendEmail),
+  },
+  hooks: {
+    ...authOptions.hooks,
+    // Moves a guest's bag into the account on sign-in (needs the database, so it's set here).
+    after: bagMergeHook(db, { secure: authBaseUrl(env).startsWith("https://"), secret: env.BETTER_AUTH_SECRET }),
   },
   rateLimit: {
     ...authOptions.rateLimit,
