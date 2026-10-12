@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 
 import { useBrowserSession } from "@/lib/auth/browser-session";
 import { isAuthPage } from "@/lib/auth/return-to";
-import { bagActions, useBag } from "@/lib/bag/store";
+import { bagActions, useBrowserBag } from "@/lib/bag/store";
 import { mergeSaved } from "@/lib/saved/actions";
 import { isSlug, mergeBatch } from "@/lib/saved/limits";
 import { savedQueryKey } from "@/lib/saved/use-saved";
@@ -30,7 +30,7 @@ const RETRY_MS = 2_000;
 export function SavedSync() {
   const queryClient = useQueryClient();
   const userId = useBrowserSession().user?.id;
-  const local = useBag().saved;
+  const local = useBrowserBag().saved;
   const leaving = isAuthPage(usePathname());
   const [attempt, setAttempt] = useState(0);
 

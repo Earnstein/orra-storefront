@@ -1,5 +1,5 @@
-// Pure bag/saved-items rules. No storage or React here, so they're easy to test and to
-// move server-side when the cart gets a backend.
+// Pure rules for what this browser keeps: saved items while signed out, and (until they're moved
+// to the server once) bag lines from before the bag lived on the server. No storage or React here.
 
 import { SAVED_LIMIT } from "@/lib/saved/limits";
 
@@ -7,24 +7,6 @@ export type BagLine = { slug: string; quantity: number };
 export type BagState = { lines: BagLine[]; saved: string[] };
 
 export const EMPTY_BAG: BagState = { lines: [], saved: [] };
-
-export function quantityInBag(state: BagState, slug: string): number {
-  return state.lines.find((line) => line.slug === slug)?.quantity ?? 0;
-}
-
-export function bagCount(state: BagState): number {
-  return state.lines.reduce((total, line) => total + line.quantity, 0);
-}
-
-/** Adds one unit, never exceeding the units in stock. `added` is false when capped. */
-export function addToBag(state: BagState, slug: string, stock: number): { state: BagState; added: boolean } {
-  const current = quantityInBag(state, slug);
-  if (current >= stock) return { state, added: false };
-  const lines = current
-    ? state.lines.map((line) => (line.slug === slug ? { ...line, quantity: line.quantity + 1 } : line))
-    : [...state.lines, { slug, quantity: 1 }];
-  return { state: { ...state, lines }, added: true };
-}
 
 export function isSaved(state: BagState, slug: string): boolean {
   return state.saved.includes(slug);
@@ -34,6 +16,16 @@ export function isSaved(state: BagState, slug: string): boolean {
 export function toggleSaved(state: BagState, slug: string): BagState {
   const saved = isSaved(state, slug) ? state.saved.filter((s) => s !== slug) : [...state.saved, slug].slice(-SAVED_LIMIT);
   return { ...state, saved };
+}
+
+/** Saves `slug` if it isn't saved yet (Move to saved items, signed out), within SAVED_LIMIT. */
+export function addSaved(state: BagState, slug: string): BagState {
+  return isSaved(state, slug) ? state : toggleSaved(state, slug);
+}
+
+/** Drops the bag lines once they've been moved to the server, keeping saved items. */
+export function withoutLines(state: BagState): BagState {
+  return state.lines.length ? { ...state, lines: [] } : state;
 }
 
 /** Removes saved slugs (after they've been merged into an account), keeping the bag lines. */

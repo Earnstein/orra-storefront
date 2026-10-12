@@ -6,8 +6,8 @@ import { CheckIcon, HeartIcon, ShoppingBagIcon, TruckIcon } from "lucide-react";
 
 import { Container } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
-import { bagActions, useBag } from "@/lib/bag/store";
-import { quantityInBag } from "@/lib/bag/rules";
+import { MAX_QUANTITY } from "@/lib/bag/limits";
+import { useBag } from "@/lib/bag/use-bag";
 import { useSaved } from "@/lib/saved/use-saved";
 import { deliveryWindow } from "@/lib/catalog/delivery";
 import type { CatalogImage } from "@/lib/catalog/types";
@@ -39,7 +39,14 @@ function useHydrated() {
  * button scrolls out of view.
  */
 export function PurchaseActions({ product }: { product: PurchasableProduct }) {
-  const bag = useBag();
+  // No bag read on load (a request per product view); each add's answer says what's in the bag.
+  const bag = useBag({ load: false });
+  const [inBag, setInBag] = useState(0);
+  const [allInBag, setAllInBag] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [soldOutSince, setSoldOutSince] = useState(false);
+  const [atLimit, setAtLimit] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const savedItems = useSaved();
   const hydrated = useHydrated();
   const [justAdded, setJustAdded] = useState(false);
@@ -47,10 +54,8 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
   const [showBar, setShowBar] = useState(false);
   const addButtonRef = useRef<HTMLDivElement>(null);
 
-  const inBag = quantityInBag(bag, product.slug);
   const saved = savedItems.isSaved(product.slug);
-  const soldOut = product.stock <= 0;
-  const allInBag = !soldOut && inBag >= product.stock;
+  const soldOut = product.stock <= 0 || soldOutSince;
 
   useEffect(() => {
     if (!justAdded) return;
@@ -71,10 +76,36 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
     return () => observer.disconnect();
   }, []);
 
-  function add() {
-    if (bagActions.add(product.slug, product.stock)) {
-      setJustAdded(true);
-      setAnnouncement(`${product.name} added to your bag.`);
+  async function add() {
+    if (adding) return;
+    setAdding(true);
+    setAddError(null);
+    try {
+      const { bag: next, capped } = await bag.add(product.slug);
+      const line = next.lines.find((l) => l.slug === product.slug);
+      // The server caps at live stock, which may be lower than this (cached) page says.
+      if (!line || line.note === "sold-out") {
+        setSoldOutSince(true);
+        setInBag(0);
+        setAnnouncement(`${product.name} is sold out.`);
+        return;
+      }
+      setInBag(line.quantity);
+      const limit = line.quantity >= MAX_QUANTITY && line.stock > MAX_QUANTITY;
+      setAtLimit(limit);
+      setAllInBag(!limit && line.quantity >= line.stock);
+      if (!capped) {
+        setJustAdded(true);
+        setAnnouncement(`${product.name} added to your bag.`);
+      } else {
+        setAnnouncement(limit ? `You have the most of ${product.name} one order can take.` : `All available ${product.name} are in your bag.`);
+      }
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : "Something went wrong. Try again.";
+      setAddError(message);
+      setAnnouncement(`${product.name} couldn't be added. ${message}`);
+    } finally {
+      setAdding(false);
     }
   }
 
@@ -83,17 +114,18 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
     setAnnouncement(saved ? `${product.name} removed from saved items.` : `${product.name} saved for later.`);
   }
 
-  const addLabel = soldOut ? "Sold out" : allInBag ? "All available in your bag" : justAdded ? "Added to bag" : "Add to bag";
+  const full = allInBag || atLimit;
+  const addLabel = soldOut ? "Sold out" : allInBag ? "All available in your bag" : atLimit ? `${MAX_QUANTITY} in your bag (the most per order)` : adding ? "Adding…" : justAdded ? "Added to bag" : "Add to bag";
   const addIcon = justAdded ? <CheckIcon data-icon="inline-start" /> : <ShoppingBagIcon data-icon="inline-start" />;
-  const compactLabel = soldOut ? "Sold out" : allInBag ? "In your bag" : justAdded ? "Added" : "Add to bag";
+  const compactLabel = soldOut ? "Sold out" : full ? "In your bag" : adding ? "Adding…" : justAdded ? "Added" : "Add to bag";
   const delivery = hydrated ? deliveryWindow(new Date()) : null;
 
   return (
     <>
       <div className="flex flex-col gap-3">
         <div ref={addButtonRef}>
-          <Button className="w-full" onClick={add} disabled={soldOut || allInBag}>
-            {!soldOut && !allInBag && addIcon}
+          <Button className="w-full" onClick={add} disabled={soldOut || full}>
+            {!soldOut && !full && addIcon}
             {addLabel}
           </Button>
         </div>
@@ -117,6 +149,11 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
                 </>
               )}
             </span>
+          </p>
+        )}
+        {addError && (
+          <p role="alert" className="caption text-destructive">
+            {addError}
           </p>
         )}
         {inBag > 0 && !justAdded && (
@@ -146,8 +183,8 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
             <p className="truncate">{product.name}</p>
             <p className="text-muted-foreground">{formatPrice(product.price)}</p>
           </div>
-          <Button size="sm" onClick={add} disabled={soldOut || allInBag} className="shrink-0">
-            {!soldOut && !allInBag && addIcon}
+          <Button size="sm" onClick={add} disabled={soldOut || full} className="shrink-0">
+            {!soldOut && !full && addIcon}
             {compactLabel}
           </Button>
         </Container>

@@ -1,37 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { SAVED_LIMIT } from "@/lib/saved/limits";
-import { addToBag, bagCount, EMPTY_BAG, isSaved, parseBagState, quantityInBag, removeSaved, toggleSaved } from "./rules";
-
-describe("addToBag", () => {
-  it("adds one unit of a new product", () => {
-    expect(addToBag(EMPTY_BAG, "a", 5)).toEqual({ state: { lines: [{ slug: "a", quantity: 1 }], saved: [] }, added: true });
-  });
-
-  it("increments an existing line", () => {
-    const state = { lines: [{ slug: "a", quantity: 1 }], saved: [] };
-    expect(addToBag(state, "a", 5).state.lines).toEqual([{ slug: "a", quantity: 2 }]);
-  });
-
-  it("never exceeds stock", () => {
-    const full = { lines: [{ slug: "a", quantity: 2 }], saved: [] };
-    expect(addToBag(full, "a", 2)).toEqual({ state: full, added: false });
-  });
-
-  it("adds nothing when the product is sold out", () => {
-    expect(addToBag(EMPTY_BAG, "a", 0).added).toBe(false);
-  });
-});
-
-describe("bag counts", () => {
-  it("sums quantities across lines", () => {
-    expect(bagCount({ lines: [{ slug: "a", quantity: 2 }, { slug: "b", quantity: 3 }], saved: [] })).toBe(5);
-  });
-
-  it("has zero of a product that isn't in the bag", () => {
-    expect(quantityInBag(EMPTY_BAG, "missing")).toBe(0);
-  });
-});
+import { addSaved, EMPTY_BAG, isSaved, parseBagState, removeSaved, toggleSaved, withoutLines } from "./rules";
 
 describe("saved items", () => {
   it("saves, then unsaves", () => {
@@ -78,5 +48,21 @@ describe("toggleSaved cap", () => {
     expect(next.saved).toHaveLength(SAVED_LIMIT);
     expect(next.saved[0]).toBe("p-1");
     expect(next.saved.at(-1)).toBe("new-one");
+  });
+});
+
+describe("addSaved", () => {
+  it("saves once and never unsaves", () => {
+    const saved = addSaved(EMPTY_BAG, "a");
+    expect(saved.saved).toEqual(["a"]);
+    expect(addSaved(saved, "a")).toBe(saved);
+  });
+});
+
+describe("withoutLines", () => {
+  it("drops old bag lines and keeps saved items", () => {
+    const state = { lines: [{ slug: "a", quantity: 2 }], saved: ["b"] };
+    expect(withoutLines(state)).toEqual({ lines: [], saved: ["b"] });
+    expect(withoutLines(EMPTY_BAG)).toBe(EMPTY_BAG);
   });
 });

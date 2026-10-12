@@ -3,9 +3,11 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
 import type { SeedDatabase } from "@/db/seed";
 import { authOptions, resetPasswordSender } from "@/lib/auth.options";
+import { bagMergeHook } from "@/lib/bag/merge";
 import type { Email } from "@/lib/email/send";
 import { createTestDb } from "./db";
 
+const TEST_SECRET = "test-secret-that-is-at-least-32-characters";
 const TEST_PLUGINS_LEFT_OUT = new Set(["dash", "next-cookies"]);
 
 /**
@@ -15,13 +17,13 @@ const TEST_PLUGINS_LEFT_OUT = new Set(["dash", "next-cookies"]);
  * emails land in `outbox` instead of being sent. Background tasks are awaited, so the outbox is
  * filled by the time a call returns.
  */
-export async function createTestAuth(db?: SeedDatabase, { rateLimit = false } = {}) {
+export async function createTestAuth(db?: SeedDatabase, { rateLimit = false, bagMerge = false } = {}) {
   const database = db ?? (await createTestDb());
   const outbox: Email[] = [];
   const auth = betterAuth({
     ...authOptions,
     plugins: authOptions.plugins.filter((plugin) => !TEST_PLUGINS_LEFT_OUT.has(plugin.id)),
-    secret: "test-secret-that-is-at-least-32-characters",
+    secret: TEST_SECRET,
     baseURL: "http://localhost:3000",
     database: drizzleAdapter(database, { provider: "pg" }),
     emailAndPassword: {
@@ -31,6 +33,7 @@ export async function createTestAuth(db?: SeedDatabase, { rateLimit = false } = 
       }),
     },
     rateLimit: { ...authOptions.rateLimit, enabled: rateLimit },
+    hooks: bagMerge ? { ...authOptions.hooks, after: bagMergeHook(database, { secure: false, secret: TEST_SECRET }) } : authOptions.hooks,
   });
   return { auth, db: database, outbox };
 }
