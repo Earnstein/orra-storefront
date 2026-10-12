@@ -120,6 +120,13 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
   }
 
   const closePanel = useCallback(() => setAdded(null), []);
+  // The compact bar may have slid away (inert) since its button was clicked: fall back to the main
+  // Add to bag, or Save for later when that's disabled.
+  const panelReturnFocus = useCallback((): HTMLElement | null => {
+    const target = returnFocus.current;
+    if (target && !target.closest("[inert]") && !(target instanceof HTMLButtonElement && target.disabled)) return target;
+    return addButtonRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? saveButtonRef.current;
+  }, []);
 
   function toggleSave() {
     savedItems.toggle(product.slug);
@@ -202,7 +209,7 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
         </Container>
       </div>
 
-      <AddedPanel item={added} onClose={closePanel} returnFocus={returnFocus} />
+      <AddedPanel item={added} onClose={closePanel} returnFocus={panelReturnFocus} />
     </>
   );
 }

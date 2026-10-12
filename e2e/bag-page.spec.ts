@@ -136,3 +136,78 @@ test("an empty bag says so and offers New in, Women and Men", async ({ page }) =
     await expect(main.getByRole("link", { name, exact: true })).toHaveAttribute("href", href);
   }
 });
+
+test("after Undo has had focus, a later change keeps focus where the shopper is", async ({ page }) => {
+  await add(page, TOTE);
+  await add(page, SHOE);
+  await openBag(page);
+  await line(page, "Leather tote").getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByRole("button", { name: "Undo" })).toBeFocused();
+  const quantity = line(page, "Double-monk shoe").getByRole("combobox", { name: "Quantity" });
+  // The shopper moves on to another line (selectOption alone doesn't move focus).
+  await quantity.focus();
+  const answered = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/bag");
+  await quantity.selectOption("2");
+  await answered;
+  await expect(bagLink(page)).toHaveAccessibleName("Bag, 2 items");
+  await expect(quantity).toBeFocused();
+});
+
+test("a failed change keeps the bag on screen and says what went wrong", async ({ page }) => {
+  await add(page, TOTE);
+  await openBag(page);
+  // The change fails, and so does the re-read that follows it.
+  await page.route("**/api/bag", (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 500, json: { ok: false, error: "failed", message: "Something went wrong. Try again." } })
+      : route.fulfill({ status: 500, body: "" }),
+  );
+  const reread = page.waitForResponse((response) => response.request().method() === "GET" && new URL(response.url()).pathname === "/api/bag");
+  await line(page, "Leather tote").getByRole("combobox", { name: "Quantity" }).selectOption("2");
+  await reread;
+  await expect(page.getByRole("main").getByRole("alert")).toHaveText("Something went wrong. Try again.");
+  await expect(line(page, "Leather tote").getByRole("combobox", { name: "Quantity" })).toHaveValue("1");
+  await expect(page.getByText("We couldn't load your bag.")).toHaveCount(0);
+});
+
+test("a failed remove puts the line back and returns focus to it", async ({ page }) => {
+  await add(page, TOTE);
+  await openBag(page);
+  await page.route("**/api/bag", (route) =>
+    route.request().method() === "POST" ? route.fulfill({ status: 500, json: { ok: false, error: "failed", message: "Something went wrong. Try again." } }) : route.continue(),
+  );
+  await line(page, "Leather tote").getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toHaveText("Something went wrong. Try again.");
+  await expect(line(page, "Leather tote").getByRole("combobox", { name: "Quantity" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Undo" })).toHaveCount(0);
+});
+
+test("Undo of an item that sold out meanwhile says so instead of announcing it back", async ({ page }) => {
+  await add(page, TOTE);
+  await add(page, SHOE);
+  await openBag(page);
+  await line(page, "Leather tote").getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByRole("button", { name: "Undo" })).toBeFocused();
+  // The server answers as if none were left.
+  await page.route("**/api/bag", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const response = await route.fetch();
+    const result = await response.json();
+    if (result.ok) result.data.bag.lines = result.data.bag.lines.filter((l: { slug: string }) => l.slug !== "leather-tote-tan");
+    await route.fulfill({ response, json: result });
+  });
+  await page.getByRole("button", { name: "Undo" }).click();
+  const note = page.getByText("Leather tote is sold out, so it couldn't go back in your bag.");
+  await expect(note).toBeVisible();
+  await expect(note).toBeFocused();
+  await expect(page.getByRole("status")).toHaveText("Leather tote is sold out.");
+});
+
+test("each line's controls name its product", async ({ page }) => {
+  await add(page, TOTE);
+  await openBag(page);
+  const tote = line(page, "Leather tote");
+  await expect(tote.getByRole("combobox")).toHaveAccessibleName("Quantity, Leather tote");
+  await expect(tote.getByRole("button", { name: /^Remove/ })).toHaveAccessibleName("Remove Leather tote");
+  await expect(tote.getByRole("button", { name: /^Move/ })).toHaveAccessibleName("Move to saved items: Leather tote");
+});

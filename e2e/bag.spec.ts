@@ -115,7 +115,7 @@ test("an Add to bag made while the old bag is still moving lands in the same bag
   expect(await serverBag(page)).toEqual({ "double-monk-shoe": 1, "leather-tote-tan": 1 });
 });
 
-const panel = (page: Page) => page.getByRole("dialog", { name: "Added to bag" });
+const panel = (page: Page) => page.getByRole("dialog", { name: /^(Added to bag|Already in your bag)$/ });
 
 test("adding opens the added-to-bag panel with the item, Checkout and View bag; Escape closes it", async ({ page }) => {
   await add(page, TOTE);
@@ -163,7 +163,39 @@ test("the panel explains when less stock was left than the page showed", async (
     await route.fulfill({ response, json: result });
   });
   await add(page, TOTE);
+  // Nothing more was added, so the panel doesn't claim it was.
+  await expect(page.getByRole("dialog", { name: "Already in your bag" })).toBeVisible();
   await expect(panel(page).getByText("Only 1 was left — it's in your bag")).toBeVisible();
+});
+
+test("going Back and Forward never finds the panel still open", async ({ page }) => {
+  await add(page, TOTE);
+  await page.keyboard.press("Escape");
+  // Then a client-side visit to the product page from the bag, so Back and Forward keep it mounted.
+  const productLink = (p: Page) => p.getByRole("main").getByRole("link", { name: "Leather tote", exact: true });
+  await gotoHydrated(page, "/bag", productLink);
+  await productLink(page).click();
+  await expect(page).toHaveURL(new RegExp(`${TOTE}$`));
+  const visibleAdd = page.getByRole("button", { name: "Add to bag" }).locator("visible=true").first();
+  await expect(visibleAdd).toBeEnabled();
+  await visibleAdd.click();
+  await expect(panel(page)).toBeVisible();
+  await page.goBack({ waitUntil: "commit" });
+  await expect(page).toHaveURL(/\/bag$/);
+  await page.goForward({ waitUntil: "commit" });
+  await expect(page).toHaveURL(new RegExp(`${TOTE}$`));
+  await expect(page.getByRole("button", { name: /^(Added to bag|Add to bag)$/ }).locator("visible=true").first()).toBeVisible();
+  await expect(panel(page)).toBeHidden();
+});
+
+test("clicking elsewhere on the page closes the panel and leaves focus there", async ({ page, isMobile }) => {
+  test.skip(isMobile, "The thumbnails are shown from lg up.");
+  await add(page, TOTE);
+  await expect(panel(page)).toBeVisible();
+  const thumbnail = page.getByRole("button", { name: /^Show image 2 of/ });
+  await thumbnail.click();
+  await expect(panel(page)).toBeHidden();
+  await expect(thumbnail).toBeFocused();
 });
 
 test("the compact bar's Add to bag opens the panel too", async ({ page }) => {

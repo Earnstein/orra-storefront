@@ -59,6 +59,7 @@ export const BagLine = forwardRef<HTMLSelectElement, Props>(function BagLine({ l
               <select
                 ref={quantityRef}
                 id={id}
+                aria-label={`Quantity, ${line.name}`}
                 value={line.quantity}
                 onChange={(event) => onQuantity(Number(event.target.value))}
                 className="h-9 border-0 border-b border-border-strong bg-transparent pr-6 pl-1 text-body focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
@@ -71,10 +72,10 @@ export const BagLine = forwardRef<HTMLSelectElement, Props>(function BagLine({ l
               </select>
             </div>
           )}
-          <Button type="button" variant="link" size="xs" className="px-0" onClick={onMove}>
+          <Button type="button" variant="link" size="xs" className="px-0" onClick={onMove} aria-label={`Move to saved items: ${line.name}`}>
             Move to saved items
           </Button>
-          <Button type="button" variant="link" size="xs" className="px-0" onClick={onRemove}>
+          <Button type="button" variant="link" size="xs" className="px-0" onClick={onRemove} aria-label={`Remove ${line.name}`}>
             Remove
           </Button>
         </div>

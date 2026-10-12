@@ -4,8 +4,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { XIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Media } from "@/components/primitives";
 import { buttonVariants } from "@/components/ui/button";
@@ -29,29 +28,41 @@ export function cappedMessage({ line, capped, pageStock }: AddedItem): string | 
  * The panel that confirms an add, after Gucci's: under the header (full width on phones, 400px and
  * right-aligned from md), with the item, the quantity now in the bag, then Checkout and View bag.
  * Non-modal, so the page (and the header's updated bag count) stays usable; focus moves in, and
- * Escape, a click or focus outside, following a link or a page change closes it and returns focus
- * to the Add to bag button that opened it. No timer. Built on Base UI's Dialog, already loaded for
- * the header's sheets.
+ * Escape, a click or focus outside, following a link or a page change closes it. Focus then goes to
+ * `returnFocus()` (the control that added), unless the shopper already moved it elsewhere. No timer.
+ * Built on Base UI's Dialog, already loaded for the header's sheets.
  */
-export function AddedPanel({ item, onClose, returnFocus }: { item: AddedItem | null; onClose: () => void; returnFocus: RefObject<HTMLElement | null> }) {
-  const pathname = usePathname();
-  const opened = useRef(pathname);
-  useEffect(() => {
-    if (item && pathname !== opened.current) onClose();
-    opened.current = pathname;
-  }, [pathname, item, onClose]);
+export function AddedPanel({ item, onClose, returnFocus }: { item: AddedItem | null; onClose: () => void; returnFocus: () => HTMLElement | null }) {
+  // Next keeps a page mounted but hidden (<Activity>) after a client navigation, and a hidden page
+  // runs no effects but does clean them up: closing here means Back never finds the panel open.
+  useEffect(() => () => onClose(), [onClose]);
 
-  const line = item?.line;
-  const message = item ? cappedMessage(item) : null;
+  // The last item stays on screen while the panel fades out.
+  const [shown, setShown] = useState(item);
+  if (item && item !== shown) setShown(item);
+  const current = item ?? shown;
+  const popup = useRef<HTMLDivElement>(null);
+
+  // Checked as the panel closes: a click or Tab that took focus elsewhere on the page keeps it there.
+  function finalFocus() {
+    const active = document.activeElement;
+    if (active && active !== document.body && !popup.current?.contains(active)) return false;
+    return returnFocus();
+  }
+
+  const line = current?.line;
+  const message = current ? cappedMessage(current) : null;
   return (
-    <Dialog.Root open={item !== null} onOpenChange={(open) => !open && onClose()} modal={false}>
+    <Dialog.Root open={item !== null} onOpenChange={(open) => !open && onClose()} onOpenChangeComplete={(open) => !open && setShown(null)} modal={false}>
       <Dialog.Portal>
         <Dialog.Popup
-          finalFocus={returnFocus}
+          ref={popup}
+          finalFocus={finalFocus}
           className="fixed inset-x-0 top-header z-40 flex flex-col gap-5 border-b border-border bg-background p-6 shadow-sm transition duration-200 ease-out-strong data-ending-style:-translate-y-2 data-ending-style:opacity-0 data-starting-style:-translate-y-2 data-starting-style:opacity-0 motion-reduce:transition-none md:left-auto md:right-gutter md:w-[400px] md:border-x"
         >
           <div className="flex items-center justify-between gap-4">
-            <Dialog.Title className="eyebrow">Added to bag</Dialog.Title>
+            {/* Capped means less than asked was added: for one more, nothing. */}
+            <Dialog.Title className="eyebrow">{current?.capped ? "Already in your bag" : "Added to bag"}</Dialog.Title>
             <Dialog.Close className={buttonVariants({ variant: "ghost", size: "icon-sm" })} aria-label="Close">
               <XIcon />
             </Dialog.Close>

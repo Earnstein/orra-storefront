@@ -21,8 +21,8 @@ export function ProductGallery({ images, name }: { images: CatalogImage[]; name:
     <div className="flex flex-col gap-tile">
       <div className="relative">
         <ul
-          // On phones this strip scrolls sideways; focusable, so keyboard users can scroll it too (axe: scrollable-region-focusable).
-          tabIndex={0}
+          // With more than one image this strip scrolls sideways on phones; focusable, so keyboard users can scroll it too (axe: scrollable-region-focusable).
+          tabIndex={count > 1 ? 0 : undefined}
           aria-label={`${name}, image ${active + 1} of ${count}`}
           onScroll={(event) => {
             const el = event.currentTarget;

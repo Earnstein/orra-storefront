@@ -12,8 +12,12 @@ import { BagLine } from "./bag-line";
 import { EmptyBag } from "./empty-bag";
 import { CheckoutButton, OrderSummary } from "./order-summary";
 
-/** A removed line, kept in its place with Undo until the shopper leaves or undoes it. */
-type Removed = { slug: string; name: string; quantity: number; index: number };
+/**
+ * A removed line, kept in its place with Undo until the shopper leaves or undoes it. `state`:
+ * "removing" while the remove is on its way, "removed" once done, "restoring" while Undo's add is
+ * on its way, "sold-out" when Undo found none left.
+ */
+type Removed = { slug: string; name: string; quantity: number; index: number; state: "removing" | "removed" | "restoring" | "sold-out" };
 
 /**
  * /bag, after Gucci's shopping bag in Orra's tokens: "Shopping bag (n)", the lines (two-thirds of
@@ -26,14 +30,20 @@ export function BagView() {
   const [removed, setRemoved] = useState<Removed[]>([]);
   const [announcement, setAnnouncement] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const undoRefs = useRef(new Map<string, HTMLButtonElement>());
+  const undoRefs = useRef(new Map<string, HTMLElement>());
   const quantityRefs = useRef(new Map<string, HTMLSelectElement>());
   const [focusUndo, setFocusUndo] = useState<string | null>(null);
   const [focusQuantity, setFocusQuantity] = useState<string | null>(null);
 
   // Focus follows the shopper's action: to Undo after a remove, back to the line after an undo.
+  // Each moves focus once, as soon as its target is on screen.
   useEffect(() => {
-    if (focusUndo) undoRefs.current.get(focusUndo)?.focus();
+    if (!focusUndo) return;
+    const target = undoRefs.current.get(focusUndo);
+    if (target) {
+      target.focus();
+      setFocusUndo(null);
+    }
   }, [focusUndo, removed, bag.bag]);
   useEffect(() => {
     if (!focusQuantity) return;
@@ -44,31 +54,72 @@ export function BagView() {
     }
   }, [focusQuantity, bag.bag]);
 
-  async function run(action: () => Promise<unknown>, done: string) {
+  /** Runs a change; the latest outcome decides whether an error shows. Undefined when it failed. */
+  async function run<T>(action: () => Promise<T>): Promise<T | undefined> {
     setError(null);
     try {
-      await action();
-      setAnnouncement(done);
+      const result = await action();
+      setError(null);
+      return result;
     } catch (failure) {
       const message = failure instanceof Error && failure.message ? failure.message : "Something went wrong. Try again.";
       setError(message);
+      return undefined;
     }
   }
 
-  function remove(line: Line, index: number) {
-    setRemoved((current) => [...current.filter((r) => r.slug !== line.slug), { slug: line.slug, name: line.name, quantity: line.quantity, index }]);
+  const dropRemoved = (slug: string) => setRemoved((current) => current.filter((r) => r.slug !== slug));
+  const updateRemoved = (slug: string, change: Partial<Removed>) =>
+    setRemoved((current) => current.map((r) => (r.slug === slug ? { ...r, ...change } : r)));
+
+  async function announceAfter(action: () => Promise<unknown>, done: string) {
+    if ((await run(action)) !== undefined) setAnnouncement(done);
+  }
+
+  function setUndoRef(slug: string, element: HTMLElement | null) {
+    if (element) undoRefs.current.set(slug, element);
+    else undoRefs.current.delete(slug);
+  }
+
+  async function remove(line: Line, index: number) {
+    setRemoved((current) => [...current.filter((r) => r.slug !== line.slug), { slug: line.slug, name: line.name, quantity: line.quantity, index, state: "removing" }]);
     setFocusUndo(line.slug);
-    void run(() => bag.remove(line.slug), `${line.name} removed from your bag.`);
+    if (await run(() => bag.remove(line.slug))) {
+      updateRemoved(line.slug, { state: "removed" });
+      setAnnouncement(`${line.name} removed from your bag.`);
+    } else {
+      // The line is back (rolled back): drop its Undo and return focus to it.
+      dropRemoved(line.slug);
+      setFocusUndo(null);
+      setFocusQuantity(line.slug);
+    }
   }
 
-  function undo(entry: Removed) {
-    setRemoved((current) => current.filter((r) => r.slug !== entry.slug));
-    setFocusUndo(null);
+  async function undo(entry: Removed) {
+    if (entry.state !== "removed") return;
+    // The entry (and focus on its Undo) stays until the server answers.
+    updateRemoved(entry.slug, { state: "restoring" });
+    const result = await run(() => bag.add(entry.slug, entry.quantity));
+    if (!result) {
+      updateRemoved(entry.slug, { state: "removed" });
+      return;
+    }
+    const line = result.bag.lines.find((l) => l.slug === entry.slug);
+    if (!line || line.note === "sold-out") {
+      updateRemoved(entry.slug, { state: "sold-out" });
+      setFocusUndo(entry.slug);
+      setAnnouncement(`${entry.name} is sold out.`);
+      return;
+    }
+    dropRemoved(entry.slug);
     setFocusQuantity(entry.slug);
-    void run(() => bag.add(entry.slug, entry.quantity), `${entry.name} is back in your bag.`);
+    setAnnouncement(
+      line.quantity < entry.quantity ? `${entry.name} is back in your bag — only ${line.quantity} left.` : `${entry.name} is back in your bag.`,
+    );
   }
 
-  if (bag.status === "failed") {
+  // A failed re-read keeps the bag already on screen.
+  if (bag.status === "failed" && !bag.bag) {
     return (
       <div className="flex flex-col items-start gap-4">
         <h1 className="text-title uppercase">Shopping bag</h1>
@@ -99,7 +150,12 @@ export function BagView() {
   }
 
   const current = bag.bag;
-  const visible = removed.filter((entry) => !current.lines.some((line) => line.slug === entry.slug));
+  const inBag = (entry: Removed) => current.lines.some((line) => line.slug === entry.slug);
+  // A settled entry whose line is back in the bag (added again here or in another tab) is dropped.
+  const back = removed.filter((entry) => (entry.state === "removed" || entry.state === "sold-out") && inBag(entry));
+  if (back.length > 0) setRemoved(removed.filter((entry) => !back.includes(entry)));
+  // Until the optimistic removal lands the line is still in the bag; show it, not its entry.
+  const visible = removed.filter((entry) => !inBag(entry));
   // Each removed line keeps its place among the lines that are left.
   const rows: ({ kind: "line"; line: Line } | { kind: "removed"; entry: Removed })[] = current.lines.map((line) => ({ kind: "line", line }));
   for (const entry of [...visible].sort((a, b) => a.index - b.index)) rows.splice(Math.min(entry.index, rows.length), 0, { kind: "removed", entry });
@@ -131,26 +187,34 @@ export function BagView() {
                     else quantityRefs.current.delete(row.line.slug);
                   }}
                   line={row.line}
-                  onQuantity={(quantity) => void run(() => bag.setQuantity(row.line.slug, quantity), `${row.line.name}: ${quantity} in your bag.`)}
-                  onRemove={() => remove(row.line, index)}
-                  onMove={() => void run(() => bag.moveToSaved(row.line.slug), `${row.line.name} moved to your saved items.`)}
+                  onQuantity={(quantity) => void announceAfter(() => bag.setQuantity(row.line.slug, quantity), `${row.line.name}: ${quantity} in your bag.`)}
+                  onRemove={() => void remove(row.line, index)}
+                  onMove={() => void announceAfter(() => bag.moveToSaved(row.line.slug), `${row.line.name} moved to your saved items.`)}
                 />
               ) : (
                 <li key={`removed-${row.entry.slug}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border py-block text-body">
-                  <span>{row.entry.name} removed.</span>
-                  <Button
-                    type="button"
-                    variant="link"
-                    size="xs"
-                    className="px-0"
-                    ref={(element) => {
-                      if (element) undoRefs.current.set(row.entry.slug, element);
-                      else undoRefs.current.delete(row.entry.slug);
-                    }}
-                    onClick={() => undo(row.entry)}
-                  >
-                    Undo
-                  </Button>
+                  {row.entry.state === "sold-out" ? (
+                    // No Undo left to offer; focus lands on the explanation instead of the page.
+                    <span tabIndex={-1} ref={(element) => setUndoRef(row.entry.slug, element)} className="outline-none">
+                      {row.entry.name} is sold out, so it couldn&apos;t go back in your bag.
+                    </span>
+                  ) : (
+                    <>
+                      <span>{row.entry.name} removed.</span>
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="xs"
+                        className="px-0"
+                        ref={(element) => setUndoRef(row.entry.slug, element)}
+                        aria-label={`Undo, put ${row.entry.name} back`}
+                        aria-disabled={row.entry.state !== "removed" || undefined}
+                        onClick={() => void undo(row.entry)}
+                      >
+                        Undo
+                      </Button>
+                    </>
+                  )}
                 </li>
               ),
             )}
