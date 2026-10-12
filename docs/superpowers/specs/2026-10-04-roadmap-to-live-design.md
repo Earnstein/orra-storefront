@@ -143,12 +143,15 @@ Homepage with hero carousel. Product detail pages with gallery, Add to bag and S
 |---|---|
 | Server-side bag | `carts` and `cart_items`. Guests are identified by a signed, httpOnly cookie; on sign-in the guest cart merges into the user's. Quantities are capped at stock (the rule in `lib/bag/rules.ts` moves server-side). The header count reads the server bag. |
 | Bag page | `/bag`: lines, quantity changes, remove, subtotal, complimentary delivery note, empty state. |
-| Checkout | Stock re-checked, then a Stripe Checkout Session (hosted, test mode) is created. A demo banner shows the Stripe test card. |
-| Orders | `orders` and `order_items` (name and price copied at purchase). A signed webhook at `/api/stripe/webhook` creates the order and decrements stock in one transaction. Duplicate events are ignored. |
+| Checkout | Orra's own `/checkout` page (refined in the [M5 spec](2026-10-11-m5-bag-checkout-design.md)): a guest-or-sign-in gate, a US delivery address and Stripe's Payment Element (Checkout Sessions in `elements` UI mode, test mode). Starting checkout holds the stock for 31 minutes and the payment is authorised, then captured once the order is secured. Payments go through a provider-neutral interface (`src/lib/payments/`), so Paystack can be added after launch. A demo banner shows the Stripe test card. |
+| Orders | `orders` and `order_items` (name and price copied at purchase). One idempotent fulfilment, run by the signed webhook (`/api/payments/stripe/webhook`) and by the success page, creates the order in one transaction and then captures; if a lapsed hold's stock is gone, the authorisation is cancelled. Duplicate events are ignored. |
 | Confirmation | `/checkout/success` page and an order confirmation email. |
 | Order history | Orders list and detail in the account. |
 
-**Exit:** a test purchase reduces stock, appears in the user's order history and sends the email; concurrent purchases of the last unit result in one order and one automatic refund.
+**Exit** (updated by the M5 spec, because holds stop most races before payment and manual capture turns the rest into a cancelled authorisation):
+1. A test purchase reduces stock, appears in the user's order history and sends the email.
+2. Two checkouts racing for the last unit result in one hold and one "sold out" message.
+3. A payment completed after its hold lapsed and the unit sold elsewhere results in one cancelled payment and no order.
 
 ### M6: Store admin → `v0.7.0`
 
@@ -158,7 +161,7 @@ Homepage with hero carousel. Product detail pages with gallery, Add to bag and S
 | Products | `/admin/products`: TanStack Table v9 list with search and sort. Create and edit with TanStack Form: fields, category, audience, colour family, material, price, stock, details, images uploaded to Vercel Blob with alt text. Edits refresh the affected storefront pages immediately. |
 | Orders | `/admin/orders`: list, detail, status changes (paid → fulfilled, cancel). |
 | Demo admin | A "Try the admin" button signs into the shared `demo-admin` account. It's rate-limited and can't manage users, roles or the owner account. |
-| Demo reset | A nightly Vercel Cron job hits a secret-protected route. It restores the catalogue and stock to the seed, deletes products that aren't in the seed, and clears orders and carts older than the reset window. On the demo, the seed is the catalogue's source of truth: catalogue changes meant to last (including the owner's) go into the seed. Users, roles and the owner's account are never reset. |
+| Demo reset | A nightly Vercel Cron job hits a secret-protected route. It restores the catalogue and stock to the seed, deletes products that aren't in the seed, and clears orders and carts older than the reset window. It also sends any order confirmation email that never went out (from the M5 spec: `email_sent_at` is set only after a confirmed send). On the demo, the seed is the catalogue's source of truth: catalogue changes meant to last (including the owner's) go into the seed. Users, roles and the owner's account are never reset. |
 
 **Exit:** a visitor edits a product through "Try the admin", sees the change on the storefront, and it is gone after the next reset; the owner's account and role are unaffected.
 
@@ -175,6 +178,18 @@ Homepage with hero carousel. Product detail pages with gallery, Add to bag and S
 
 **Exit:** the success criteria above hold on production; `v1.0.0` is tagged and released.
 
+### After launch: Paystack → `v1.1.0`
+
+Added at the user's request during M5's brainstorming: Stripe first, Paystack once the application is done.
+
+| Module | Delivers |
+|---|---|
+| Paystack provider | A Paystack implementation of the payment interface (Popup V2 with `resumeTransaction`; verify and HMAC-SHA512 webhooks feeding the same fulfilment). Paystack has no hold-then-capture and no session expiry, so a payment after a lapsed hold is refunded automatically. |
+| Naira | Prices in NGN (kobo) alongside or instead of USD, with formatting per currency; the provider is chosen by currency. |
+| Nigerian delivery | Address fields for Nigeria (state, city, address). |
+
+**Exit:** a test purchase in naira through Paystack's popup creates an order, and a payment after a lapsed, sold-out hold is refunded.
+
 ## Architecture decisions shared by milestones
 
 **Data.**
@@ -188,7 +203,7 @@ Homepage with hero carousel. Product detail pages with gallery, Add to bag and S
 | M2 | `products.audience` (`women` / `men` / `unisex`), `products.colour_family` and `products.material` (fixed lists, for M3's filters). |
 | M3 | `products.search` (`tsvector` kept current by a trigger, GIN index) and a `pg_trgm` index for typo tolerance. |
 | M4 | `saved_items(user_id, product_id, created_at)`, PK on both ids, cascading deletes. |
-| M5 | `carts(id, user_id unique nullable, …)`, `cart_items(cart_id, product_id, quantity > 0)`, `orders(id, number, user_id nullable, email, status, subtotal, currency, stripe_session_id unique, created_at)`, `order_items(order_id, product_id, name, unit_price, quantity)`. |
+| M5 | `carts(id, user_id unique nullable, …)`, `cart_items(cart_id, product_id, quantity > 0)`, `checkouts` and `checkout_items` (stock holds), `orders(id, number, checkout_id unique, user_id nullable, email, status, subtotal, currency, payment_provider, payment_reference unique, created_at, …)`, `order_items(order_id, product_id, name, unit_price, quantity)`, `payment_events(id, provider, received_at)`. |
 | M6 | Better Auth admin fields (`role`, …) via `auth:generate`. |
 
 **Reads and writes.**
@@ -206,15 +221,15 @@ Homepage with hero carousel. Product detail pages with gallery, Add to bag and S
 | TanStack Query | Fetching and caching on the client: listings and search in M3, admin tables in M6. |
 | TanStack Pacer | Debouncing the search text (`useDebouncedValue`) in M3. It's beta, so the version is pinned and its use kept narrow. |
 
-TanStack DB was evaluated for search during M2's brainstorming. Its live queries run in the browser and have no full-text search or relevance ranking, so it isn't used there. Revisit it for the bag and saved items (M4, M5) and the admin tables (M6), where its optimistic mutations fit.
+TanStack DB was evaluated for search during M2's brainstorming. Its live queries run in the browser and have no full-text search or relevance ranking, so it isn't used there. M4 and M5 revisited it for saved items and the bag and kept TanStack Query's optimistic mutations instead (M5: it's at 0.13, not 1.0, and about 95 KB gzipped). Revisit it for the admin tables (M6).
 
-**Transactions.** The webhook and stock decrement need a transaction whose later statements depend on earlier results. The neon-http driver can't do that, so this path uses Neon's WebSocket driver (`drizzle-orm/neon-serverless` with a `Pool`). The decrement is `UPDATE … SET stock = stock - $q WHERE id = $id AND stock >= $q`; zero rows updated means out of stock, so the order is cancelled and refunded.
+**Transactions.** The webhook and stock decrement need a transaction whose later statements depend on earlier results. The neon-http driver can't do that, so this path uses Neon's WebSocket driver (`drizzle-orm/neon-serverless` with a `Pool`). The decrement is `UPDATE … SET stock = stock - $q WHERE id = $id AND stock >= $q`; zero rows updated means out of stock. From M5, stock is taken when checkout starts (a hold) and taken again at fulfilment only if the hold lapsed; when it's gone, the payment's authorisation is cancelled.
 
 **Integrations.** All keys are env vars, validated in `src/lib/env.ts`, with placeholders in `.env.example`.
 
 | Integration | Use |
 |---|---|
-| Stripe (test mode) | Checkout Sessions, refunds, signed webhooks. |
+| Stripe (test mode) | Checkout Sessions (`elements` UI mode, manual capture), refunds, signed webhooks. Behind `src/lib/payments/`, which Paystack implements after launch. |
 | Resend | Password reset and order confirmation emails. |
 | Vercel Blob | Admin image uploads; the host is added to `images.remotePatterns`. |
 | Vercel Cron | Nightly demo reset, authorised by `CRON_SECRET`. |
@@ -255,7 +270,7 @@ Tests are written first (red → green) for every behaviour a plan task introduc
 
 ## Risks
 
-- **Stripe webhooks on previews.** Every preview needs a reachable webhook endpoint and its own signing secret. Mitigation: the webhook path is tested in CI with signed test events; previews use the Stripe CLI or a per-preview endpoint, decided in M5.
+- **Stripe webhooks on previews: settled in the [M5 spec](2026-10-11-m5-bag-checkout-design.md).** Previews sit behind the Vercel login, so the success page confirms the payment with Stripe and runs the same idempotent fulfilment as the webhook; production has the webhook; locally `stripe listen`. The webhook is tested with signed test events.
 - **Neon branch sprawl.** One database branch per preview. Mitigation: the integration's automatic cleanup when a pull request closes.
 - **Demo abuse.** The public admin and checkout can be spammed. Mitigation: rate limits on the demo login and checkout, nightly reset, and limits on demo-admin permissions.
 - **Workflow skills not installed.** The writing-plans and executing-plans skills refer to companion skills (test-driven-development, subagent-driven-development, using-git-worktrees, requesting-code-review, finishing-a-development-branch) and a `sdd-workspace` script that aren't installed. Until they are, execution follows their intent: tests first, a ledger per plan, a fresh-context whole-branch review before each pull request.
