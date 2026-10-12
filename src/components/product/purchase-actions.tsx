@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import { CheckIcon, HeartIcon, ShoppingBagIcon, TruckIcon } from "lucide-react";
 
 import { Container } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
+import { AddedPanel, type AddedItem } from "@/components/bag/added-panel";
 import { MAX_QUANTITY } from "@/lib/bag/limits";
 import { useBag } from "@/lib/bag/use-bag";
 import { useSaved } from "@/lib/saved/use-saved";
@@ -47,6 +48,11 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
   const [soldOutSince, setSoldOutSince] = useState(false);
   const [atLimit, setAtLimit] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const [added, setAdded] = useState<AddedItem | null>(null);
+  // Where focus goes when the added-to-bag panel closes: the button that added, or Save for later
+  // when the bag now holds all there is (Add to bag is disabled then).
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const saveButtonRef = useRef<HTMLButtonElement>(null);
   const savedItems = useSaved();
   const hydrated = useHydrated();
   const [justAdded, setJustAdded] = useState(false);
@@ -76,7 +82,8 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
     return () => observer.disconnect();
   }, []);
 
-  async function add() {
+  async function add(event: React.MouseEvent<HTMLButtonElement>) {
+    const clicked = event.currentTarget;
     if (adding) return;
     setAdding(true);
     setAddError(null);
@@ -92,8 +99,11 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
       }
       setInBag(line.quantity);
       const limit = line.quantity >= MAX_QUANTITY && line.stock > MAX_QUANTITY;
+      const all = !limit && line.quantity >= line.stock;
       setAtLimit(limit);
-      setAllInBag(!limit && line.quantity >= line.stock);
+      setAllInBag(all);
+      returnFocus.current = limit || all ? saveButtonRef.current : clicked;
+      setAdded({ line, capped, pageStock: product.stock });
       if (!capped) {
         setJustAdded(true);
         setAnnouncement(`${product.name} added to your bag.`);
@@ -108,6 +118,8 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
       setAdding(false);
     }
   }
+
+  const closePanel = useCallback(() => setAdded(null), []);
 
   function toggleSave() {
     savedItems.toggle(product.slug);
@@ -129,7 +141,7 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
             {addLabel}
           </Button>
         </div>
-        <Button variant="outline" className="w-full" onClick={toggleSave} aria-pressed={saved}>
+        <Button ref={saveButtonRef} variant="outline" className="w-full" onClick={toggleSave} aria-pressed={saved}>
           <HeartIcon data-icon="inline-start" className={cn(saved && "fill-current")} />
           {saved ? "Saved" : "Save for later"}
         </Button>
@@ -189,6 +201,8 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
           </Button>
         </Container>
       </div>
+
+      <AddedPanel item={added} onClose={closePanel} returnFocus={returnFocus} />
     </>
   );
 }

@@ -90,3 +90,11 @@ test("the bag, full and empty", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1, name: "Shopping bag (1)" })).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
 });
+
+test("the added-to-bag panel", async ({ page }) => {
+  await gotoHydrated(page, "/products/leather-tote-tan", (page) => page.getByRole("button", { name: "Add to bag" }));
+  await page.getByRole("button", { name: "Add to bag" }).first().click();
+  await expect(page.getByRole("dialog", { name: "Added to bag" })).toBeVisible();
+  await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running"));
+  expect(await seriousViolations(page)).toEqual([]);
+});

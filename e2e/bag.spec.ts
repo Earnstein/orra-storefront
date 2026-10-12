@@ -114,3 +114,65 @@ test("an Add to bag made while the old bag is still moving lands in the same bag
   await expect(bagLink(page)).toHaveAccessibleName("Bag, 2 items", { timeout: 15_000 });
   expect(await serverBag(page)).toEqual({ "double-monk-shoe": 1, "leather-tote-tan": 1 });
 });
+
+const panel = (page: Page) => page.getByRole("dialog", { name: "Added to bag" });
+
+test("adding opens the added-to-bag panel with the item, Checkout and View bag; Escape closes it", async ({ page }) => {
+  await add(page, TOTE);
+  await expect(panel(page)).toBeVisible();
+  await expect(panel(page).getByText("Leather tote", { exact: true })).toBeVisible();
+  await expect(panel(page).getByText("Quantity in your bag: 1")).toBeVisible();
+  await expect(panel(page).getByRole("link", { name: "Checkout" })).toHaveAttribute("href", "/checkout");
+  await expect(panel(page).getByRole("link", { name: "View bag" })).toHaveAttribute("href", "/bag");
+  // Non-modal: the header (and its updated count) stays usable.
+  await expect(bagLink(page)).toHaveAccessibleName("Bag, 1 item");
+  await page.keyboard.press("Escape");
+  await expect(panel(page)).toBeHidden();
+  await expect(addButton(page)).toBeFocused();
+});
+
+test("View bag goes to the bag and closes the panel", async ({ page }) => {
+  await add(page, TOTE);
+  await panel(page).getByRole("link", { name: "View bag" }).click();
+  await expect(page).toHaveURL(/\/bag$/);
+  await expect(panel(page)).toBeHidden();
+  await expect(page.getByRole("heading", { level: 1, name: "Shopping bag (1)" })).toBeVisible();
+});
+
+test("the panel says when the bag now holds all the stock", async ({ page }) => {
+  // The shoe has 2 left in the seed.
+  await add(page, SHOE);
+  await page.keyboard.press("Escape");
+  await addButton(page).click();
+  await expect(panel(page).getByText("You have all 2 available in your bag")).toBeVisible();
+  await page.keyboard.press("Escape");
+  // Add to bag is disabled now, so focus goes to Save for later.
+  await expect(page.getByRole("button", { name: /^(Save for later|Saved)$/ })).toBeFocused();
+});
+
+test("the panel explains when less stock was left than the page showed", async ({ page }) => {
+  // The page's stock is cached; make the server's answer say only 1 was left.
+  await page.route("**/api/bag", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const response = await route.fetch();
+    const result = await response.json();
+    if (result.ok) {
+      result.data.capped = true;
+      result.data.bag.lines = result.data.bag.lines.map((l: object) => ({ ...l, stock: 1, quantity: 1 }));
+    }
+    await route.fulfill({ response, json: result });
+  });
+  await add(page, TOTE);
+  await expect(panel(page).getByText("Only 1 was left — it's in your bag")).toBeVisible();
+});
+
+test("the compact bar's Add to bag opens the panel too", async ({ page }) => {
+  await gotoHydrated(page, TOTE, addButton);
+  await page.mouse.wheel(0, 1500);
+  const compact = page.getByRole("button", { name: "Add to bag" }).last();
+  await expect(compact).toBeVisible();
+  const answered = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/bag");
+  await compact.click();
+  await answered;
+  await expect(panel(page)).toBeVisible();
+});

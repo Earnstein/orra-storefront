@@ -21,13 +21,15 @@ export function ProductGallery({ images, name }: { images: CatalogImage[]; name:
     <div className="flex flex-col gap-tile">
       <div className="relative">
         <ul
+          // On phones this strip scrolls sideways; focusable, so keyboard users can scroll it too (axe: scrollable-region-focusable).
+          tabIndex={0}
           aria-label={`${name}, image ${active + 1} of ${count}`}
           onScroll={(event) => {
             const el = event.currentTarget;
             if (el.clientWidth) setActive(Math.round(el.scrollLeft / el.clientWidth));
           }}
           className={cn(
-            "flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+            "flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain outline-none [scrollbar-width:none] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring [&::-webkit-scrollbar]:hidden",
             // Desktop frame: square, height-limited so the thumbnails stay on screen, never wider than ~half the viewport.
             "lg:relative lg:block lg:size-[min(calc(100svh-var(--spacing-header)-2*var(--spacing-block)-6.25rem-var(--spacing-tile)),48vw)] lg:overflow-hidden lg:bg-surface",
           )}
