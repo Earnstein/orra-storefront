@@ -92,7 +92,7 @@ Server actions (`src/lib/bag/actions.ts`) with Zod-validated input, returning M4
 - `moveToSaved(slug)`: removes the line and saves the item (to the account when signed in; the client adds it to the browser list when signed out);
 - `importLines(lines)`: the one-time move below.
 
-Each is one SQL statement (the Neon HTTP driver has no interactive transactions). The add is an `INSERT … ON CONFLICT DO UPDATE SET quantity = LEAST(old + added, stock, 10)`, so concurrent clicks can't pass the stock cap. Each returns the updated bag and whether the add was capped, and sets the count cookie.
+Each is one SQL statement (the Neon HTTP driver has no interactive transactions). The add is an `INSERT … ON CONFLICT (cart_id, product_id) DO UPDATE SET quantity = LEAST(cart_items.quantity + EXCLUDED.quantity, (SELECT stock FROM products WHERE id = EXCLUDED.product_id), 10)`: the stock is read by a scalar subquery inside the conflict update (an `ON CONFLICT` update can't see the `INSERT … SELECT`'s source tables), so concurrent clicks can't pass the stock cap. Each returns the updated bag and whether the add was capped, and sets the count cookie.
 
 ### Merge on sign-in
 
@@ -192,20 +192,20 @@ A **fake provider** (`src/lib/payments/fake.ts`) drives the unit tests. Paystack
 ### Data
 
 `src/db/schema/orders.ts`:
-- **`orders`:** `id`, `number` (from a sequence, shown as "ORR-10001"), `checkout_id` (unique), `user_id` (nullable; set to null when the account is deleted, so the record stays), `email`, `status` (`pending_capture`, `paid`, `cancelled`; M6 adds `fulfilled`), `subtotal`, `currency`, `shipping` (name and address, JSON), `payment_provider`, `payment_reference` (unique), `payment_summary` (e.g. "Visa ending 4242"), `guest_key_hash`, `email_sent_at`, `created_at`.
+- **`orders`:** `id`, `number` (from a sequence, shown as "ORR-10001"), `checkout_id` (unique), `user_id` (nullable; set to null when the account is deleted, so the record stays), `email`, `status` (`pending_capture`, `paid`, `cancelled`; M6 adds `fulfilled`), `subtotal`, `currency`, `shipping` (name and address, JSON), `payment_provider`, `payment_reference` (unique), `payment_summary` (e.g. "Visa ending 4242"), `guest_key_hash`, `email_attempted_at`, `email_sent_at`, `created_at`.
 - **`order_items`:** `order_id`, `product_id` (set to null if the product is deleted), and `name`, `unit_price`, `quantity` and `image` as they were at purchase.
 - **`payment_events`:** `id` (the provider's event id), `provider`, `received_at`; a repeated delivery is skipped.
 
 ### Fulfilment
 
 `fulfil(checkoutId)` is safe to call twice or at the same moment; the webhook and the success page both call it.
-1. A fulfilled checkout returns its order.
+1. A fulfilled checkout whose order is finished (`paid` or `cancelled`) returns it, after retrying anything left undone (the email; the undo of a cancelled payment). One whose order is still `pending_capture` (an earlier call stopped after the commit) skips to step 5 and resumes the capture: no new order and no stock change.
 2. `verify` the payment. Not authorised: return pending or failed, changing nothing.
 3. The authorised amount and currency must equal the checkout's; a mismatch is undone and logged, never fulfilled.
 4. In one transaction, lock the checkout row (`FOR UPDATE`):
    - **Hold open:** create the order (`pending_capture`) and its items; mark the checkout `fulfilled`.
    - **Hold lapsed:** take the stock again with the same conditional update. If that works, carry on as above; if not, mark the checkout `cancelled`.
-5. After the commit: `settle`, then mark the order `paid`. If capture fails, put the stock back, mark the order `cancelled` and `undo`. A later call retries an order still in `pending_capture`. For a cancelled checkout, `undo` (the authorisation is cancelled; no money is taken).
+5. After the commit: `settle`, then mark the order `paid`. If capture fails, put the stock back, mark the order `cancelled` and `undo`. A later call resumes an order still in `pending_capture` (step 1). For a cancelled checkout, `undo` (the authorisation is cancelled; no money is taken); `undo` is safe to repeat, and a later call repeats it while `verify` still reports the payment authorised.
 6. Remove the bought lines from the cart, set the count cookie (when called from the success page) and send the email once.
 
 ### Webhook
@@ -222,7 +222,11 @@ A static shell, `noindex`; the client calls `confirmCheckout(id)`, which runs `f
 
 ### Confirmation email
 
-`orderConfirmationEmail` (house style, escaped): order number, items, totals, address, estimated delivery and a link to the order. Sent in `after()`, exactly once: `UPDATE orders SET email_sent_at = now() WHERE id = $1 AND email_sent_at IS NULL RETURNING id` before sending. Guests' links carry a random key; only its SHA-256 hash is stored.
+`orderConfirmationEmail` (house style, escaped): order number, items, totals, address, estimated delivery and a link to the order. Sent in `after()`, once the order is `paid`, with a state that survives failures:
+- **Claim:** `UPDATE orders SET email_attempted_at = now() WHERE id = $1 AND email_sent_at IS NULL AND (email_attempted_at IS NULL OR email_attempted_at < now() - interval '10 minutes') RETURNING id`. Only one sender holds the claim; a claim abandoned by a crashed or cut-off function lapses after 10 minutes.
+- **Send:** `sendEmail` reports whether the provider accepted the email, and passes Resend's idempotency key `order-confirmation/<order id>`, so a send that succeeded but wasn't recorded isn't sent twice (Resend deduplicates for 24 hours).
+- **Record:** `email_sent_at` is set only after a confirmed send. A failure clears `email_attempted_at`, so the order stays eligible.
+- **Retry:** every later `fulfil` call for the order (the webhook's redeliveries, the success page's re-checks) tries again; M6's nightly job picks up any order still unsent. Guests' links carry a random key; only its SHA-256 hash is stored.
 
 ### Order history (module 6)
 
@@ -246,7 +250,7 @@ A static shell, `noindex`; the client calls `confirmCheckout(id)`, which runs `f
 | Layer | Covers |
 |---|---|
 | Unit | Bag limits and caps; the cookie signature; the payment interface's Stripe mapping (Stripe client stubbed); webhook signatures with Stripe's offline `generateTestHeaderString`; email templates. |
-| Database (PGlite, real migrations) | Bag actions including concurrent adds; the sign-in merge hook through `createTestAuth`; the one-time import; holds (create, reuse, short line, release, sweep, concurrent starts for the last unit); fulfilment with the fake provider (normal path, two calls at once giving one order, lapsed hold taken again, lapsed hold sold out and undone, capture failure, amount mismatch); duplicate webhook events; email sent once; the narrowed search trigger (a stock update leaves the index alone, a rename updates it); the migration replay. |
+| Database (PGlite, real migrations) | Bag actions including concurrent adds; the sign-in merge hook through `createTestAuth`; the one-time import; holds (create, reuse, short line, release, sweep, concurrent starts for the last unit); fulfilment with the fake provider (normal path, two calls at once giving one order, lapsed hold taken again, lapsed hold sold out and undone, capture failure, a call resuming an order left in `pending_capture`, amount mismatch); duplicate webhook events; the email sent once, retried after a failed send, and reclaimed after a lapsed claim; the narrowed search trigger (a stock update leaves the index alone, a rename updates it); the migration replay. |
 | End-to-end (Playwright, desktop and mobile) | Add to bag and the panel; quantity, Remove and Undo, Move to saved; the stock cap and a sold-out line; the guest bag merging on sign-in; the one-time import; the checkout gate; paying with Stripe test cards typed into Stripe's frames; success, processing and sold-out states; order history for a shopper and a guest link. Checkout tests need Stripe test keys and skip without them (the user adds them as GitHub secrets for CI). Fulfilment in e2e goes through the success page, the same path previews use. |
 | Accessibility (axe) | `/bag` (full and empty), the open panel, `/checkout`, the success page and the order pages. |
 
@@ -266,7 +270,7 @@ A static shell, `noindex`; the client calls `confirmCheckout(id)`, which runs `f
 
 - **`CLAUDE.md`:** the bag (data, cookies, actions, merge, import), checkout and holds, the payment interface and Stripe setup, orders and fulfilment, the success page, order history, the env vars and the Stripe test keys for e2e.
 - **`.env.example`:** the three Stripe variables.
-- **Roadmap:** M5's exit criteria as above; `elements` UI mode instead of the hosted page; previews finish orders on the success page; the data line for M5 gains `checkouts`, `checkout_items` and `payment_events`, and orders store `payment_provider`/`payment_reference` instead of `stripe_session_id`; the webhooks-on-previews risk is settled; a new post-launch milestone, **Paystack → `v1.1.0`**: a Paystack provider and popup, naira prices, Nigerian delivery addresses, and choosing the provider by currency.
+- **Roadmap:** M5's exit criteria as above; `elements` UI mode instead of the hosted page; previews finish orders on the success page; the data line for M5 gains `checkouts`, `checkout_items` and `payment_events`, and orders store `payment_provider`/`payment_reference` instead of `stripe_session_id`; the webhooks-on-previews risk is settled; M6's nightly job also resends order emails that never went out; a new post-launch milestone, **Paystack → `v1.1.0`**: a Paystack provider and popup, naira prices, Nigerian delivery addresses, and choosing the provider by currency.
 
 ## Risks
 

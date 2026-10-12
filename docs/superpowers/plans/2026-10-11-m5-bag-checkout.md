@@ -141,7 +141,7 @@
 - Produces:
   - `type BagLine = { slug; name; colour; unitPrice; image; stock; quantity; note: "reduced" | "sold-out" | null }`; `type Bag = { lines: BagLine[]; count: number; subtotal: number; currency: "USD" }` (`count` and `subtotal` leave sold-out lines out);
   - `readBag(db, cartId): Promise<Bag>`: live stock; a line above stock is lowered in the database in the same request (one `UPDATE … FROM products`) and marked `reduced`; a line with stock 0 stays and is marked `sold-out`;
-  - mutations, each one statement and returning `{ bag, capped }`: `addLine(db, cartId, slug, quantity)` (`INSERT … SELECT … FROM products WHERE slug = $slug AND stock > 0 ON CONFLICT (cart_id, product_id) DO UPDATE SET quantity = LEAST(cart_items.quantity + excluded.quantity, products.stock, 10)`; refuses a new line past 50), `setLineQuantity`, `removeLine`;
+  - mutations, each one statement and returning `{ bag, capped }`: `addLine(db, cartId, slug, quantity)` (`INSERT … SELECT … FROM products WHERE slug = $slug AND stock > 0 ON CONFLICT (cart_id, product_id) DO UPDATE SET quantity = LEAST(cart_items.quantity + EXCLUDED.quantity, (SELECT stock FROM products WHERE id = EXCLUDED.product_id), 10)`: the conflict update reads stock through a scalar subquery keyed by `EXCLUDED.product_id`, since it can't reference the `SELECT`'s `products`; refuses a new line past 50), `setLineQuantity`, `removeLine`;
   - actions `addToBag(slug, quantity = 1)`, `setQuantity(slug, quantity)`, `removeFromBag(slug)`, `moveToSaved(slug)` → `Promise<ActionResult<{ bag: Bag; capped: boolean }>>` (Zod: `isSlug`, quantity 1–10); each sets the count cookie, and `addToBag` creates the guest cookie when needed;
   - `GET /api/bag` → `Bag`, `Cache-Control: private, no-store`, `Server-Timing: db;dur=…`; sets the count cookie.
 
@@ -165,7 +165,7 @@
 
 **Interfaces:**
 - Produces:
-  - `mergeGuestCart(db, { guestCartId, userId }): Promise<{ count: number }>`: one statement inserts the guest lines into the user's cart (`ON CONFLICT DO UPDATE SET quantity = LEAST(sum, stock, 10)`, skipping lines that would pass 50), then deletes the guest cart;
+  - `mergeGuestCart(db, { guestCartId, userId }): Promise<{ count: number }>`: one statement inserts the guest lines into the user's cart (`ON CONFLICT (cart_id, product_id) DO UPDATE SET quantity = LEAST(cart_items.quantity + EXCLUDED.quantity, (SELECT stock FROM products WHERE id = EXCLUDED.product_id), 10)`, skipping lines that would pass 50), then deletes the guest cart;
   - `bagMergeHook` (a Better Auth `hooks.after` middleware) for `/sign-in/email` and `/sign-up/email` that reads the guest cookie from the request, merges into the new session's user, and clears the guest cookie and sets the count cookie on the response;
   - `importLines(lines: { slug: string; quantity: number }[])` (at most 50) → `ActionResult<{ count: number }>`.
 
@@ -351,7 +351,9 @@
   - two `fulfil` calls at once create one order and capture once;
   - a lapsed hold whose stock is still there takes it again and creates the order;
   - a lapsed hold whose stock sold elsewhere creates no order, marks the checkout `cancelled`, calls `undo` once and returns `sold-out` with the item names;
-  - a capture failure cancels the order, puts the stock back and calls `undo`; a later call retries an order left in `pending_capture`;
+  - a capture failure cancels the order, puts the stock back and calls `undo`;
+  - a call that stopped after the commit (the order left in `pending_capture`, the checkout `fulfilled`) is resumed by the next call: it captures and marks the order `paid` without creating a second order or touching stock; a fulfilled checkout returns early only once its order is `paid` or `cancelled`;
+  - a cancelled checkout whose `undo` failed repeats `undo` on the next call while `verify` reports the payment authorised;
   - an authorised amount or currency that differs from the checkout's is undone and logged, never fulfilled;
   - `pending` and `failed` payments change nothing;
   - the migration replay includes the tables.
@@ -393,15 +395,21 @@
 ### Task 16: The confirmation email
 
 **Files:**
-- Modify: `src/lib/email/templates.ts` (`orderConfirmationEmail`); `src/lib/orders/fulfil.ts` (send once after `paid`).
+- Modify: `src/lib/email/templates.ts` (`orderConfirmationEmail`); `src/lib/email/send.ts` (report `{ ok }`, pass an idempotency key); `src/lib/orders/fulfil.ts` (claim, send, record after `paid`); `drizzle/0009_orders.sql` (`email_attempted_at`).
 - Test: `src/lib/email/templates.test.ts`, `src/lib/orders/fulfil.test.ts`, `e2e/checkout.spec.ts` (the outbox).
 
 - [ ] **Step 1: Write the failing tests:**
   - the template escapes names, lists items and totals, and links to the order (a guest key in guests' links);
-  - two `fulfil` calls send one email (`email_sent_at`);
+  - two `fulfil` calls send one email;
+  - a failed send leaves `email_sent_at` null and clears the claim, and the next `fulfil` call sends it;
+  - a claim older than 10 minutes with no `email_sent_at` (a cut-off function) is taken over by the next call;
+  - the send carries the idempotency key `order-confirmation/<order id>`;
   - **e2e:** the outbox receives one email for the order.
 - [ ] **Step 2:** Run them. Expected: FAIL.
-- [ ] **Step 3: Implement.** Generate the guest key with `crypto.randomBytes(32)`, store its SHA-256, and send in `after()` after claiming `email_sent_at`.
+- [ ] **Step 3: Implement.**
+  - Generate the guest key with `crypto.randomBytes(32)` and store its SHA-256.
+  - `sendEmail(email, { idempotencyKey })` returns `{ ok: boolean }` (the outbox counts as ok); it still never throws, and existing callers ignore the result.
+  - In `after()`, once the order is `paid`: claim with `email_attempted_at` (null, or older than 10 minutes, and `email_sent_at` null), send, then set `email_sent_at` on `ok` or clear `email_attempted_at` on failure.
 - [ ] **Step 4: Verify and open the PR**
   - Run the full verification. Measure `startCheckout` and the webhook against the budgets.
   - Browser-check the success page's three states at the four widths.

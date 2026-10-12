@@ -161,7 +161,7 @@ Homepage with hero carousel. Product detail pages with gallery, Add to bag and S
 | Products | `/admin/products`: TanStack Table v9 list with search and sort. Create and edit with TanStack Form: fields, category, audience, colour family, material, price, stock, details, images uploaded to Vercel Blob with alt text. Edits refresh the affected storefront pages immediately. |
 | Orders | `/admin/orders`: list, detail, status changes (paid → fulfilled, cancel). |
 | Demo admin | A "Try the admin" button signs into the shared `demo-admin` account. It's rate-limited and can't manage users, roles or the owner account. |
-| Demo reset | A nightly Vercel Cron job hits a secret-protected route. It restores the catalogue and stock to the seed, deletes products that aren't in the seed, and clears orders and carts older than the reset window. On the demo, the seed is the catalogue's source of truth: catalogue changes meant to last (including the owner's) go into the seed. Users, roles and the owner's account are never reset. |
+| Demo reset | A nightly Vercel Cron job hits a secret-protected route. It restores the catalogue and stock to the seed, deletes products that aren't in the seed, and clears orders and carts older than the reset window. It also sends any order confirmation email that never went out (from the M5 spec: `email_sent_at` is set only after a confirmed send). On the demo, the seed is the catalogue's source of truth: catalogue changes meant to last (including the owner's) go into the seed. Users, roles and the owner's account are never reset. |
 
 **Exit:** a visitor edits a product through "Try the admin", sees the change on the storefront, and it is gone after the next reset; the owner's account and role are unaffected.
 
