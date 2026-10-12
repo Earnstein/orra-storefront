@@ -1,6 +1,6 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import { bagQueryKey } from "@/lib/bag/bag-query";
@@ -19,6 +19,10 @@ let started = false;
  */
 export function BagImport() {
   const queryClient = useQueryClient();
+  // Same mutation scope as useBag's changes: a guest has no cart cookie until the first write
+  // answers, so an Add to bag sent meanwhile would create a second guest cart and one of the two
+  // would be lost. In one scope, the add waits for the import (and its cookie).
+  const { mutateAsync: importLines } = useMutation({ mutationKey: ["bag"], scope: { id: "bag" }, mutationFn: postBag });
   useEffect(() => {
     const lines = bagActions.lines();
     if (started || lines.length === 0) return;
@@ -30,7 +34,7 @@ export function BagImport() {
       .map((line) => ({ slug: line.slug, quantity: Math.min(line.quantity, MAX_QUANTITY) }));
     if (batch.length === 0) return bagActions.clearLines();
     // Two tabs restored at once may both import; the server keeps the larger quantity, so nothing doubles.
-    void postBag({ kind: "import", lines: batch })
+    void importLines({ kind: "import", lines: batch })
       .then((result) => {
         // Invalid input (old data that no longer validates) can't succeed later either.
         if (!result.ok && result.error === "failed") return void (started = false);
@@ -41,6 +45,6 @@ export function BagImport() {
       .catch(() => {
         started = false;
       });
-  }, [queryClient]);
+  }, [queryClient, importLines]);
   return null;
 }

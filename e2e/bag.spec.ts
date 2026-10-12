@@ -97,3 +97,20 @@ test("a bag kept in this browser before M5 moves to the server once", async ({ p
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("orra:bag:v1") ?? "{}"));
   expect(stored).toEqual({ lines: [], saved: ["double-monk-shoe"] });
 });
+
+test("an Add to bag made while the old bag is still moving lands in the same bag", async ({ page }) => {
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("orra:bag:v1", JSON.stringify({ lines: [{ slug: "double-monk-shoe", quantity: 1 }], saved: [] }));
+  });
+  // Slow the import, so the add is clicked while it's still in flight.
+  await page.route("**/api/bag", async (route) => {
+    if (route.request().method() === "POST" && route.request().postData()?.includes('"import"')) await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.continue();
+  });
+  await gotoHydrated(page, TOTE, addButton);
+  await addButton(page).click();
+  await expect(bagLink(page)).toHaveAccessibleName("Bag, 2 items", { timeout: 15_000 });
+  expect(await serverBag(page)).toEqual({ "double-monk-shoe": 1, "leather-tote-tan": 1 });
+});
