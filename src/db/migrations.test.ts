@@ -65,8 +65,9 @@ describe("M3 migrations on a database that predates them", () => {
     expect(bySlug["leather-tote-tan"].search_text).toContain("leather");
     expect(bySlug["leather-tote-tan"].matches).toBe(true);
     expect(rows.every((row) => row.search_text.length > 0)).toBe(true);
-    // Writing null can't stick (the trigger recomputes both columns), and the columns are NOT NULL.
-    await client.query("update products set search = null, search_text = null");
+    // Writing null can't stick: the columns are NOT NULL. (Since M5's 0007 the trigger fires only
+    // for searchable columns, so a write to the search columns alone is refused, not recomputed.)
+    await expect(client.query("update products set search = null, search_text = null")).rejects.toThrow(/null/i);
     const after = await client.query<{ empty: number }>("select count(*)::int as empty from products where search_text = ''");
     expect(after.rows[0].empty).toBe(0);
     const columns = await client.query<{ column_name: string; is_nullable: string }>(
@@ -86,5 +87,22 @@ describe("M4 migrations", () => {
       "select column_name from information_schema.columns where table_name = 'saved_items' order by ordinal_position",
     );
     expect(rows.map((row) => row.column_name)).toEqual(["user_id", "product_id", "created_at"]);
+  });
+});
+
+describe("M5 migrations", () => {
+  it("add carts and cart_items", async () => {
+    const client = createPGlite();
+    const tags = migrationTags();
+    expect(tags).toContain("0007_server_bag");
+    await applyMigrations(client, tags);
+    const columns = async (table: string) =>
+      (
+        await client.query<{ column_name: string }>(
+          `select column_name from information_schema.columns where table_name = '${table}' order by ordinal_position`,
+        )
+      ).rows.map((row) => row.column_name);
+    expect(await columns("carts")).toEqual(["id", "user_id", "created_at", "updated_at"]);
+    expect(await columns("cart_items")).toEqual(["cart_id", "product_id", "quantity", "added_at"]);
   });
 });
