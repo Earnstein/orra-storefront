@@ -24,10 +24,17 @@ describe("the fake payment provider", () => {
     expect(fake.payments.get(reference)).toMatchObject({ status: "paid", settled: 1 });
   });
 
+  it("returns the same payment when the same checkout starts again", async () => {
+    const fake = createFakeProvider();
+    const first = await fake.provider.startPayment(input);
+    expect(await fake.provider.startPayment(input)).toEqual(first);
+    expect(fake.started).toBe(1);
+  });
+
   it("fails settles on request, and undo expires a pending payment or cancels an authorised one", async () => {
     const fake = createFakeProvider();
     const a = (await fake.provider.startPayment(input)).reference;
-    const b = (await fake.provider.startPayment(input)).reference;
+    const b = (await fake.provider.startPayment({ ...input, checkoutId: "c2" })).reference;
     fake.set(b, { status: "authorised" });
     fake.failSettle(b);
     await expect(fake.provider.settle(b)).rejects.toThrow(/settle failed/);

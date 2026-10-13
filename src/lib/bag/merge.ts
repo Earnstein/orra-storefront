@@ -8,6 +8,8 @@ import { ensureCart, findCart } from "./cart";
 import { BAG_COUNT_COOKIE, cartCookieName, cartCookieOptions, countCookieOptions, verifyCartCookie } from "./cookies";
 import { BAG_LINE_LIMIT, MAX_QUANTITY } from "./limits";
 import { readBag } from "./queries";
+import { availableTo } from "./stock";
+import { releaseGuestHolds } from "@/lib/checkout/holds";
 
 /**
  * Moves a guest bag into a user's bag in one statement, then deletes the guest cart. Lines for the
@@ -19,13 +21,18 @@ import { readBag } from "./queries";
  */
 export async function mergeGuestCart(db: SeedDatabase, { guestCartId, userId }: { guestCartId: string; userId: string }): Promise<{ cartId: string }> {
   const target = await ensureCart(db, { userId, guestCartId: null });
+  // The guest's own hold (checkout started, then signed in) would otherwise keep its stock until
+  // it expires, capping the very lines being merged. Its payment, if finished anyway, is a lapsed
+  // hold for fulfilment.
+  await releaseGuestHolds(db, guestCartId);
+  const available = availableTo(target.id, sql.raw("p"));
   await db.execute(sql`
     with guest as (delete from carts where id = ${guestCartId} and user_id is null returning id),
     candidates as (
-      select gi.product_id, least(gi.quantity, p.stock, ${MAX_QUANTITY}) as quantity, gi.added_at,
+      select gi.product_id, least(gi.quantity, ${available}, ${MAX_QUANTITY}) as quantity, gi.added_at,
         exists (select 1 from cart_items ui where ui.cart_id = ${target.id} and ui.product_id = gi.product_id) as existing
       from cart_items gi join products p on p.id = gi.product_id
-      where gi.cart_id = (select id from guest) and p.stock > 0
+      where gi.cart_id = (select id from guest) and ${available} > 0
     ),
     ranked as (select *, row_number() over (partition by existing order by added_at desc) as rank from candidates),
     merged as (
@@ -33,7 +40,7 @@ export async function mergeGuestCart(db: SeedDatabase, { guestCartId, userId }: 
       select ${target.id}, product_id, quantity, added_at from ranked
       where existing or rank <= ${BAG_LINE_LIMIT} - (select count(*) from cart_items where cart_id = ${target.id})
       on conflict (cart_id, product_id) do update
-        set quantity = least(cart_items.quantity + excluded.quantity, (select stock from products where id = excluded.product_id), ${MAX_QUANTITY})
+        set quantity = least(cart_items.quantity + excluded.quantity, (select ${available} from products p where p.id = excluded.product_id), ${MAX_QUANTITY})
       returning product_id
     )
     select (select count(*) from merged) as merged`);

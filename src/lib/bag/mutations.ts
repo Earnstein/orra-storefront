@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import type { SeedDatabase } from "@/db/seed";
 import { BAG_LINE_LIMIT, MAX_QUANTITY } from "./limits";
 import { readBag, rowsOf } from "./queries";
+import { availableTo } from "./stock";
 import type { Bag } from "./types";
 
 // Bag writes. Each change is one SQL statement (the Neon HTTP driver has no interactive
@@ -36,7 +37,7 @@ export async function addLine(db: SeedDatabase, cartId: string, slug: string, qu
   const combined = mode === "max" ? sql`greatest(cart_items.quantity, excluded.quantity)` : sql`cart_items.quantity + excluded.quantity`;
   const [row] = rowsOf<{ product_id: number | null; stock: number | null; before: number | null; after: number | null }>(
     await db.execute(sql`
-      with product as (select id, stock from products where slug = ${slug}),
+      with product as (select p.id, ${availableTo(cartId, sql.raw("p"))} as stock from products p where p.slug = ${slug}),
       before as (select ci.quantity from cart_items ci join product p on ci.product_id = p.id where ci.cart_id = ${cartId}),
       touch as (update carts set updated_at = now() where id = ${cartId}),
       upsert as (
@@ -45,7 +46,7 @@ export async function addLine(db: SeedDatabase, cartId: string, slug: string, qu
         where p.stock > 0
           and (exists (select 1 from before) or (select count(*) from cart_items where cart_id = ${cartId}) < ${BAG_LINE_LIMIT})
         on conflict (cart_id, product_id) do update
-          set quantity = least(${combined}, (select stock from products where id = excluded.product_id), ${MAX_QUANTITY})
+          set quantity = least(${combined}, (select ${availableTo(cartId, sql.raw("p"))} from products p where p.id = excluded.product_id), ${MAX_QUANTITY})
         returning quantity
       )
       select (select id from product) as product_id, (select stock from product) as stock,
@@ -66,9 +67,9 @@ export async function setLineQuantity(db: SeedDatabase, cartId: string, slug: st
     await db.execute(sql`
       with touch as (update carts set updated_at = now() where id = ${cartId}),
       updated as (
-        update cart_items ci set quantity = least(${quantity}, p.stock, ${MAX_QUANTITY})
+        update cart_items ci set quantity = least(${quantity}, ${availableTo(cartId, sql.raw("p"))}, ${MAX_QUANTITY})
         from products p
-        where ci.cart_id = ${cartId} and ci.product_id = p.id and p.slug = ${slug} and p.stock > 0
+        where ci.cart_id = ${cartId} and ci.product_id = p.id and p.slug = ${slug} and ${availableTo(cartId, sql.raw("p"))} > 0
         returning ci.quantity
       )
       select (select quantity from updated) as after`),

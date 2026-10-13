@@ -136,3 +136,8 @@ export function releaseExpiredHolds(db: SeedDatabase): Promise<number> {
 export async function releaseHold(db: SeedDatabase, checkoutId: string): Promise<boolean> {
   return (await release(db, sql`id = ${checkoutId}`)) > 0;
 }
+
+/** Releases a guest bag's open holds (when it merges into an account on sign-in); answers how many. */
+export function releaseGuestHolds(db: SeedDatabase, cartId: string): Promise<number> {
+  return release(db, sql`cart_id = ${cartId} and cart_id in (select id from carts where user_id is null)`);
+}

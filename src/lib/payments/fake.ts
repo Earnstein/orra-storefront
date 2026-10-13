@@ -3,12 +3,14 @@ import { InvalidWebhookError, type PaymentCheck, type PaymentEvent, type Payment
 type FakePayment = PaymentCheck & { input: StartPaymentInput; settled: number; undone: number; settleFails: boolean };
 
 /**
- * An in-memory payment provider for tests (never used by the app). Each started payment is
+ * An in-memory payment provider for tests (never used by the app). Starting the same checkout
+ * again returns the same payment, as Stripe's idempotency key does. Each started payment is
  * `pending` until a test moves it on with `set`; `failSettle` makes the next settles throw.
  * Webhooks are JSON events "signed" with the header `x-fake-signature: valid`.
  */
 export function createFakeProvider() {
   const payments = new Map<string, FakePayment>();
+  const byCheckout = new Map<string, string>();
   let started = 0;
 
   function get(reference: string): FakePayment {
@@ -20,8 +22,12 @@ export function createFakeProvider() {
   const provider: PaymentProvider = {
     name: "fake",
     async startPayment(input) {
+      // Like Stripe's idempotency key: the same checkout gets the same payment back.
+      const existing = byCheckout.get(input.checkoutId);
+      if (existing) return { reference: existing, clientSecret: `${existing}_secret` };
       started += 1;
       const reference = `fake_${started}`;
+      byCheckout.set(input.checkoutId, reference);
       const amount = input.lines.reduce((total, line) => total + line.unitPrice * line.quantity, 0);
       payments.set(reference, { status: "pending", amount, currency: input.currency, summary: null, shipping: null, input, settled: 0, undone: 0, settleFails: false });
       return { reference, clientSecret: `${reference}_secret` };
@@ -53,7 +59,7 @@ export function createFakeProvider() {
   return {
     provider,
     payments,
-    /** The number of payments started so far. */
+    /** The number of distinct payments started so far. */
     get started() {
       return started;
     },

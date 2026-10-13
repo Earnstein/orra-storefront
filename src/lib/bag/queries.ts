@@ -6,6 +6,7 @@ import { cartItems, products } from "@/db/schema";
 import type { SeedDatabase } from "@/db/seed";
 import type { CatalogImage } from "@/lib/catalog/types";
 import { MAX_QUANTITY } from "./limits";
+import { availableTo } from "./stock";
 import type { Bag, BagLine } from "./types";
 
 /** Rows from `db.execute`, which both drivers (Neon HTTP and PGlite) return as `{ rows }`. */
@@ -19,11 +20,12 @@ export function rowsOf<T>(result: unknown): T[] {
  * count and subtotal. Newest lines first.
  */
 export async function readBag(db: SeedDatabase, cartId: string): Promise<Bag> {
+  const available = availableTo(cartId, sql.raw("p"));
   const reduced = rowsOf<{ product_id: number }>(
     await db.execute(sql`
-      update cart_items ci set quantity = least(p.stock, ${MAX_QUANTITY})
+      update cart_items ci set quantity = least(${available}, ${MAX_QUANTITY})
       from products p
-      where ci.cart_id = ${cartId} and ci.product_id = p.id and p.stock > 0 and ci.quantity > least(p.stock, ${MAX_QUANTITY})
+      where ci.cart_id = ${cartId} and ci.product_id = p.id and ${available} > 0 and ci.quantity > least(${available}, ${MAX_QUANTITY})
       returning ci.product_id`),
   );
   const lowered = new Set(reduced.map((row) => Number(row.product_id)));
@@ -36,7 +38,7 @@ export async function readBag(db: SeedDatabase, cartId: string): Promise<Bag> {
       colour: products.colour,
       unitPrice: products.price,
       image: sql<CatalogImage | null>`${products.images} -> 0`,
-      stock: products.stock,
+      stock: availableTo(cartId, sql.raw(`"products"`)),
       quantity: cartItems.quantity,
     })
     .from(cartItems)
