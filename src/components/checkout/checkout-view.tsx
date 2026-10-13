@@ -148,7 +148,7 @@ function CheckoutPage({ email, onChangeEmail }: { email: string; onChangeEmail: 
           </div>
         </details>
 
-        <div className="flex flex-col gap-section lg:col-span-2">
+        <div className="flex flex-col gap-block lg:col-span-2">
           <section aria-labelledby="contact-heading" className="flex flex-col gap-4">
             <h2 id="contact-heading" className="eyebrow">
               1 Contact

@@ -24,7 +24,8 @@ export const stripeElementsOptions: StripeCheckoutElementsOptions = {
       focusOutline: "none",
     },
     rules: {
-      ".Label": { fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#5b5b5b" },
+      // As the site's own field labels (FieldLabel: 14px, medium, ink), e.g. Phone number beside them.
+      ".Label": { fontSize: "14px", fontWeight: "500", color: "#0d0d0d", marginBottom: "8px" },
       ".Input": { backgroundColor: "#ffffff", border: "none", borderBottom: "1px solid #0d0d0d", boxShadow: "none", padding: "10px 2px", fontSize: "16px" },
       ".Input:focus": { borderBottom: "2px solid #0d0d0d", boxShadow: "none" },
       ".Input--invalid": { borderBottom: "1px solid #c51e21", boxShadow: "none" },

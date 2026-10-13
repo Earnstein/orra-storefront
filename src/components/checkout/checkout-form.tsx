@@ -85,7 +85,7 @@ function Fields({ total }: { total: number }) {
     <form
       noValidate
       aria-label="Delivery and payment"
-      className="flex flex-col gap-section"
+      className="flex flex-col gap-block"
       onSubmit={async (event) => {
         event.preventDefault();
         await form.handleSubmit();
