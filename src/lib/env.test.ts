@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { authBaseUrl, parseServerEnv, trustedAuthOrigins } from "@/lib/env";
+import { authBaseUrl, parseServerEnv, paymentsConfigured, trustedAuthOrigins } from "@/lib/env";
 
 const PRODUCTION_URL = "https://orra-storefront.vercel.app";
 
@@ -70,5 +70,47 @@ describe("parseServerEnv", () => {
     const env = parseServerEnv({ ...base, RESEND_API_KEY: "re_test", EMAIL_OUTBOX_DIR: "/tmp/outbox" });
     expect(env.RESEND_API_KEY).toBe("re_test");
     expect(env.EMAIL_OUTBOX_DIR).toBe("/tmp/outbox");
+  });
+
+  // Placeholders shaped like Stripe's test keys; not real credentials.
+  const stripe = {
+    STRIPE_SECRET_KEY: "sk_test_placeholder",
+    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_test_placeholder",
+    STRIPE_WEBHOOK_SECRET: "whsec_placeholder",
+  };
+
+  it("leaves the Stripe keys optional, counting empty values as unset", () => {
+    const env = parseServerEnv({ ...base, STRIPE_SECRET_KEY: "", NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "", STRIPE_WEBHOOK_SECRET: "" });
+    expect(env.STRIPE_SECRET_KEY).toBeUndefined();
+    expect(env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY).toBeUndefined();
+    expect(env.STRIPE_WEBHOOK_SECRET).toBeUndefined();
+    expect(paymentsConfigured(env)).toBe(false);
+  });
+
+  it("returns the Stripe keys when set; payments need the secret and publishable keys", () => {
+    const env = parseServerEnv({ ...base, ...stripe });
+    expect(env.STRIPE_SECRET_KEY).toBe("sk_test_placeholder");
+    expect(paymentsConfigured(env)).toBe(true);
+    expect(paymentsConfigured(parseServerEnv({ ...base, STRIPE_SECRET_KEY: stripe.STRIPE_SECRET_KEY }))).toBe(false);
+  });
+
+  it("accepts only Stripe test-mode keys (the store promises no real money)", () => {
+    expect(() => parseServerEnv({ ...base, ...stripe, STRIPE_SECRET_KEY: "sk_live_placeholder" })).toThrow(/STRIPE_SECRET_KEY/);
+    expect(() => parseServerEnv({ ...base, ...stripe, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_live_placeholder" })).toThrow(
+      /NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY/,
+    );
+    // A restricted test key works too.
+    expect(parseServerEnv({ ...base, ...stripe, STRIPE_SECRET_KEY: "rk_test_placeholder" }).STRIPE_SECRET_KEY).toBe("rk_test_placeholder");
+  });
+
+  it("never puts a rejected key's value in the error", () => {
+    let message = "";
+    try {
+      parseServerEnv({ ...base, ...stripe, STRIPE_SECRET_KEY: "sk_live_do-not-echo" });
+    } catch (error) {
+      message = String(error);
+    }
+    expect(message).toMatch(/STRIPE_SECRET_KEY/);
+    expect(message).not.toContain("do-not-echo");
   });
 });

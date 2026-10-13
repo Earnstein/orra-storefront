@@ -18,6 +18,12 @@ const serverSchema = z
     RESEND_API_KEY: optional(z.string()),
     // Local runs and CI only: also write each email to a file here, so e2e tests can read links.
     EMAIL_OUTBOX_DIR: optional(z.string()),
+    // Stripe, test mode only: the store promises "no real money". Without the secret and
+    // publishable keys, checkout says it's unavailable. Messages never include the value.
+    STRIPE_SECRET_KEY: optional(z.string().regex(/^(sk|rk)_test_/, { error: "must be a Stripe test-mode secret key (sk_test_ or rk_test_)" })),
+    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: optional(z.string().regex(/^pk_test_/, { error: "must be a Stripe test-mode publishable key (pk_test_)" })),
+    // Verifies webhooks; without it every webhook is refused.
+    STRIPE_WEBHOOK_SECRET: optional(z.string()),
   })
   .superRefine((env, ctx) => {
     if (env.VERCEL_ENV !== "preview" && !env.BETTER_AUTH_URL) {
@@ -33,6 +39,11 @@ export type ServerEnv = z.infer<typeof serverSchema>;
 
 export function parseServerEnv(raw: Record<string, string | undefined>): ServerEnv {
   return serverSchema.parse(raw);
+}
+
+/** Whether checkout can take payments: Stripe's secret and publishable keys are both set. */
+export function paymentsConfigured(env: Pick<ServerEnv, "STRIPE_SECRET_KEY" | "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY">): boolean {
+  return Boolean(env.STRIPE_SECRET_KEY && env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 }
 
 /** Server-only env. Throws on first access if anything is missing or invalid. */
