@@ -33,6 +33,9 @@ export async function takeStock(tx: SeedDatabase, lines: { productId: number; qu
     lines.map((line) => sql`(${line.productId}::int, ${line.quantity}::int)`),
     sql`, `,
   );
+  // Lock the rows in id order first, so two holds over the same products can't deadlock.
+  const ids = [...new Set(lines.map((line) => line.productId))].sort((x, y) => x - y);
+  await tx.execute(sql`select id from products where id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) order by id for update`);
   const taken = rowsOf<{ id: number }>(
     await tx.execute(sql`
       with wanted (product_id, quantity) as (values ${wanted})
@@ -106,12 +109,22 @@ export async function findOpenHold(db: SeedDatabase, cartId: string): Promise<Op
   };
 }
 
-/** Marks the matching open holds `expired` and returns their stock, in one statement. */
-async function release(db: SeedDatabase, which: ReturnType<typeof sql>): Promise<number> {
-  const [row] = rowsOf<{ released: number }>(
+/**
+ * A hold that ran out is only swept (or counted as free by other bags, see `availableTo`) this long
+ * after it expired: its Stripe session expires at the same moment, and a payment authorised in its
+ * last seconds must still find the hold when fulfilment comes to take the money.
+ */
+export const HOLD_GRACE = sql.raw("interval '2 minutes'");
+
+/**
+ * Marks the matching open holds `expired` and returns their stock, in one statement; answers the
+ * released holds' payment references (null before a payment started).
+ */
+async function release(db: SeedDatabase, which: ReturnType<typeof sql>): Promise<(string | null)[]> {
+  const rows = rowsOf<{ payment_reference: string | null }>(
     await db.execute(sql`
       with released as (
-        update checkouts set status = 'expired' where status = 'open' and ${which} returning id
+        update checkouts set status = 'expired' where status = 'open' and ${which} returning id, payment_reference
       ),
       returned as (
         update products p set stock = p.stock + r.quantity
@@ -122,22 +135,35 @@ async function release(db: SeedDatabase, which: ReturnType<typeof sql>): Promise
         ) r
         where p.id = r.product_id
       )
-      select count(*)::int as released from released`),
+      select payment_reference from released`),
   );
-  return Number(row?.released ?? 0);
+  return rows.map((row) => row.payment_reference);
 }
 
-/** Releases every open hold whose time has run out; answers how many. */
-export function releaseExpiredHolds(db: SeedDatabase): Promise<number> {
-  return release(db, sql`expires_at < now()`);
+/** Releases every open hold whose time ran out more than HOLD_GRACE ago; answers how many. */
+export async function releaseExpiredHolds(db: SeedDatabase): Promise<number> {
+  return (await release(db, sql`expires_at < now() - ${HOLD_GRACE}`)).length;
 }
 
 /** Releases one hold if it's still open; false when it was already released, paid or cancelled. */
 export async function releaseHold(db: SeedDatabase, checkoutId: string): Promise<boolean> {
-  return (await release(db, sql`id = ${checkoutId}`)) > 0;
+  return (await release(db, sql`id = ${checkoutId}`)).length > 0;
 }
 
-/** Releases a guest bag's open holds (when it merges into an account on sign-in); answers how many. */
-export function releaseGuestHolds(db: SeedDatabase, cartId: string): Promise<number> {
-  return release(db, sql`cart_id = ${cartId} and cart_id in (select id from carts where user_id is null)`);
+/**
+ * Releases a bag's open holds, run out or not (a new hold replaces them, or the bag was emptied);
+ * answers their payment references, which the caller must undo.
+ */
+export async function releaseCartHolds(db: SeedDatabase, cartId: string): Promise<string[]> {
+  return (await release(db, sql`cart_id = ${cartId}`)).filter((reference): reference is string => reference !== null);
+}
+
+/**
+ * Releases a guest bag's open holds (when it merges into an account on sign-in); answers their
+ * payment references, which the caller must undo.
+ */
+export async function releaseGuestHolds(db: SeedDatabase, cartId: string): Promise<string[]> {
+  return (await release(db, sql`cart_id = ${cartId} and cart_id in (select id from carts where user_id is null)`)).filter(
+    (reference): reference is string => reference !== null,
+  );
 }

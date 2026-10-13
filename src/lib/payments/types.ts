@@ -1,11 +1,11 @@
 /**
  * The payment-provider interface. The rest of the app imports only this, so Paystack (v1.1.0) can
- * implement the same five calls: start a payment, check it, take the money, give it back, and
- * read a webhook.
+ * implement the same calls: start a payment (or resume one), check it, take the money, give it
+ * back, and read a webhook.
  */
 
-/** One line of a hold, priced from the database (cents). */
-export type PaymentLine = { name: string; unitPrice: number; quantity: number; image: string | null };
+/** One line of a hold, as the hold recorded it (name and price in cents). */
+export type PaymentLine = { name: string; unitPrice: number; quantity: number };
 
 export type StartPaymentInput = {
   checkoutId: string;
@@ -57,7 +57,13 @@ export type PaymentEvent = {
 
 export interface PaymentProvider {
   name: "stripe" | "fake";
+  /**
+   * Starts the payment for a hold. Safe to retry with the same input (an idempotency key per
+   * checkout); different input for the same checkout is refused, so build it from the hold.
+   */
   startPayment(input: StartPaymentInput): Promise<{ reference: string; clientSecret: string }>;
+  /** The client secret of a payment already started and still open, to show its form again. */
+  resume(reference: string): Promise<{ clientSecret: string }>;
   verify(reference: string): Promise<PaymentCheck>;
   /** Takes authorised money. Safe to repeat: does nothing once paid. */
   settle(reference: string): Promise<void>;

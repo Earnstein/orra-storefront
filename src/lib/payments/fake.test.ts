@@ -9,7 +9,7 @@ const input = {
   currency: "USD" as const,
   expiresAt: new Date(),
   returnUrl: "https://orra.test/checkout/success",
-  lines: [{ name: "Tote", unitPrice: 1000, quantity: 2, image: null }],
+  lines: [{ name: "Tote", unitPrice: 1000, quantity: 2 }],
 };
 
 describe("the fake payment provider", () => {
@@ -29,6 +29,16 @@ describe("the fake payment provider", () => {
     const first = await fake.provider.startPayment(input);
     expect(await fake.provider.startPayment(input)).toEqual(first);
     expect(fake.started).toBe(1);
+    // As Stripe does, the same checkout with different input is refused.
+    await expect(fake.provider.startPayment({ ...input, returnUrl: "https://orra.test/elsewhere" })).rejects.toThrow(/different input/);
+  });
+
+  it("resumes a pending payment and refuses a finished one", async () => {
+    const fake = createFakeProvider();
+    const { reference } = await fake.provider.startPayment(input);
+    expect(await fake.provider.resume(reference)).toEqual({ clientSecret: `${reference}_secret` });
+    await fake.provider.undo(reference);
+    await expect(fake.provider.resume(reference)).rejects.toThrow(/expired/);
   });
 
   it("fails settles on request, and undo expires a pending payment or cancels an authorised one", async () => {

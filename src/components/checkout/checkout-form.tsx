@@ -39,20 +39,20 @@ const paymentOptions = { wallets: { link: "never" } } as const;
 const dateFormat = new Intl.DateTimeFormat(site.locale, { weekday: "short", day: "numeric", month: "short" });
 const noopSubscribe = () => () => {};
 
-type Props = { publishableKey: string; clientSecret: string; total: number };
+type Props = { publishableKey: string; clientSecret: string; total: number; onPaying: (paying: boolean) => void };
 
 /** Delivery (Stripe's address fields, US only) and Payment (Stripe's Payment Element), then Pay. */
-export default function CheckoutForm({ publishableKey, clientSecret, total }: Props) {
+export default function CheckoutForm({ publishableKey, clientSecret, total, onPaying }: Props) {
   return (
     <CheckoutElementsProvider stripe={stripeFor(publishableKey)} options={{ clientSecret, elementsOptions: stripeElementsOptions }}>
-      <Fields total={total} />
+      <Fields total={total} onPaying={onPaying} />
     </CheckoutElementsProvider>
   );
 }
 
 const phoneForm = z.object({ phone: phoneSchema });
 
-function Fields({ total }: { total: number }) {
+function Fields({ total, onPaying }: Pick<Props, "total" | "onPaying">) {
   const state = useCheckoutElements();
   const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
   const delivery = hydrated ? deliveryWindow(new Date()) : null;
@@ -66,12 +66,23 @@ function Fields({ total }: { total: number }) {
     onSubmit: async ({ value }) => {
       if (state.type !== "success") return;
       setError(null);
+      onPaying(true);
       // On success Stripe goes to the session's return URL (/checkout/success?checkout=…).
-      const result = await state.checkout.confirm({ phoneNumber: usPhone(value.phone) ?? undefined });
-      if (result.type === "error") {
-        console.error("checkout: payment not confirmed", result.error.code, result.error.message);
-        // Stripe's messages are written for shoppers ("Your card was declined."), except the odd code.
-        setError(/\s/.test(result.error.message) ? result.error.message : "Your payment didn't go through. Check your details and try again.");
+      let failure: string | null = null;
+      try {
+        const result = await state.checkout.confirm({ phoneNumber: usPhone(value.phone) ?? undefined });
+        if (result.type === "error") {
+          console.error("checkout: payment not confirmed", result.error.code, result.error.message);
+          // Stripe's messages are written for shoppers ("Your card was declined."), except the odd code.
+          failure = /\s/.test(result.error.message) ? result.error.message : "Your payment didn't go through. Check your details and try again.";
+        }
+      } catch (thrown) {
+        console.error("checkout: confirm failed", thrown instanceof Error ? thrown.message : thrown);
+        failure = "Your payment didn't go through. Check your connection and try again.";
+      }
+      if (failure) {
+        onPaying(false);
+        setError(failure);
         // The message takes focus so it's read out and seen, even below the fold.
         requestAnimationFrame(() => errorRef.current?.focus());
       }

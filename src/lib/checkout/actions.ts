@@ -7,7 +7,7 @@ import { db } from "@/db";
 import { withTransaction } from "@/db/tx";
 import { emailSchema } from "@/lib/auth/schemas";
 import { readCartRef } from "@/lib/bag/request";
-import { authBaseUrl, serverEnv } from "@/lib/env";
+import { authBaseUrl, serverEnv, trustedAuthOrigins, type ServerEnv } from "@/lib/env";
 import { paymentProvider } from "@/lib/payments";
 import { startCheckoutWith, type StartResult } from "./start";
 
@@ -19,6 +19,16 @@ const startSchema = z.object({ email: emailSchema });
  * action makes Next refetch the page); a lowered bag shows in its answer, and the header count
  * catches up on the next bag read.
  */
+/**
+ * Where Stripe sends the shopper back: the site they're on, if it's one we serve (a preview is
+ * reached at its branch URL as well as its deployment URL, and the bag and session cookies are
+ * host-only), else the canonical one.
+ */
+function returnOrigin(origin: string | null, env: ServerEnv): string {
+  const ours = [authBaseUrl(env), ...trustedAuthOrigins(env)];
+  return origin && ours.includes(origin) ? origin : authBaseUrl(env);
+}
+
 /** The start's answer, plus Stripe's publishable key on success (read at runtime, not built in). */
 export type CheckoutStart = Exclude<StartResult, { ok: true }> | { ok: true; data: Extract<StartResult, { ok: true }>["data"] & { publishableKey: string } };
 
@@ -28,8 +38,9 @@ export async function startCheckout(input: { email: string }): Promise<CheckoutS
 
   const env = serverEnv();
   const cart = await readCartRef();
+  const requestHeaders = await headers();
   // The client's address, as Better Auth reads it: Vercel puts it first.
-  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+  const ip = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
   try {
     const result = await startCheckoutWith(
       {
@@ -37,7 +48,7 @@ export async function startCheckout(input: { email: string }): Promise<CheckoutS
         transact: withTransaction,
         provider: paymentProvider,
         rateLimit: env.VERCEL_ENV === "production" || env.VERCEL_ENV === "preview",
-        baseUrl: authBaseUrl(env),
+        baseUrl: returnOrigin(requestHeaders.get("origin"), env),
       },
       { cart, email: parsed.data.email, ip },
     );

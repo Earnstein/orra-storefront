@@ -76,7 +76,7 @@ export function createStripeProvider({ client, webhookSecret }: { client: Stripe
             price_data: {
               currency: input.currency.toLowerCase(),
               unit_amount: line.unitPrice,
-              product_data: { name: line.name, ...(line.image ? { images: [line.image] } : {}) },
+              product_data: { name: line.name },
             },
           })),
           customer_email: input.email,
@@ -95,6 +95,12 @@ export function createStripeProvider({ client, webhookSecret }: { client: Stripe
       );
       if (!session.client_secret) throw new Error("Stripe returned no client secret for the checkout session");
       return { reference: session.id, clientSecret: session.client_secret };
+    },
+
+    async resume(reference) {
+      const session = await client.checkout.sessions.retrieve(reference);
+      if (session.status !== "open" || !session.client_secret) throw new Error(`Can't resume a checkout session that is ${session.status}`);
+      return { clientSecret: session.client_secret };
     },
 
     async verify(reference): Promise<PaymentCheck> {

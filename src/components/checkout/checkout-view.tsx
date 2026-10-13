@@ -47,12 +47,13 @@ export function CheckoutView() {
   const session = useBrowserSession();
   const [chosen, setChosen] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  // A guest's email for this tab survives a reload; a signed-in shopper uses their account's.
+  // A guest's email for this tab survives a reload; a signed-in shopper uses their account's
+  // (unless they changed it here).
   const [remembered] = useState(rememberedEmail);
-  const email = chosen ?? remembered ?? session.user?.email ?? null;
+  const email = chosen ?? (session.user ? session.user.email : remembered);
   const signedIn = Boolean(session.user);
 
-  if (session.isPending && !chosen && !remembered) return <CheckoutSkeleton />;
+  if (session.isPending && !chosen) return <CheckoutSkeleton />;
   if (!email || editing) {
     return (
       <CheckoutGate
@@ -71,15 +72,29 @@ export function CheckoutView() {
 
 function CheckoutPage({ email, onChangeEmail }: { email: string; onChangeEmail: () => void }) {
   const router = useRouter();
+  // While a payment is being confirmed (say the shopper is away in their bank's app), coming back
+  // to the tab doesn't restart checkout under it.
+  const [paying, setPaying] = useState(false);
   const start = useQuery({
     queryKey: ["checkout", email],
     queryFn: () => startCheckout({ email }),
     staleTime: Infinity,
     gcTime: 0,
     retry: false,
-    refetchOnWindowFocus: "always",
+    refetchOnWindowFocus: paying ? false : "always",
   });
-  const answer: CheckoutStart | undefined = start.data;
+
+  // A refresh that fails (offline, a server error) keeps a hold that's still running on screen,
+  // with the shopper's address and card, instead of replacing it with an error.
+  type Started = Extract<CheckoutStart, { ok: true }>;
+  const [kept, setKept] = useState<Started | null>(null);
+  const [lapsed, setLapsed] = useState(false);
+  if (start.data?.ok && start.data !== kept) {
+    setKept(start.data);
+    setLapsed(false);
+  }
+  const refreshFailed = start.isError || (start.data !== undefined && !start.data.ok && start.data.error === "failed");
+  const answer: CheckoutStart | undefined = refreshFailed && kept && !lapsed ? kept : start.data;
 
   // The bag may have been lowered while starting: the header count catches up.
   useEffect(() => {
@@ -92,12 +107,18 @@ function CheckoutPage({ email, onChangeEmail }: { email: string; onChangeEmail: 
   const { refetch } = start;
   useEffect(() => {
     if (!expiresAt) return;
-    const timeout = window.setTimeout(() => void refetch(), Math.max(new Date(expiresAt).getTime() - Date.now(), 0) + 1000);
+    const timeout = window.setTimeout(
+      () => {
+        setLapsed(true);
+        void refetch();
+      },
+      Math.max(new Date(expiresAt).getTime() - Date.now(), 0) + 1000,
+    );
     return () => window.clearTimeout(timeout);
   }, [expiresAt, refetch]);
 
   if (start.isPending) return <CheckoutSkeleton />;
-  if (start.isError || !answer) return <Problem message="Something went wrong. Try again." onRetry={() => void refetch()} />;
+  if (!answer) return <Problem message="Something went wrong. Try again." onRetry={() => void refetch()} />;
   if (!answer.ok) {
     if (answer.error === "invalid" && answer.reason === "short") {
       return (
@@ -162,7 +183,7 @@ function CheckoutPage({ email, onChangeEmail }: { email: string; onChangeEmail: 
           </section>
           <Suspense fallback={<Skeleton className="h-96 bg-surface" />}>
             {/* A new hold means a new payment: remount Stripe's fields for it. */}
-            <CheckoutForm key={clientSecret} publishableKey={publishableKey} clientSecret={clientSecret} total={summary.subtotal} />
+            <CheckoutForm key={clientSecret} publishableKey={publishableKey} clientSecret={clientSecret} total={summary.subtotal} onPaying={setPaying} />
           </Suspense>
           <p className="text-caption text-muted-foreground">Payments run in Stripe test mode — no real money</p>
         </div>

@@ -6,6 +6,7 @@ import { after } from "next/server";
 import { db } from "@/db";
 import { authOptions, resetPasswordSender } from "@/lib/auth.options";
 import { bagMergeHook } from "@/lib/bag/merge";
+import { paymentProvider } from "@/lib/payments";
 import { sendEmail } from "@/lib/email/send";
 import { authBaseUrl, serverEnv, trustedAuthOrigins } from "@/lib/env";
 
@@ -24,7 +25,19 @@ export const auth = betterAuth({
   hooks: {
     ...authOptions.hooks,
     // Moves a guest's bag into the account on sign-in (needs the database, so it's set here).
-    after: bagMergeHook(db, { secure: authBaseUrl(env).startsWith("https://"), secret: env.BETTER_AUTH_SECRET }),
+    after: bagMergeHook(db, {
+      secure: authBaseUrl(env).startsWith("https://"),
+      secret: env.BETTER_AUTH_SECRET,
+      // A guest's hold released by the merge mustn't stay payable; Stripe is called after the response.
+      onHoldsReleased: (references) =>
+        after(async () => {
+          for (const reference of references) {
+            await paymentProvider()
+              .undo(reference)
+              .catch((error) => console.error("[bag] couldn't undo a released payment:", error instanceof Error ? error.message : error));
+          }
+        }),
+    }),
   },
   rateLimit: {
     ...authOptions.rateLimit,

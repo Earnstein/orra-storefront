@@ -16,6 +16,9 @@ import * as schema from "./schema";
  */
 export async function withTransaction<T>(fn: (tx: SeedDatabase) => Promise<T>): Promise<T> {
   const pool = new Pool({ connectionString: serverEnv().DATABASE_URL });
+  // An idle connection dropping (between the commit and the pool closing) is reported here;
+  // without a listener it would be an uncaught exception.
+  pool.on("error", (error: Error) => console.error("db: transaction pool error", error.message));
   after(() => pool.end());
   const db = drizzle({ client: pool, schema, casing: "snake_case" });
   return db.transaction((tx) => fn(tx));

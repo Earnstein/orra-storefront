@@ -1,6 +1,6 @@
 import { InvalidWebhookError, type PaymentCheck, type PaymentEvent, type PaymentProvider, type StartPaymentInput } from "./types";
 
-type FakePayment = PaymentCheck & { input: StartPaymentInput; settled: number; undone: number; settleFails: boolean };
+type FakePayment = PaymentCheck & { input: StartPaymentInput; settled: number; undone: number; resumed: number; settleFails: boolean };
 
 /**
  * An in-memory payment provider for tests (never used by the app). Starting the same checkout
@@ -22,15 +22,25 @@ export function createFakeProvider() {
   const provider: PaymentProvider = {
     name: "fake",
     async startPayment(input) {
-      // Like Stripe's idempotency key: the same checkout gets the same payment back.
+      // Like Stripe's idempotency key: the same checkout gets the same payment back, and different
+      // input for the same checkout is refused.
       const existing = byCheckout.get(input.checkoutId);
-      if (existing) return { reference: existing, clientSecret: `${existing}_secret` };
+      if (existing) {
+        if (JSON.stringify(get(existing).input) !== JSON.stringify(input)) throw new Error("fake: same checkout started with different input");
+        return { reference: existing, clientSecret: `${existing}_secret` };
+      }
       started += 1;
       const reference = `fake_${started}`;
       byCheckout.set(input.checkoutId, reference);
       const amount = input.lines.reduce((total, line) => total + line.unitPrice * line.quantity, 0);
-      payments.set(reference, { status: "pending", amount, currency: input.currency, summary: null, shipping: null, input, settled: 0, undone: 0, settleFails: false });
+      payments.set(reference, { status: "pending", amount, currency: input.currency, summary: null, shipping: null, input, settled: 0, undone: 0, resumed: 0, settleFails: false });
       return { reference, clientSecret: `${reference}_secret` };
+    },
+    async resume(reference) {
+      const payment = get(reference);
+      if (payment.status !== "pending") throw new Error(`fake: can't resume a payment that is ${payment.status}`);
+      payment.resumed += 1;
+      return { clientSecret: `${reference}_secret` };
     },
     async verify(reference) {
       const { status, amount, currency, summary, shipping } = get(reference);

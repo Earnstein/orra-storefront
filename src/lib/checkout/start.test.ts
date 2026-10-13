@@ -84,6 +84,54 @@ describe("startCheckout", () => {
     expect(fake.started).toBe(1);
   });
 
+  it("resumes the hold's payment on reuse, even when the bag's lines come back in another order", async () => {
+    const { cart, cartId } = await guestBag({ "leather-tote-tan": 1, "double-monk-shoe": 1 });
+    const first = await start(cart);
+    // Remove, then Undo: the line comes back at the top of the bag.
+    await db.execute(sql`delete from cart_items where cart_id = ${cartId} and product_id = (select id from products where slug = 'leather-tote-tan')`);
+    await addLine(db, cartId, "leather-tote-tan", 1);
+    const second = await start(cart);
+    if (!first.ok || !second.ok) throw new Error("expected both to start");
+    expect(second.data).toMatchObject({ checkoutId: first.data.checkoutId, clientSecret: first.data.clientSecret });
+    expect(fake.started).toBe(1);
+    expect(fake.payments.get("fake_1")?.resumed).toBe(1);
+  });
+
+  it("keeps a reused hold when its payment can't be resumed", async () => {
+    const tote = await product("leather-tote-tan");
+    const { cart } = await guestBag({ "leather-tote-tan": 1 });
+    const first = await start(cart);
+    if (!first.ok) throw new Error(first.message);
+    fake.set("fake_1", { status: "authorised" });
+    expect(await start(cart)).toMatchObject({ ok: false, error: "failed" });
+    expect(await stockOf("leather-tote-tan")).toBe(tote.stock - 1);
+    expect((await db.select({ status: checkouts.status }).from(checkouts).where(eq(checkouts.id, first.data.checkoutId)))[0]?.status).toBe("open");
+  });
+
+  it("undoes a replaced hold's payment even when the new payment can't start", async () => {
+    const tote = await product("leather-tote-tan");
+    const { cart, cartId } = await guestBag({ "leather-tote-tan": 1 });
+    expect((await start(cart)).ok).toBe(true);
+    await setLineQuantity(db, cartId, "leather-tote-tan", 2);
+    const failing = { ...fake.provider, startPayment: async () => Promise.reject(new Error("stripe is down")) };
+    expect(await start(cart, { provider: () => failing })).toMatchObject({ ok: false, error: "failed" });
+    expect(fake.payments.get("fake_1")?.undone).toBe(1);
+    expect(await stockOf("leather-tote-tan")).toBe(tote.stock);
+    expect(await db.select().from(checkouts).where(eq(checkouts.status, "open"))).toHaveLength(0);
+  });
+
+  it("gives two starts for the same bag at once one hold and one payment, and never says sold out", async () => {
+    await setStock("double-monk-shoe", 1);
+    const { cart } = await guestBag({ "double-monk-shoe": 1 });
+    const [a, b] = await Promise.all([start(cart), start(cart)]);
+    if (!a.ok || !b.ok) throw new Error(`expected both to start: ${JSON.stringify([a, b].map((r) => (r.ok ? "ok" : r.message)))}`);
+    expect(b.data.checkoutId).toBe(a.data.checkoutId);
+    expect(b.data.clientSecret).toBe(a.data.clientSecret);
+    expect(await stockOf("double-monk-shoe")).toBe(0);
+    expect(await db.select().from(checkouts)).toHaveLength(1);
+    expect(fake.started).toBe(1);
+  });
+
   it("releases the old hold (stock back, its payment undone) and holds again when the bag changed", async () => {
     const tote = await product("leather-tote-tan");
     const { cart, cartId } = await guestBag({ "leather-tote-tan": 1 });
@@ -184,7 +232,7 @@ describe("startCheckout", () => {
     const b = await guestBag({ "double-monk-shoe": 1 });
     const first = await start(a.cart);
     if (!first.ok) throw new Error(first.message);
-    await db.update(checkouts).set({ expiresAt: new Date(Date.now() - 60_000) }).where(eq(checkouts.id, first.data.checkoutId));
+    await db.update(checkouts).set({ expiresAt: new Date(Date.now() - 5 * 60_000) }).where(eq(checkouts.id, first.data.checkoutId));
 
     const second = await start(b.cart);
     expect(second.ok).toBe(true);
@@ -255,7 +303,7 @@ describe("a shopper's own hold", () => {
     const other = await guestBag({});
     expect((await addLine(db, other.cartId, "leather-tote-tan", 1)).bag.lines).toHaveLength(0);
 
-    await db.update(checkouts).set({ expiresAt: new Date(Date.now() - 60_000) }).where(eq(checkouts.id, result.data.checkoutId));
+    await db.update(checkouts).set({ expiresAt: new Date(Date.now() - 5 * 60_000) }).where(eq(checkouts.id, result.data.checkoutId));
     expect((await addLine(db, other.cartId, "leather-tote-tan", 1)).bag.lines[0]).toMatchObject({ quantity: 1, stock: 2 });
     // Starting checkout sweeps the lapsed hold for real, then holds from the returned stock.
     expect((await start(other.cart)).ok).toBe(true);
@@ -270,7 +318,10 @@ describe("a shopper's own hold", () => {
 
     const { auth } = await createTestAuth(db);
     const { user } = await auth.api.signUpEmail({ body: { name: "Ada", email: "ada@example.test", password: "correct-horse" } });
-    const { cartId: userCartId } = await mergeGuestCart(db, { guestCartId: cartId, userId: user.id });
+    const released: string[] = [];
+    const { cartId: userCartId } = await mergeGuestCart(db, { guestCartId: cartId, userId: user.id }, { onHoldsReleased: (references) => released.push(...references) });
+    // Its payment is handed back to be undone (auth.ts does it after the response).
+    expect(released).toEqual(["fake_1"]);
 
     expect(await stockOf("leather-tote-tan")).toBe(2);
     expect((await readBag(db, userCartId)).lines[0]).toMatchObject({ quantity: 2, note: null });

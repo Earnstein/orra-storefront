@@ -53,8 +53,8 @@ describe("startPayment", () => {
       expiresAt,
       returnUrl: `https://orra.test/checkout/success?checkout=${CHECKOUT_ID}`,
       lines: [
-        { name: "Leather tote", unitPrice: 98000, quantity: 2, image: "https://images.unsplash.com/photo-1" },
-        { name: "Silk scarf", unitPrice: 0, quantity: 1, image: null },
+        { name: "Leather tote", unitPrice: 98000, quantity: 2 },
+        { name: "Silk scarf", unitPrice: 0, quantity: 1 },
       ],
     });
 
@@ -77,7 +77,7 @@ describe("startPayment", () => {
     expect(params?.excluded_payment_method_types).toEqual(expect.arrayContaining(["us_bank_account", "cashapp", "klarna", "affirm"]));
     expect(params?.excluded_payment_method_types).not.toContain("card");
     expect(params?.line_items).toEqual([
-      { quantity: 2, price_data: { currency: "usd", unit_amount: 98000, product_data: { name: "Leather tote", images: ["https://images.unsplash.com/photo-1"] } } },
+      { quantity: 2, price_data: { currency: "usd", unit_amount: 98000, product_data: { name: "Leather tote" } } },
       { quantity: 1, price_data: { currency: "usd", unit_amount: 0, product_data: { name: "Silk scarf" } } },
     ]);
     // A retried start for the same hold can't create a second session.
@@ -89,6 +89,16 @@ describe("startPayment", () => {
     await expect(
       provider.startPayment({ checkoutId: CHECKOUT_ID, email: "a@example.test", currency: "USD", expiresAt: new Date(), returnUrl: "https://orra.test/x", lines: [] }),
     ).rejects.toThrow(/client secret/);
+  });
+});
+
+describe("resume", () => {
+  it("returns an open session's client secret, and refuses one that's finished", async () => {
+    const retrieve = vi.spyOn(client.checkout.sessions, "retrieve").mockResolvedValueOnce(session());
+    expect(await provider.resume("cs_test_1")).toEqual({ clientSecret: "cs_test_1_secret_abc" });
+    expect(retrieve).toHaveBeenCalledWith("cs_test_1");
+    retrieve.mockResolvedValueOnce(session({ status: "expired" }));
+    await expect(provider.resume("cs_test_1")).rejects.toThrow(/expired/);
   });
 });
 

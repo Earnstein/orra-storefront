@@ -9,6 +9,8 @@ export function markSignedOut() {
   // The header's bag count belongs to the account's bag, which stays in the account.
   clearBagCount();
   try {
+    // A guest email typed at checkout in this tab isn't the next shopper's.
+    sessionStorage.removeItem("orra:checkout-email");
     localStorage.setItem(SIGNED_OUT_AT, String(Date.now()));
   } catch {
     // Private mode or blocked storage: the back/forward cache check just won't fire.

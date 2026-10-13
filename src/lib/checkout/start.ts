@@ -9,10 +9,15 @@ import { findCart, type CartRef } from "@/lib/bag/cart";
 import { readBag } from "@/lib/bag/queries";
 import type { Bag, BagLine } from "@/lib/bag/types";
 import { PaymentsUnavailableError, type PaymentProvider } from "@/lib/payments/types";
-import { createHold, findOpenHold, releaseExpiredHolds, releaseHold, takeStock, type HoldLine, type OpenHold } from "./holds";
+import { rowsOf } from "@/lib/bag/queries";
+import { createHold, findOpenHold, releaseCartHolds, releaseExpiredHolds, releaseHold, takeStock, type HoldLine, type OpenHold } from "./holds";
 import { allowCheckoutStart } from "./rate-limit";
 
-/** Stripe won't let a session expire sooner than 30 minutes; the hold outlasts it by one. */
+/**
+ * Stripe won't create a session that expires sooner than 30 minutes ahead; 31 leaves room for the
+ * request. The session expires with the hold (the same `expires_at`); see HOLD_GRACE for the gap
+ * before a lapsed hold's stock is given to others.
+ */
 export const HOLD_MINUTES = 31;
 
 export type ShortLine = { slug: string; name: string; available: number };
@@ -62,14 +67,16 @@ const sameHold = (hold: OpenHold, email: string, lines: HoldLine[]) =>
 
 /**
  * Starts (or resumes) checkout for this shopper's bag:
- * 1. releases every lapsed hold, so their stock counts again (and an emptied bag's own hold);
+ * 1. releases every lapsed hold, so their stock counts again (and an emptied bag's own holds);
  * 2. reads the bag at live stock; if that lowered a line, or a line has sold out with nothing
  *    left to buy, nothing is held and the shopper sees the updated bag first;
- * 3. reuses this bag's open hold when nothing changed (Stripe's idempotency key returns the same
- *    session, so the client secret is never stored);
- * 4. otherwise, within the rate limit, in one transaction: releases the bag's old hold, takes the
- *    stock all or nothing, and records the new hold; a short line rolls it all back;
- * 5. after the commit starts the payment, undoes the old hold's payment, and stores the reference.
+ * 3. reuses this bag's open hold when nothing changed, resuming its payment;
+ * 4. otherwise, within the rate limit, in one transaction: releases the bag's holds, records the
+ *    new hold, then takes the stock all or nothing (a short line rolls it all back). The hold row
+ *    goes first so a second start for the same bag waits on the one-open-hold index and then uses
+ *    the winner's hold, instead of finding its stock gone;
+ * 5. starts (or resumes) the hold's payment, built from the hold alone, and undoes the payments of
+ *    the holds it replaced.
  * Prices always come from the database.
  */
 export async function startCheckoutWith(deps: StartDeps, { cart: ref, email, ip }: { cart: CartRef; email: string; ip: string | null }): Promise<StartResult> {
@@ -77,12 +84,12 @@ export async function startCheckoutWith(deps: StartDeps, { cart: ref, email, ip 
   const cart = await findCart(db, ref);
   if (!cart) return EMPTY;
 
-  await releaseExpiredHolds(db);
+  // Best effort: a failed sweep (say, a deadlock with another release) mustn't stop this start.
+  await releaseExpiredHolds(db).catch((error) => console.error("checkout: sweep failed", error instanceof Error ? error.message : error));
   const bag = await readBag(db, cart.id);
   if (bag.lines.length === 0) {
-    // An emptied bag gives back what it still held, and its payment can't go through.
-    const stale = await findOpenHold(db, cart.id);
-    if (stale && (await releaseHold(db, stale.id)) && stale.paymentReference) await undoQuietly(deps, stale.paymentReference);
+    // An emptied bag gives back what it still held, and its payments can't go through.
+    for (const reference of await releaseCartHolds(db, cart.id)) await undoQuietly(deps, reference);
     return EMPTY;
   }
 
@@ -101,27 +108,36 @@ export async function startCheckoutWith(deps: StartDeps, { cart: ref, email, ip 
   const lines = await holdLines(db, buyable);
   const existing = await findOpenHold(db, cart.id);
 
-  let checkoutId: string;
-  let expiresAt: Date;
-  let replaced: OpenHold | null = null;
+  let hold: OpenHold;
+  // A hold this request created (released again if its payment can't start), not one it found.
+  let created = false;
+  let replaced: string[] = [];
   if (existing && sameHold(existing, email, lines)) {
-    checkoutId = existing.id;
-    expiresAt = existing.expiresAt;
+    hold = existing;
   } else {
     if (deps.rateLimit && ip && !(await allowCheckoutStart(db, ip))) {
       return { ok: false, error: "invalid", reason: "rate-limited", message: "Too many checkouts started. Try again in a few minutes." };
     }
-    expiresAt = new Date(Date.now() + HOLD_MINUTES * 60_000);
+    const expiresAt = new Date(Date.now() + HOLD_MINUTES * 60_000);
     try {
-      checkoutId = await deps.transact(async (tx) => {
-        if (existing) await releaseHold(tx, existing.id);
+      const result = await deps.transact(async (tx) => {
+        // Another start for this bag may have committed since `existing` was read.
+        const current = await findOpenHold(tx, cart.id);
+        if (current && sameHold(current, email, lines)) throw new UseHold(current);
+        const released = await releaseCartHolds(tx, cart.id);
+        const { id } = await createHold(tx, { cartId: cart.id, userId: ref.userId, email, lines, expiresAt });
         const taken = await takeStock(tx, lines);
-        // Throwing rolls the transaction back: nothing is held.
+        // Throwing rolls the transaction back: nothing is held, nothing released.
         if (!taken.ok) throw new ShortStock(taken.short);
-        return (await createHold(tx, { cartId: cart.id, userId: ref.userId, email, lines, expiresAt })).id;
+        return { id, released };
       });
+      hold = { id: result.id, email, amount: lines.reduce((total, line) => total + line.unitPrice * line.quantity, 0), paymentReference: null, expiresAt, lines: [...lines].sort((a, b) => a.productId - b.productId) };
+      created = true;
+      replaced = result.released;
     } catch (error) {
-      if (error instanceof ShortStock) {
+      if (error instanceof UseHold) {
+        hold = error.hold;
+      } else if (error instanceof ShortStock) {
         // Re-reading the bag lowers it to what's left.
         const updated = await readBag(db, cart.id);
         const byId = new Map(buyable.map((line, index) => [lines[index]!.productId, line]));
@@ -129,41 +145,68 @@ export async function startCheckoutWith(deps: StartDeps, { cart: ref, email, ip 
           updated,
           error.short.map(({ productId, available }) => ({ slug: byId.get(productId)!.slug, name: byId.get(productId)!.name, available })),
         );
+      } else {
+        // Another start for this bag won the race to the one open hold: use it if it matches.
+        const winner = await findOpenHold(db, cart.id);
+        if (!winner || !sameHold(winner, email, lines)) {
+          console.error("checkout: couldn't hold the bag", error instanceof Error ? error.message : error);
+          return FAILED;
+        }
+        hold = winner;
       }
-      // Another start for this bag won the race to the one open hold: use it if it matches.
-      const winner = await findOpenHold(db, cart.id);
-      if (!winner || !sameHold(winner, email, lines)) {
-        console.error("checkout: couldn't hold the bag", error instanceof Error ? error.message : error);
-        return FAILED;
-      }
-      checkoutId = winner.id;
-      expiresAt = winner.expiresAt;
     }
-    replaced = existing;
   }
 
-  let payment: { reference: string; clientSecret: string };
-  try {
-    payment = await provider.startPayment({
-      checkoutId,
-      email,
-      currency: "USD",
-      expiresAt,
-      returnUrl: `${deps.baseUrl}/checkout/success?checkout=${checkoutId}`,
-      lines: lines.map((line, index) => ({ name: line.name, unitPrice: line.unitPrice, quantity: line.quantity, image: buyable[index]!.image?.src ?? null })),
-    });
-  } catch (error) {
-    console.error("checkout: the payment didn't start", error instanceof Error ? error.message : error);
-    await releaseHold(db, checkoutId);
+  const payment = await paymentFor(deps, provider, hold);
+  // The replaced holds' payments mustn't stay payable, whatever happens to the new one.
+  for (const reference of replaced) await undoQuietly(deps, reference);
+  if (!payment) {
+    // Only a hold this request made is given back; a found one may be another tab's checkout.
+    if (created) await releaseHold(db, hold.id);
     return FAILED;
   }
-  await db.execute(sql`
-    update checkouts set payment_provider = ${provider.name}, payment_reference = ${payment.reference}
-    where id = ${checkoutId} and payment_reference is null`);
-  // The old session mustn't stay payable; a failure here leaves it to expire with its hold.
-  if (replaced?.paymentReference) await undoQuietly(deps, replaced.paymentReference);
+  return { ok: true, data: { checkoutId: hold.id, clientSecret: payment.clientSecret, expiresAt: hold.expiresAt.toISOString(), summary: bag } };
+}
 
-  return { ok: true, data: { checkoutId, clientSecret: payment.clientSecret, expiresAt: expiresAt.toISOString(), summary: bag } };
+/**
+ * The hold's payment: resumed when it has one, else started from the hold alone (its lines by
+ * product id, its email and expiry), so a retry or a concurrent start for the same hold sends
+ * Stripe the same request under the same idempotency key. The reference is stored only while the
+ * hold is still open; a payment for a hold released meanwhile is undone. Null when it failed.
+ */
+async function paymentFor(deps: StartDeps, provider: PaymentProvider, hold: OpenHold): Promise<{ clientSecret: string } | null> {
+  try {
+    if (hold.paymentReference) return await provider.resume(hold.paymentReference);
+    const payment = await provider.startPayment({
+      checkoutId: hold.id,
+      email: hold.email,
+      currency: "USD",
+      expiresAt: hold.expiresAt,
+      returnUrl: `${deps.baseUrl}/checkout/success?checkout=${hold.id}`,
+      lines: hold.lines.map(({ name, unitPrice, quantity }) => ({ name, unitPrice, quantity })),
+    });
+    const stored = rowsOf<{ id: string }>(
+      await deps.db.execute(sql`
+        update checkouts set payment_provider = ${provider.name}, payment_reference = ${payment.reference}
+        where id = ${hold.id} and status = 'open' and (payment_reference is null or payment_reference = ${payment.reference})
+        returning id`),
+    );
+    if (stored.length === 0) {
+      await undoQuietly(deps, payment.reference);
+      return null;
+    }
+    return payment;
+  } catch (error) {
+    console.error("checkout: the payment didn't start", error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+/** Thrown inside the transaction to roll it back and use a matching hold that's already there. */
+class UseHold extends Error {
+  constructor(readonly hold: OpenHold) {
+    super("use the open hold");
+  }
 }
 
 class ShortStock extends Error {

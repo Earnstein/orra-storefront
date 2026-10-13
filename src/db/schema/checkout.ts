@@ -56,5 +56,10 @@ export const checkoutItems = pgTable(
     unitPrice: integer().notNull(),
     quantity: integer().notNull(),
   },
-  (t) => [primaryKey({ columns: [t.checkoutId, t.productId] }), check("checkout_items_quantity_positive", sql`${t.quantity} > 0`)],
+  (t) => [
+    primaryKey({ columns: [t.checkoutId, t.productId] }),
+    // Every bag read sums the open holds on each of its products (availableTo).
+    index().on(t.productId),
+    check("checkout_items_quantity_positive", sql`${t.quantity} > 0`),
+  ],
 );

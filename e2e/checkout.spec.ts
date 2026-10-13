@@ -44,8 +44,7 @@ async function giveBack(page: Page) {
     }
   });
   await page.goto("/checkout", { waitUntil: "domcontentloaded" });
-  // Back at /bag once the hold is released; the gate means no email, so nothing was started here.
-  await expect(page.getByRole("button", { name: "Check out as a guest" }).or(page.getByRole("heading", { level: 1, name: /^Shopping bag/ }))).toBeVisible({ timeout: 20_000 });
+  await expect(page).toHaveURL(/\/bag$/, { timeout: 20_000 });
 }
 
 async function seriousViolations(page: Page) {
@@ -94,7 +93,12 @@ test.describe("the gate", () => {
 
 test.describe("@writes paying", () => {
   test.skip(!configured, "Needs Stripe test keys (STRIPE_SECRET_KEY, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY).");
-  test.afterEach(async ({ page }) => giveBack(page));
+  // A test that gives its stock back itself (before deleting its account) sets this.
+  let givenBack = false;
+  test.afterEach(async ({ page }) => {
+    if (!givenBack) await giveBack(page);
+    givenBack = false;
+  });
 
   test("shows the demo note, the contact, Stripe's fields and the summary with the hold's time", async ({ page, context, browserName }) => {
     await addToBag(page, POUCH, 2);
@@ -147,8 +151,13 @@ test.describe("@writes paying", () => {
       await expect(page.getByRole("button", { name: "Check out as a guest" })).toHaveCount(0);
       await expect(page.getByText(user.email, { exact: true })).toBeVisible();
     } finally {
-      await giveBack(page).catch(() => undefined);
-      await deleteTestUser(browser, baseURL!, user);
+      givenBack = true;
+      try {
+        // While still signed in, so /checkout knows the email and releases the hold.
+        await giveBack(page);
+      } finally {
+        await deleteTestUser(browser, baseURL!, user);
+      }
     }
   });
 

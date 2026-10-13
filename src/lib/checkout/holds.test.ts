@@ -103,23 +103,31 @@ describe("holds", () => {
     await expect(hold(cartId, [line(tote, 1)])).resolves.toMatchObject({ id: expect.any(String) });
   });
 
-  it("are swept when expired: only expired open holds are released, each line's stock returned, and the count answered", async () => {
+  it("are swept once expired past the grace: only those open holds are released, each line's stock returned, and the count answered", async () => {
+    await setStock((await product("leather-tote-tan")).id, 10);
+    await setStock((await product("double-monk-shoe")).id, 10);
     const tote = await product("leather-tote-tan");
     const shoe = await product("double-monk-shoe");
     const [toteBefore, shoeBefore] = [tote.stock, shoe.stock];
     const lapsed1 = await hold(await newCart(), [line(tote, 2), line(shoe, 1)], inMinutes(-5));
-    const lapsed2 = await hold(await newCart(), [line(tote, 1)], inMinutes(-1));
+    const lapsed2 = await hold(await newCart(), [line(tote, 1)], inMinutes(-3));
+    // Ran out a minute ago: a payment authorised at the last moment may still be on its way.
+    const justRunOut = await hold(await newCart(), [line(shoe, 1)], inMinutes(-1));
     const current = await hold(await newCart(), [line(tote, 1)]);
     const paid = await hold(await newCart(), [line(shoe, 1)], inMinutes(-10));
     await db.update(checkouts).set({ status: "fulfilled" }).where(eq(checkouts.id, paid.id));
 
     expect(await releaseExpiredHolds(db)).toBe(2);
     expect(await stockOf(tote.id)).toBe(toteBefore - 1);
-    expect(await stockOf(shoe.id)).toBe(shoeBefore - 1);
-    const statuses = await db.select({ id: checkouts.id, status: checkouts.status }).from(checkouts).where(inArray(checkouts.id, [lapsed1.id, lapsed2.id, current.id, paid.id]));
+    expect(await stockOf(shoe.id)).toBe(shoeBefore - 2);
+    const statuses = await db
+      .select({ id: checkouts.id, status: checkouts.status })
+      .from(checkouts)
+      .where(inArray(checkouts.id, [lapsed1.id, lapsed2.id, justRunOut.id, current.id, paid.id]));
     expect(Object.fromEntries(statuses.map((s) => [s.id, s.status]))).toEqual({
       [lapsed1.id]: "expired",
       [lapsed2.id]: "expired",
+      [justRunOut.id]: "open",
       [current.id]: "open",
       [paid.id]: "fulfilled",
     });
