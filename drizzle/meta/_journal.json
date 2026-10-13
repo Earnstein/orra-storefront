@@ -57,6 +57,13 @@
       "when": 1791831059507,
       "tag": "0007_server_bag",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791873097947,
+      "tag": "0008_checkouts",
+      "breakpoints": true
     }
   ]
 }
