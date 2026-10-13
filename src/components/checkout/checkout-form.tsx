@@ -2,7 +2,7 @@
 
 import { CheckoutElementsProvider, PaymentElement, ShippingAddressElement, useCheckoutElements } from "@stripe/react-stripe-js/checkout";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -47,13 +47,7 @@ function Fields({ total }: { total: number }) {
   const [paying, setPaying] = useState(false);
   const errorRef = useRef<HTMLParagraphElement>(null);
 
-  if (state.type === "error") {
-    return (
-      <p role="alert" className="text-body text-destructive">
-        Payment couldn&apos;t load: {state.error.message}
-      </p>
-    );
-  }
+  if (state.type === "error") return <LoadError message={state.error.message} />;
 
   async function pay() {
     if (state.type !== "success" || paying) return;
@@ -103,5 +97,20 @@ function Fields({ total }: { total: number }) {
         </Button>
       </div>
     </>
+  );
+}
+
+/** Stripe's fields didn't load. Its message can name the key, so shoppers get a plain one. */
+function LoadError({ message }: { message: string }) {
+  useEffect(() => console.error("checkout: Stripe didn't load:", message), [message]);
+  return (
+    <div className="flex flex-col items-start gap-3">
+      <p role="alert" className="text-body text-destructive">
+        Payment couldn&apos;t load. Reload the page to try again.
+      </p>
+      <Button type="button" variant="outline" onClick={() => window.location.reload()}>
+        Reload
+      </Button>
+    </div>
   );
 }
