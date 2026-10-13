@@ -35,6 +35,16 @@ export type StartDeps = {
 };
 
 const FAILED = { ok: false, error: "failed", message: "Something went wrong. Try again." } as const;
+const EMPTY = { ok: false, error: "invalid", reason: "empty", message: "Your bag is empty." } as const;
+
+/** Closes a released hold's payment; a failure is logged and the payment expires with the hold. */
+async function undoQuietly(deps: StartDeps, reference: string) {
+  try {
+    await deps.provider().undo(reference);
+  } catch (error) {
+    console.error("checkout: couldn't undo a released payment", error instanceof Error ? error.message : error);
+  }
+}
 
 /** "Only 1 Leather tote was left — your bag has been updated", or which items sold out. */
 export function shortMessage(short: ShortLine[]): string {
@@ -52,7 +62,7 @@ const sameHold = (hold: OpenHold, email: string, lines: HoldLine[]) =>
 
 /**
  * Starts (or resumes) checkout for this shopper's bag:
- * 1. releases every lapsed hold, so their stock counts again;
+ * 1. releases every lapsed hold, so their stock counts again (and an emptied bag's own hold);
  * 2. reads the bag at live stock; if that lowered a line, or a line has sold out with nothing
  *    left to buy, nothing is held and the shopper sees the updated bag first;
  * 3. reuses this bag's open hold when nothing changed (Stripe's idempotency key returns the same
@@ -64,6 +74,18 @@ const sameHold = (hold: OpenHold, email: string, lines: HoldLine[]) =>
  */
 export async function startCheckoutWith(deps: StartDeps, { cart: ref, email, ip }: { cart: CartRef; email: string; ip: string | null }): Promise<StartResult> {
   const { db } = deps;
+  const cart = await findCart(db, ref);
+  if (!cart) return EMPTY;
+
+  await releaseExpiredHolds(db);
+  const bag = await readBag(db, cart.id);
+  if (bag.lines.length === 0) {
+    // An emptied bag gives back what it still held, and its payment can't go through.
+    const stale = await findOpenHold(db, cart.id);
+    if (stale && (await releaseHold(db, stale.id)) && stale.paymentReference) await undoQuietly(deps, stale.paymentReference);
+    return EMPTY;
+  }
+
   let provider: PaymentProvider;
   try {
     provider = deps.provider();
@@ -71,13 +93,6 @@ export async function startCheckoutWith(deps: StartDeps, { cart: ref, email, ip 
     if (error instanceof PaymentsUnavailableError) return { ok: false, error: "invalid", reason: "unavailable", message: "Checkout isn't available right now." };
     throw error;
   }
-
-  const cart = await findCart(db, ref);
-  if (!cart) return { ok: false, error: "invalid", reason: "empty", message: "Your bag is empty." };
-
-  await releaseExpiredHolds(db);
-  const bag = await readBag(db, cart.id);
-  if (bag.lines.length === 0) return { ok: false, error: "invalid", reason: "empty", message: "Your bag is empty." };
 
   const changed = bag.lines.filter((line) => line.note === "reduced" || (line.note === "sold-out" && bag.count === 0));
   if (changed.length > 0) return shortAnswer(bag, changed.map((line) => ({ slug: line.slug, name: line.name, available: line.stock })));
@@ -145,10 +160,8 @@ export async function startCheckoutWith(deps: StartDeps, { cart: ref, email, ip 
   await db.execute(sql`
     update checkouts set payment_provider = ${provider.name}, payment_reference = ${payment.reference}
     where id = ${checkoutId} and payment_reference is null`);
-  if (replaced?.paymentReference) {
-    // The old session mustn't stay payable; a failure here leaves it to expire with its hold.
-    await provider.undo(replaced.paymentReference).catch((error) => console.error("checkout: couldn't undo the replaced payment", error instanceof Error ? error.message : error));
-  }
+  // The old session mustn't stay payable; a failure here leaves it to expire with its hold.
+  if (replaced?.paymentReference) await undoQuietly(deps, replaced.paymentReference);
 
   return { ok: true, data: { checkoutId, clientSecret: payment.clientSecret, expiresAt: expiresAt.toISOString(), summary: bag } };
 }

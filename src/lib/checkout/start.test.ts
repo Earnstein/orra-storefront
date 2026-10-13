@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { checkouts, products } from "@/db/schema";
@@ -151,6 +151,21 @@ describe("startCheckout", () => {
     expect(await start({ userId: null, guestCartId: null })).toMatchObject({ ok: false, reason: "empty" });
     const { id } = await ensureCart(db, { userId: null, guestCartId: null });
     expect(await start({ userId: null, guestCartId: id })).toMatchObject({ ok: false, reason: "empty" });
+  });
+
+  it("releases an emptied bag's hold and closes its payment", async () => {
+    const tote = await product("leather-tote-tan");
+    const { cart, cartId } = await guestBag({ "leather-tote-tan": 1 });
+    expect((await start(cart)).ok).toBe(true);
+    await db.execute(sql`delete from cart_items where cart_id = ${cartId}`);
+    expect(await start(cart)).toMatchObject({ ok: false, reason: "empty" });
+    expect(await stockOf("leather-tote-tan")).toBe(tote.stock);
+    expect(fake.payments.get("fake_1")?.undone).toBe(1);
+  });
+
+  it("answers empty before checking whether payments are configured", async () => {
+    const unavailable = { provider: () => { throw new PaymentsUnavailableError(); } };
+    expect(await start({ userId: null, guestCartId: null }, unavailable)).toMatchObject({ ok: false, reason: "empty" });
   });
 
   it("answers short (nothing to hold) when every line has sold out", async () => {
