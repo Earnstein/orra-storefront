@@ -247,6 +247,21 @@ describe("a shopper's own hold", () => {
     expect(theirs.lines[0]).toMatchObject({ quantity: 1, stock: 1, note: "reduced" });
   });
 
+  it("counts expired holds as returned before any sweep, so a product held in full isn't sold out for good", async () => {
+    await setStock("leather-tote-tan", 2);
+    const first = await guestBag({ "leather-tote-tan": 2 });
+    const result = await start(first.cart);
+    if (!result.ok) throw new Error(result.message);
+    const other = await guestBag({});
+    expect((await addLine(db, other.cartId, "leather-tote-tan", 1)).bag.lines).toHaveLength(0);
+
+    await db.update(checkouts).set({ expiresAt: new Date(Date.now() - 60_000) }).where(eq(checkouts.id, result.data.checkoutId));
+    expect((await addLine(db, other.cartId, "leather-tote-tan", 1)).bag.lines[0]).toMatchObject({ quantity: 1, stock: 2 });
+    // Starting checkout sweeps the lapsed hold for real, then holds from the returned stock.
+    expect((await start(other.cart)).ok).toBe(true);
+    expect(await stockOf("leather-tote-tan")).toBe(1);
+  });
+
   it("is released when the guest signs in, so the merged bag isn't capped by it", async () => {
     await setStock("leather-tote-tan", 2);
     const { cart, cartId } = await guestBag({ "leather-tote-tan": 2 });

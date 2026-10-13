@@ -1,14 +1,16 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
+import { deleteTestUser, newUser, signUp } from "./auth";
 import { gotoHydrated } from "./hydration";
 import { fillAddress, fillCard, stripeConfigured, TEST_CARDS } from "./stripe";
 
 // /checkout: the gate, the page, holds and paying with Stripe test cards. Tests that start a
 // checkout hold real stock on the test database, so they use products no other spec uses (Derby
-// shoe, Zip pouch), are tagged @writes, and give the stock back afterwards.
+// shoe, Wool beret, Zip pouch), are tagged @writes, and give the stock back afterwards.
 
-const DERBY = "derby-shoe-tan";
+// Desktop and mobile run at the same time, so each races for its own product (14 and 16 in stock).
+const RACED = { desktop: { slug: "derby-shoe-tan", name: "Derby shoe" }, mobile: { slug: "wool-beret-red", name: "Wool beret" } } as const;
 const POUCH = "zip-pouch-black";
 const EMAIL = "guest@example.test";
 
@@ -42,7 +44,8 @@ async function giveBack(page: Page) {
     }
   });
   await page.goto("/checkout", { waitUntil: "domcontentloaded" });
-  await expect(page).toHaveURL(/\/bag$/, { timeout: 15_000 });
+  // Back at /bag once the hold is released; the gate means no email, so nothing was started here.
+  await expect(page.getByRole("button", { name: "Check out as a guest" }).or(page.getByRole("heading", { level: 1, name: /^Shopping bag/ }))).toBeVisible({ timeout: 20_000 });
 }
 
 async function seriousViolations(page: Page) {
@@ -60,6 +63,20 @@ test.describe("the gate", () => {
     await expect(page.getByRole("textbox", { name: "Email" })).toBeFocused();
     await expect(gate(page).getByText("Enter a valid email address.")).toBeVisible();
     expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test("hydrates without a mismatch after another page has read the session", async ({ page }) => {
+    // The header can read the session before the page's own part hydrates (a warm connection).
+    await gotoHydrated(page, "/bag", (p) => p.getByRole("heading", { level: 1 }));
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    for (let i = 0; i < 3; i++) {
+      // Each load reads the session; wait for it, as a shopper would before acting.
+      const sessionRead = page.waitForResponse((response) => response.url().includes("/api/auth/get-session"), { timeout: 15_000 }).catch(() => undefined);
+      await gotoHydrated(page, "/checkout", (p) => p.getByRole("button", { name: "Check out as a guest" }));
+      await sessionRead;
+    }
+    expect(errors).toEqual([]);
   });
 
   test("an empty bag goes back to the bag", async ({ page }) => {
@@ -110,17 +127,43 @@ test.describe("@writes paying", () => {
     await expect(page.getByRole("button", { name: /^Pay \$/ })).toBeEnabled();
   });
 
-  test("when another shopper holds the stock first, the bag is lowered and the page says so", async ({ page, browser }) => {
-    // Two shoppers each put 10 of the 14 Derby shoes in their bags; the first to check out holds 10.
+  test("paying with the test card goes to the success page for this checkout", async ({ page }) => {
+    await addToBag(page, POUCH);
+    await continueAsGuest(page);
+    await fillAddress(page);
+    await fillCard(page, TEST_CARDS.visa);
+    await page.getByRole("button", { name: /^Pay \$/ }).click();
+    // The page itself arrives with orders (module 5); Stripe has authorised the payment by now.
+    await expect(page).toHaveURL(/\/checkout\/success\?checkout=[0-9a-f-]{36}/, { timeout: 60_000 });
+  });
+
+  test("signed in, the gate is skipped and the account's email is used", async ({ page, browser, baseURL }) => {
+    const user = newUser();
+    try {
+      await signUp(page, user);
+      await addToBag(page, POUCH);
+      await page.goto("/checkout", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("button", { name: /^Pay \$/ })).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByRole("button", { name: "Check out as a guest" })).toHaveCount(0);
+      await expect(page.getByText(user.email, { exact: true })).toBeVisible();
+    } finally {
+      await giveBack(page).catch(() => undefined);
+      await deleteTestUser(browser, baseURL!, user);
+    }
+  });
+
+  test("when another shopper holds the stock first, the bag is lowered and the page says so", async ({ page, browser }, testInfo) => {
+    const product = RACED[testInfo.project.name as keyof typeof RACED];
+    // Two shoppers each put 10 in their bags; the first to check out holds 10, leaving fewer.
     const other = await (await browser.newContext()).newPage();
     try {
-      await addToBag(other, DERBY, 10);
-      await addToBag(page, DERBY, 10);
+      await addToBag(other, product.slug, 10);
+      await addToBag(page, product.slug, 10);
       await continueAsGuest(other, "first@example.test");
       await expect(other.getByRole("button", { name: /^Pay \$/ })).toBeVisible({ timeout: 20_000 });
 
       await continueAsGuest(page);
-      await expect(page.getByRole("main").getByRole("alert")).toHaveText(/^Only \d+ Derby shoe (was|were) left — your bag has been updated$/, { timeout: 20_000 });
+      await expect(page.getByRole("main").getByRole("alert")).toHaveText(new RegExp(`^Only \\d+ ${product.name} (was|were) left — your bag has been updated$`), { timeout: 20_000 });
       await page.getByRole("button", { name: "Continue to payment" }).click();
       await expect(page.getByRole("button", { name: /^Pay \$/ })).toBeVisible({ timeout: 20_000 });
     } finally {

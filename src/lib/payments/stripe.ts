@@ -19,6 +19,20 @@ export function createStripeClient(secretKey: string): Stripe {
   return new Stripe(secretKey, { apiVersion: STRIPE_API_VERSION, maxNetworkRetries: 2, appInfo: { name: "orra-storefront" } });
 }
 
+/**
+ * Everything the account offers except cards (with Apple Pay and Google Pay where the domain
+ * allows) and Link, which authorise at once and can be captured later. This API version has no
+ * allowlist on sessions, so the rest are excluded by name (the SDK's list for 2026-09-30.endive);
+ * a method Stripe adds later needs adding here, or turning off in the dashboard.
+ */
+export const EXCLUDED_PAYMENT_METHODS: Stripe.Checkout.SessionCreateParams.ExcludedPaymentMethodType[] = [
+  "acss_debit", "affirm", "afterpay_clearpay", "alipay", "alma", "amazon_pay", "au_becs_debit", "bacs_debit", "bancontact", "billie",
+  "bizum", "blik", "boleto", "cashapp", "crypto", "customer_balance", "eps", "fpx", "giropay", "grabpay", "ideal", "kakao_pay",
+  "klarna", "konbini", "kr_card", "mb_way", "mobilepay", "multibanco", "naver_pay", "nz_bank_account", "oxxo", "p24", "pay_by_bank",
+  "payco", "paynow", "paypal", "paypay", "payto", "pix", "promptpay", "revolut_pay", "samsung_pay", "satispay", "scalapay",
+  "sepa_debit", "sequra", "sofort", "sunbit", "swish", "twint", "upi", "us_bank_account", "wechat_pay", "zip",
+];
+
 const COMPLETED = new Set(["checkout.session.completed", "checkout.session.async_payment_succeeded"]);
 const EXPIRED = new Set(["checkout.session.expired"]);
 
@@ -56,6 +70,7 @@ export function createStripeProvider({ client, webhookSecret }: { client: Stripe
         {
           ui_mode: "elements",
           mode: "payment",
+          excluded_payment_method_types: EXCLUDED_PAYMENT_METHODS,
           line_items: input.lines.map((line) => ({
             quantity: line.quantity,
             price_data: {
@@ -69,6 +84,9 @@ export function createStripeProvider({ client, webhookSecret }: { client: Stripe
           metadata: { checkout_id: input.checkoutId },
           payment_intent_data: { capture_method: "manual", metadata: { checkout_id: input.checkoutId } },
           shipping_address_collection: { allowed_countries: ["US"] },
+          // A phone number for the courier. Without one, Stripe.js copies an empty phone into the
+          // billing details ("Billing is same as shipping") and its own API rejects the payment.
+          phone_number_collection: { enabled: true },
           expires_at: Math.floor(input.expiresAt.getTime() / 1000),
           return_url: input.returnUrl,
         },

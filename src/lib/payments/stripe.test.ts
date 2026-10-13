@@ -69,9 +69,13 @@ describe("startPayment", () => {
       metadata: { checkout_id: CHECKOUT_ID },
       payment_intent_data: { capture_method: "manual", metadata: { checkout_id: CHECKOUT_ID } },
       shipping_address_collection: { allowed_countries: ["US"] },
+      phone_number_collection: { enabled: true },
       expires_at: Math.floor(expiresAt.getTime() / 1000),
       return_url: `https://orra.test/checkout/success?checkout=${CHECKOUT_ID}`,
     });
+    // Only cards and Link: bank debits and buy-now-pay-later are left out.
+    expect(params?.excluded_payment_method_types).toEqual(expect.arrayContaining(["us_bank_account", "cashapp", "klarna", "affirm"]));
+    expect(params?.excluded_payment_method_types).not.toContain("card");
     expect(params?.line_items).toEqual([
       { quantity: 2, price_data: { currency: "usd", unit_amount: 98000, product_data: { name: "Leather tote", images: ["https://images.unsplash.com/photo-1"] } } },
       { quantity: 1, price_data: { currency: "usd", unit_amount: 0, product_data: { name: "Silk scarf" } } },
