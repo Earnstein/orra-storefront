@@ -55,7 +55,7 @@ test("changing a quantity updates the totals and the header count", async ({ pag
   const answered = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/bag");
   await line(page, "Leather tote").getByRole("combobox", { name: "Quantity" }).selectOption("3");
   await answered;
-  await expect(page.getByTestId("subtotal")).toHaveText(new RegExp(`${(unit * 3).toLocaleString("en-US")}`));
+  await expect.poll(async () => money(await page.getByTestId("subtotal").textContent())).toBe(unit * 3);
   await expect(bagLink(page)).toHaveAccessibleName("Bag, 3 items");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Shopping bag (3)");
 });
