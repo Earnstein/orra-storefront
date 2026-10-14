@@ -35,6 +35,16 @@ test("the open search panel", async ({ page }) => {
   await searchButton(page).click();
   await page.getByRole("searchbox", { name: "Search for" }).fill("leather");
   await expect(page.getByRole("dialog", { name: "Search" }).locator('a[href^="/products/"]').first()).toBeVisible();
+  // The homepage hero stops advancing behind the panel (its timer is the progress bar's animation)...
+  await expect
+    .poll(() =>
+      page
+        .locator('[aria-roledescription="carousel"] [style*="animation-play-state"]')
+        .evaluateAll((bars) => bars.length > 0 && bars.every((bar) => (bar as HTMLElement).style.animationPlayState === "paused")),
+    )
+    .toBe(true);
+  // ...so once a slide change already under way has finished fading in, contrast is measured at rest.
+  await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running"));
   expect(await seriousViolations(page)).toEqual([]);
 });
 

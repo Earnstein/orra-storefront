@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { products as seedProducts } from "../src/db/seed/catalog";
 import { primaryNav } from "../src/lib/site";
+import { gotoHydrated } from "./hydration";
 
 // Expected product lists come from the seed, so growing the catalogue doesn't break these.
 // :visible because Cache Components keeps the previous route mounted but hidden (React <Activity>)
@@ -44,17 +45,20 @@ test("a tab's breadcrumb leads to the audience landing page", async ({ page }) =
 });
 
 test("a tab narrows the listing", async ({ page }) => {
-  await page.goto("/collections/women", { waitUntil: "domcontentloaded" });
-  await page.getByRole("navigation", { name: "Categories" }).getByRole("link", { name: "Bags", exact: true }).click();
+  // The tab is a client-side link: clicked before hydration it would race a full page load.
+  const bagsTab = (p: Page) => p.getByRole("navigation", { name: "Categories" }).getByRole("link", { name: "Bags", exact: true });
+  await gotoHydrated(page, "/collections/women", bagsTab);
+  await bagsTab(page).click();
   await expect(page).toHaveURL(/\/collections\/women\/bags$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Bags");
 
   const expected = seedProducts
     .filter((product) => product.category === "bags" && product.audience !== "men")
     .map((product) => `/products/${product.slug}`);
-  await expect(productLinks(page)).toHaveCount(expected.length); // waits for the new page
-  const hrefs = await productLinks(page).evaluateAll((links) => links.map((link) => link.getAttribute("href")));
-  expect(hrefs.sort()).toEqual(expected.sort());
+  // Waits for the new results; the previous page's stay mounted but hidden (Activity).
+  await expect
+    .poll(async () => (await productLinks(page).evaluateAll((links) => links.map((link) => link.getAttribute("href")))).sort())
+    .toEqual(expected.sort());
 });
 
 test("unknown collection paths 404", async ({ page }) => {
