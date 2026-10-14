@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { deleteTestUser, newUser, openAccountMenu, signIn, signUp, type TestUser } from "./auth";
+import { AUTH_TIMEOUT, deleteTestUser, newUser, openAccountMenu, signIn, signUp, type TestUser } from "./auth";
 import { hydrated } from "./hydration";
 
 // Tests that create accounts are tagged @writes: each signs up a fresh …@example.test user and
@@ -218,7 +218,7 @@ test("@writes deleting the account signs out, says so, and the account is gone",
   await dialog.getByRole("button", { name: "Delete account" }).click();
 
   await expect(page.getByRole("status").filter({ hasText: "Your account has been deleted." })).toBeVisible({ timeout: 15_000 });
-  await expect(page).toHaveURL((url) => url.pathname === "/" && url.search === "");
+  await expect(page).toHaveURL((url) => url.pathname === "/" && url.search === "", { timeout: AUTH_TIMEOUT });
   created = undefined; // nothing left to clean up
 
   const response = await page.request.post("/api/auth/sign-in/email", {

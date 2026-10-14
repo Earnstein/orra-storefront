@@ -80,7 +80,8 @@ test("@writes signing out shows an empty bag; the account keeps its bag", async 
   await expect(bagLink(page)).toHaveAccessibleName("Bag, 1 item");
   const menu = await openAccountMenu(page, isMobile);
   await menu.getByRole(isMobile ? "button" : "menuitem", { name: "Sign out" }).click();
-  await expect(page).toHaveURL((url) => url.pathname === "/");
+  // Signing out makes database round trips, then loads the page in full (as auth.ts's tests allow).
+  await expect(page).toHaveURL((url) => url.pathname === "/", { timeout: 15_000 });
   await expect(bagLink(page)).toHaveAccessibleName("Bag");
   expect(await serverBag(page)).toEqual({});
 });

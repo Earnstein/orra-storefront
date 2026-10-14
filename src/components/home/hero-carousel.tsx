@@ -38,14 +38,26 @@ function usePageHidden() {
   return useSyncExternalStore(subscribeVisibility, () => document.hidden, () => false);
 }
 
+// Base UI marks the page behind a modal (the search panel, the filter sheet, the phone menu) with
+// data-base-ui-inert while it's open.
+function subscribeModal(onChange: () => void) {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.body, { subtree: true, attributeFilter: ["data-base-ui-inert"] });
+  return () => observer.disconnect();
+}
+
+function useBehindModal() {
+  return useSyncExternalStore(subscribeModal, () => document.querySelector("[data-base-ui-inert]") !== null, () => false);
+}
+
 /**
  * Full-bleed campaign carousel. Each slide's image crossfades over the previous one
  * (no dip to the background), and its copy rises in after the image starts.
  *
  * The active picker's progress bar is the timer: its CSS animation advances the slide
  * when it ends, so pausing the animation pauses the carousel. Autoplay pauses on mouse
- * hover, keyboard focus, a hidden tab, the pause button, and (by default) for
- * prefers-reduced-motion.
+ * hover, keyboard focus, a hidden tab, a modal panel open over the page, the pause button,
+ * and (by default) for prefers-reduced-motion.
  */
 export function HeroCarousel({
   slides,
@@ -63,13 +75,14 @@ export function HeroCarousel({
   const [focused, setFocused] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
   const pageHidden = usePageHidden();
+  const behindModal = useBehindModal();
   const swipeStart = useRef<number | null>(null);
   const slideRefs = useRef<(HTMLDivElement | null)[]>([]);
   const direction = useRef<1 | -1>(1);
 
   // Reduced motion starts paused; the user can still press play.
   const paused = userPaused ?? reducedMotion;
-  const running = !paused && !hovered && !focused && !pageHidden;
+  const running = !paused && !hovered && !focused && !pageHidden && !behindModal;
 
   const goTo = useCallback(
     (next: number) => {

@@ -105,4 +105,31 @@ describe("M5 migrations", () => {
     expect(await columns("carts")).toEqual(["id", "user_id", "created_at", "updated_at"]);
     expect(await columns("cart_items")).toEqual(["cart_id", "product_id", "quantity", "added_at"]);
   });
+
+  it("add checkouts (stock holds) and checkout_items", async () => {
+    const client = createPGlite();
+    const tags = migrationTags();
+    expect(tags).toContain("0008_checkouts");
+    await applyMigrations(client, tags);
+    const columns = async (table: string) =>
+      (
+        await client.query<{ column_name: string }>(
+          `select column_name from information_schema.columns where table_name = '${table}' order by ordinal_position`,
+        )
+      ).rows.map((row) => row.column_name);
+    expect(await columns("checkouts")).toEqual([
+      "id",
+      "cart_id",
+      "user_id",
+      "email",
+      "status",
+      "amount",
+      "currency",
+      "payment_provider",
+      "payment_reference",
+      "expires_at",
+      "created_at",
+    ]);
+    expect(await columns("checkout_items")).toEqual(["checkout_id", "product_id", "name", "unit_price", "quantity"]);
+  });
 });

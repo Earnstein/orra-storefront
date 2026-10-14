@@ -7,7 +7,7 @@ import { hydrated } from "./hydration";
 /** `oldPasswords` keeps any password a test changed away from, so clean-up can still sign in. */
 export type TestUser = { name: string; email: string; password: string; oldPasswords?: string[] };
 
-const AUTH_TIMEOUT = 15_000;
+export const AUTH_TIMEOUT = 15_000;
 
 /** A fresh user. Tests that create accounts are tagged @writes and delete them at the end. */
 export function newUser(): TestUser {

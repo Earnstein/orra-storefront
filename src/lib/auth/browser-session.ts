@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 import { SIGNED_OUT_AT } from "./signed-out-marker";
 
@@ -65,8 +65,15 @@ export function useBrowserSession() {
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, [queryClient]);
+  // Next hydrates a page in pieces: the header can start this read, and get its answer, before a
+  // later piece hydrates. That piece must still render what the server did (loading), or React
+  // throws the hydration mismatch away and re-renders it, losing whatever happened meanwhile.
+  const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
+  if (!hydrated) return { user: null, isPending: true };
   return { user: query.data ?? null, isPending: query.isPending };
 }
+
+const noopSubscribe = () => () => {};
 
 /**
  * Re-reads the session without the cookie cache and updates every reader (a read already under way,

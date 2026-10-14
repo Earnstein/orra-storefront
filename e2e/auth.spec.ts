@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { accountLink, deleteTestUser, fillSignUp, newUser, openAccountMenu, sessionName, signIn, signUp, type TestUser } from "./auth";
+import { accountLink, AUTH_TIMEOUT, deleteTestUser, fillSignUp, newUser, openAccountMenu, sessionName, signIn, signUp, type TestUser } from "./auth";
 import { gotoHydrated, hydrated } from "./hydration";
 import { readResetLink } from "./outbox";
 
@@ -54,7 +54,7 @@ test("@writes the account menu signs out to the homepage, and signing in again w
   await expect(accountLink(menu, "Saved items", isMobile)).toHaveAttribute("href", "/saved");
   await menu.getByRole(isMobile ? "button" : "menuitem", { name: "Sign out" }).click();
 
-  await expect(page).toHaveURL((url) => url.pathname === "/");
+  await expect(page).toHaveURL((url) => url.pathname === "/", { timeout: AUTH_TIMEOUT });
   expect(await sessionName(page)).toBeNull();
   const signedOut = await openAccountMenu(page, isMobile);
   await expect(accountLink(signedOut, "Sign in", isMobile)).toHaveAttribute("href", "/sign-in?returnTo=%2F");
@@ -73,7 +73,7 @@ test("@writes signing out in one tab updates the account menu in another", async
 
   const menu = await openAccountMenu(page, isMobile);
   await menu.getByRole(isMobile ? "button" : "menuitem", { name: "Sign out" }).click();
-  await expect(page).toHaveURL((url) => url.pathname === "/");
+  await expect(page).toHaveURL((url) => url.pathname === "/", { timeout: AUTH_TIMEOUT });
 
   // The other tab hears about it without being reloaded or refocused.
   await expect(async () => {

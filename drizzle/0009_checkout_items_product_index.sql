@@ -1,0 +1,1 @@
+CREATE INDEX "checkout_items_product_id_index" ON "checkout_items" USING btree ("product_id");
