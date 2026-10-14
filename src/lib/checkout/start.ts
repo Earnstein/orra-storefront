@@ -8,6 +8,7 @@ import type { Transact } from "@/db/tx";
 import { findCart, type CartRef } from "@/lib/bag/cart";
 import { readBag } from "@/lib/bag/queries";
 import type { Bag, BagLine } from "@/lib/bag/types";
+import { closeReleasedPayment } from "@/lib/payments/close";
 import { PaymentsUnavailableError, type PaymentProvider } from "@/lib/payments/types";
 import { rowsOf } from "@/lib/bag/queries";
 import { createHold, findOpenHold, releaseCartHolds, releaseExpiredHolds, releaseHold, takeStock, type HoldLine, type OpenHold } from "./holds";
@@ -42,12 +43,13 @@ export type StartDeps = {
 const FAILED = { ok: false, error: "failed", message: "Something went wrong. Try again." } as const;
 const EMPTY = { ok: false, error: "invalid", reason: "empty", message: "Your bag is empty." } as const;
 
-/** Closes a released hold's payment; a failure is logged and the payment expires with the hold. */
-async function undoQuietly(deps: StartDeps, reference: string) {
+/** Closes a released hold's payment unless it was paid meanwhile (see closeReleasedPayment). */
+async function closeReleased(deps: StartDeps, reference: string) {
   try {
-    await deps.provider().undo(reference);
+    await closeReleasedPayment(deps.provider(), reference);
   } catch (error) {
-    console.error("checkout: couldn't undo a released payment", error instanceof Error ? error.message : error);
+    // Payments not configured: nothing was started to close.
+    console.error("checkout: couldn't close a released payment", error instanceof Error ? error.message : error);
   }
 }
 
@@ -75,8 +77,8 @@ const sameHold = (hold: OpenHold, email: string, lines: HoldLine[]) =>
  *    new hold, then takes the stock all or nothing (a short line rolls it all back). The hold row
  *    goes first so a second start for the same bag waits on the one-open-hold index and then uses
  *    the winner's hold, instead of finding its stock gone;
- * 5. starts (or resumes) the hold's payment, built from the hold alone, and undoes the payments of
- *    the holds it replaced.
+ * 5. starts (or resumes) the hold's payment, built from the hold alone, and closes the payments of
+ *    the holds it replaced (unless paid in their last seconds).
  * Prices always come from the database.
  */
 export async function startCheckoutWith(deps: StartDeps, { cart: ref, email, ip }: { cart: CartRef; email: string; ip: string | null }): Promise<StartResult> {
@@ -89,7 +91,7 @@ export async function startCheckoutWith(deps: StartDeps, { cart: ref, email, ip 
   const bag = await readBag(db, cart.id);
   if (bag.lines.length === 0) {
     // An emptied bag gives back what it still held, and its payments can't go through.
-    for (const reference of await releaseCartHolds(db, cart.id)) await undoQuietly(deps, reference);
+    for (const reference of await releaseCartHolds(db, cart.id)) await closeReleased(deps, reference);
     return EMPTY;
   }
 
@@ -149,7 +151,7 @@ export async function startCheckoutWith(deps: StartDeps, { cart: ref, email, ip 
         // Another start for this bag won the race to the one open hold: use it if it matches.
         const winner = await findOpenHold(db, cart.id);
         if (!winner || !sameHold(winner, email, lines)) {
-          console.error("checkout: couldn't hold the bag", error instanceof Error ? error.message : error);
+          console.error("checkout: couldn't hold the bag", describe(error));
           return FAILED;
         }
         hold = winner;
@@ -158,8 +160,9 @@ export async function startCheckoutWith(deps: StartDeps, { cart: ref, email, ip 
   }
 
   const payment = await paymentFor(deps, provider, hold);
-  // The replaced holds' payments mustn't stay payable, whatever happens to the new one.
-  for (const reference of replaced) await undoQuietly(deps, reference);
+  // The replaced holds' payments mustn't stay payable, whatever happens to the new one (unless one
+  // was paid in its last seconds: fulfilment takes that).
+  for (const reference of replaced) await closeReleased(deps, reference);
   if (!payment) {
     // Only a hold this request made is given back; a found one may be another tab's checkout.
     if (created) await releaseHold(db, hold.id);
@@ -192,7 +195,7 @@ async function paymentFor(deps: StartDeps, provider: PaymentProvider, hold: Open
         returning id`),
     );
     if (stored.length === 0) {
-      await undoQuietly(deps, payment.reference);
+      await closeReleased(deps, payment.reference);
       return null;
     }
     return payment;
@@ -213,6 +216,13 @@ class ShortStock extends Error {
   constructor(readonly short: { productId: number; available: number }[]) {
     super("short");
   }
+}
+
+/** An error's message with its cause's (Drizzle wraps the database's error in `cause`). */
+function describe(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause = error.cause instanceof Error ? ` (${error.cause.message})` : "";
+  return `${error.message.split("\n")[0]}${cause}`;
 }
 
 function shortAnswer(bag: Bag, short: ShortLine[]): StartResult {

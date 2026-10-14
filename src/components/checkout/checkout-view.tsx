@@ -106,7 +106,8 @@ function CheckoutPage({ email, onChangeEmail }: { email: string; onChangeEmail: 
   const expiresAt = answer?.ok ? answer.data.expiresAt : null;
   const { refetch } = start;
   useEffect(() => {
-    if (!expiresAt) return;
+    // Not while a payment is being confirmed: starting again would replace the hold under it.
+    if (!expiresAt || paying) return;
     const timeout = window.setTimeout(
       () => {
         setLapsed(true);
@@ -115,7 +116,7 @@ function CheckoutPage({ email, onChangeEmail }: { email: string; onChangeEmail: 
       Math.max(new Date(expiresAt).getTime() - Date.now(), 0) + 1000,
     );
     return () => window.clearTimeout(timeout);
-  }, [expiresAt, refetch]);
+  }, [expiresAt, refetch, paying]);
 
   if (start.isPending) return <CheckoutSkeleton />;
   if (!answer) return <Problem message="Something went wrong. Try again." onRetry={() => void refetch()} />;

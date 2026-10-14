@@ -33,9 +33,12 @@ export async function takeStock(tx: SeedDatabase, lines: { productId: number; qu
     lines.map((line) => sql`(${line.productId}::int, ${line.quantity}::int)`),
     sql`, `,
   );
-  // Lock the rows in id order first, so two holds over the same products can't deadlock.
+  // Lock the rows in id order first, so two holds over the same products queue instead of
+  // deadlocking. NO KEY UPDATE (what the UPDATE below takes anyway), not FOR UPDATE: the hold's
+  // lines, inserted just before, hold KEY SHARE locks on these rows for their foreign keys, which
+  // FOR UPDATE would wait on in every concurrent hold (Postgres found that deadlock in e2e).
   const ids = [...new Set(lines.map((line) => line.productId))].sort((x, y) => x - y);
-  await tx.execute(sql`select id from products where id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) order by id for update`);
+  await tx.execute(sql`select id from products where id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) order by id for no key update`);
   const taken = rowsOf<{ id: number }>(
     await tx.execute(sql`
       with wanted (product_id, quantity) as (values ${wanted})

@@ -148,6 +148,16 @@ describe("startCheckout", () => {
     expect(statuses.find((s) => s.id === second.data.checkoutId)?.status).toBe("open");
   });
 
+  it("replacing a hold doesn't cancel a payment authorised in its last seconds; fulfilment takes it", async () => {
+    const { cart, cartId } = await guestBag({ "leather-tote-tan": 1 });
+    expect((await start(cart)).ok).toBe(true);
+    // The shopper paid just as the bag changed in another tab (or the hold ran out under them).
+    fake.set("fake_1", { status: "authorised" });
+    await setLineQuantity(db, cartId, "leather-tote-tan", 2);
+    expect((await start(cart)).ok).toBe(true);
+    expect(fake.payments.get("fake_1")?.undone).toBe(0);
+  });
+
   it("starts a new hold when the email changes", async () => {
     const { cart } = await guestBag({ "leather-tote-tan": 1 });
     const first = await start(cart);

@@ -1,4 +1,4 @@
-import { expect, type Frame, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 /**
  * Whether checkout can run: Stripe's test keys are set. CI gets them as secrets; locally they're in
@@ -17,33 +17,18 @@ export function stripeConfigured(): boolean {
 }
 
 /**
- * The Stripe frame holding a field. Several of Stripe's frames share a title (Link and Stripe's own
- * tools add hidden ones), so this looks for the frame that has the field, waiting until it loads.
+ * Stripe's frames, one per Element. Link and Stripe's own tools add hidden frames with the same
+ * titles, so these take the visible one; locators inside then wait for Stripe to load (which can
+ * take 20 s with several tests at once on a slow connection).
  */
-async function frameWith(page: Page, label: string | RegExp): Promise<Frame> {
-  let found: Frame | undefined;
-  await expect
-    .poll(
-      async () => {
-        for (const frame of page.frames()) {
-          if (!frame.url().includes("stripe.com")) continue;
-          if (await frame.getByLabel(label).count().catch(() => 0)) {
-            found = frame;
-            return true;
-          }
-        }
-        return false;
-      },
-      { timeout: 60_000 },
-    )
-    .toBe(true);
-  return found!;
-}
+const addressFrame = (page: Page) => page.locator('iframe[title="Secure address input frame"]').visible().first().contentFrame();
+const paymentFrame = (page: Page) => page.locator('iframe[title="Secure payment input frame"]').visible().first().contentFrame();
+const STRIPE_LOAD = { timeout: 60_000 };
 
 /** Fills Stripe's address fields with a US address, and the phone number. */
 export async function fillAddress(page: Page) {
-  const frame = await frameWith(page, "Full name");
-  await frame.getByLabel("Full name").fill("Ada Lovelace");
+  const frame = addressFrame(page);
+  await frame.getByLabel("Full name").fill("Ada Lovelace", STRIPE_LOAD);
   // One "Address" field that expands into line 1, line 2, city, state and ZIP once typed in; its
   // suggestions list is closed with Escape.
   const line1 = frame.getByLabel(/^Address( line 1)?$/);
@@ -58,8 +43,8 @@ export async function fillAddress(page: Page) {
 
 /** Types a card into Stripe's Payment Element (any future date, any CVC). */
 export async function fillCard(page: Page, number: string) {
-  const frame = await frameWith(page, "Card number");
-  await frame.getByLabel("Card number").fill(number);
+  const frame = paymentFrame(page);
+  await frame.getByLabel("Card number").fill(number, STRIPE_LOAD);
   await frame.getByLabel(/^Expiration/).fill("12 / 34");
   await frame.getByLabel("Security code").fill("123");
 }

@@ -93,6 +93,8 @@ test.describe("the gate", () => {
 
 test.describe("@writes paying", () => {
   test.skip(!configured, "Needs Stripe test keys (STRIPE_SECRET_KEY, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY).");
+  // Stripe's fields can take 20 s to load with several tests at once.
+  test.describe.configure({ timeout: 120_000 });
   // A test that gives its stock back itself (before deleting its account) sets this.
   let givenBack = false;
   test.afterEach(async ({ page }) => {
@@ -126,7 +128,7 @@ test.describe("@writes paying", () => {
     await fillCard(page, TEST_CARDS.declined);
     await page.getByRole("button", { name: /^Pay \$/ }).click();
     const error = page.getByRole("main").getByRole("alert").filter({ hasText: /declined/i });
-    await expect(error).toBeVisible({ timeout: 30_000 });
+    await expect(error).toBeVisible({ timeout: 60_000 });
     await expect(error).toBeFocused();
     await expect(page.getByRole("button", { name: /^Pay \$/ })).toBeEnabled();
   });
