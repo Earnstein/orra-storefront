@@ -4,7 +4,9 @@ import { Suspense } from "react";
 import { AccountOverview } from "@/components/account/account-overview";
 import { Container } from "@/components/primitives";
 import { Skeleton } from "@/components/ui/skeleton";
+import { db } from "@/db";
 import { requireUser } from "@/lib/auth/session";
+import { countOrdersForUser } from "@/lib/orders/queries";
 import { countSavedItems } from "@/lib/saved/queries";
 
 export const metadata: Metadata = {
@@ -27,7 +29,8 @@ export default function AccountPage() {
 
 async function Account() {
   const user = await requireUser("/account");
-  return <AccountOverview user={user} savedCount={await countSavedItems(user.id)} />;
+  const [savedCount, orderCount] = await Promise.all([countSavedItems(user.id), countOrdersForUser(db, user.id)]);
+  return <AccountOverview user={user} savedCount={savedCount} orderCount={orderCount} />;
 }
 
 function AccountSkeleton() {

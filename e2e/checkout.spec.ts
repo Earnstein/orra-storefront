@@ -5,6 +5,7 @@ import { deleteTestUser, newUser, signUp } from "./auth";
 import { testDatabase } from "./db";
 import { gotoHydrated } from "./hydration";
 import { readEmails } from "./outbox";
+import { addToBag, continueAsGuest as continueWith, gate, giveBack } from "./shop";
 import { fillAddress, fillCard, pay, stripeConfigured, TEST_CARDS } from "./stripe";
 
 // /checkout and /checkout/success: the gate, the page, holds, paying with Stripe test cards and
@@ -25,36 +26,7 @@ const EMAIL = "guest@example.test";
 
 const configured = stripeConfigured();
 
-async function addToBag(page: Page, slug: string, quantity = 1) {
-  // Through the bag's own endpoint (same origin, so the page's cookies carry the guest bag).
-  await page.goto("/bag", { waitUntil: "domcontentloaded" });
-  const answer = await page.evaluate(
-    async ({ slug, quantity }) => (await fetch("/api/bag", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "add", slug, quantity }) })).json(),
-    { slug, quantity },
-  );
-  expect(answer.ok).toBe(true);
-}
-
-const gate = (page: Page) => page.getByRole("form", { name: "Email for this order" });
-
-async function continueAsGuest(page: Page, email = EMAIL) {
-  await gotoHydrated(page, "/checkout", (p) => p.getByRole("button", { name: "Check out as a guest" }));
-  await page.getByRole("textbox", { name: "Email" }).fill(email);
-  await page.getByRole("button", { name: "Check out as a guest" }).click();
-}
-
-/** Empties this browser's bag and opens /checkout, which releases the bag's hold. */
-async function giveBack(page: Page) {
-  await page.goto("/bag", { waitUntil: "domcontentloaded" });
-  await page.evaluate(async () => {
-    const bag = await (await fetch("/api/bag")).json();
-    for (const line of bag.lines) {
-      await fetch("/api/bag", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "remove", slug: line.slug }) });
-    }
-  });
-  await page.goto("/checkout", { waitUntil: "domcontentloaded" });
-  await expect(page).toHaveURL(/\/bag$/, { timeout: 20_000 });
-}
+const continueAsGuest = (page: Page, email = EMAIL) => continueWith(page, email);
 
 async function seriousViolations(page: Page) {
   const { violations } = await new AxeBuilder({ page }).exclude('iframe[name^="__privateStripe"]').analyze();

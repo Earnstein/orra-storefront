@@ -1,13 +1,12 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { handOffEmail } from "@/components/auth/email-handoff";
-import { Media } from "@/components/primitives";
+import { OrderFacts, OrderSummary } from "@/components/orders/order-detail";
 import { buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,7 +14,6 @@ import { bagQueryKey } from "@/lib/bag/bag-query";
 import { notifyBagCount } from "@/lib/bag/use-bag-count";
 import { deliveryWindow } from "@/lib/catalog/delivery";
 import type { ConfirmAnswer, ConfirmedOrder } from "@/lib/checkout/confirm";
-import { formatPrice } from "@/lib/format";
 import { site } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
@@ -141,7 +139,6 @@ function Notice({ title, message, backToBag = false }: { title: string; message:
 
 function Confirmed({ order, signedIn }: { order: ConfirmedOrder; signedIn: boolean }) {
   const delivery = deliveryWindow(new Date(order.createdAt));
-  const { shipping } = order;
   return (
     <div className="flex flex-col gap-block">
       <div className="flex flex-col gap-3">
@@ -155,44 +152,11 @@ function Confirmed({ order, signedIn }: { order: ConfirmedOrder; signedIn: boole
 
       <div className="grid items-start gap-block lg:grid-cols-3">
         <div className="flex flex-col gap-block lg:col-span-2">
-          <dl className="grid gap-block text-body sm:grid-cols-2">
-            {shipping && (
-              <div className="flex flex-col gap-2">
-                <dt className="eyebrow">Delivering to</dt>
-                <dd>
-                  <address className="not-italic">
-                    {shipping.name}
-                    <br />
-                    {shipping.line1}
-                    {shipping.line2 && (
-                      <>
-                        <br />
-                        {shipping.line2}
-                      </>
-                    )}
-                    <br />
-                    {shipping.city}, {shipping.state} {shipping.postalCode}
-                    <br />
-                    {shipping.country === "US" ? "United States" : shipping.country}
-                  </address>
-                </dd>
-              </div>
-            )}
-            <div className="flex flex-col gap-2">
-              <dt className="eyebrow">Estimated delivery</dt>
-              <dd>
-                {dateFormat.format(delivery.earliest)} – {dateFormat.format(delivery.latest)}
-                <br />
-                <span className="text-muted-foreground">Complimentary delivery</span>
-              </dd>
-            </div>
-            {order.paymentSummary && (
-              <div className="flex flex-col gap-2">
-                <dt className="eyebrow">Payment</dt>
-                <dd>{order.paymentSummary}</dd>
-              </div>
-            )}
-          </dl>
+          <OrderFacts
+            shipping={order.shipping}
+            delivery={`${dateFormat.format(delivery.earliest)} – ${dateFormat.format(delivery.latest)}`}
+            paymentSummary={order.paymentSummary}
+          />
 
           <Separator />
           {signedIn ? (
@@ -223,43 +187,5 @@ function Confirmed({ order, signedIn }: { order: ConfirmedOrder; signedIn: boole
         <OrderSummary order={order} />
       </div>
     </div>
-  );
-}
-
-function OrderSummary({ order }: { order: ConfirmedOrder }) {
-  return (
-    <section aria-labelledby="order-summary-heading" className="flex flex-col gap-5 bg-surface p-6">
-      <h2 id="order-summary-heading" className="eyebrow">
-        Order summary
-      </h2>
-      <ul className="flex flex-col gap-4">
-        {order.items.map((item, index) => (
-          <li key={index} className="grid grid-cols-[4rem_1fr_auto] gap-4 text-caption">
-            <Media>{item.image && <Image src={item.image.src} alt={item.image.alt} fill sizes="64px" className="object-cover" />}</Media>
-            <div className="flex min-w-0 flex-col gap-1">
-              <p className="uppercase">{item.name}</p>
-              <p className="text-muted-foreground">Quantity: {item.quantity}</p>
-            </div>
-            <p>{formatPrice(item.unitPrice * item.quantity)}</p>
-          </li>
-        ))}
-      </ul>
-      <Separator />
-      <dl className="flex flex-col gap-3 text-body">
-        <div className="flex justify-between gap-4">
-          <dt>Subtotal</dt>
-          <dd>{formatPrice(order.subtotal)}</dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt>Delivery</dt>
-          <dd>Complimentary</dd>
-        </div>
-      </dl>
-      <Separator />
-      <div className="flex justify-between gap-4 text-body uppercase">
-        <span>Total</span>
-        <span>{formatPrice(order.subtotal)}</span>
-      </div>
-    </section>
   );
 }
