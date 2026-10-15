@@ -140,7 +140,7 @@ function Confirmed({ order, signedIn }: { order: ConfirmedOrder; signedIn: boole
     <div className="flex flex-col gap-block">
       <div className="flex flex-col gap-3">
         <p className="eyebrow">Order confirmed</p>
-        <h1 className="text-title uppercase">Thank you — order {order.number} is confirmed</h1>
+        <h1 className="text-title uppercase">Thank you — order <span className="whitespace-nowrap">{order.number}</span> is confirmed</h1>
         <p className="text-body">
           We&apos;ve emailed a confirmation to <span className="break-all">{order.email}</span>.
         </p>

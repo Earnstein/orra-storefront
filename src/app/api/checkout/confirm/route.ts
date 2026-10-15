@@ -14,6 +14,7 @@ const bodySchema = z.object({ checkout: z.uuid() });
  * cookie set in a server action makes Next refetch the page). Same origin only.
  */
 export async function POST(request: Request) {
+  const started = performance.now();
   const origin = request.headers.get("origin");
   if (origin && origin !== new URL(request.url).origin) return Response.json({ status: "received" } satisfies ConfirmAnswer, { status: 403, headers: PRIVATE });
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
   try {
     const { answer, count } = await confirmCheckoutWith(fulfilDeps(), { cart: await readCartRef(), checkoutId: parsed.data.checkout });
     if (count !== null) await writeBagCookies({ count });
-    return Response.json(answer, { headers: PRIVATE });
+    return Response.json(answer, { headers: { ...PRIVATE, "Server-Timing": `confirm;dur=${Math.round(performance.now() - started)}` } });
   } catch (error) {
     if (!(error instanceof PaymentsUnavailableError)) console.error("checkout: confirm failed", error instanceof Error ? error.message : error);
     // The page keeps checking, then says the email will follow.
