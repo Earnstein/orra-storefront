@@ -2,9 +2,9 @@
 
 import { useForm, useStore } from "@tanstack/react-form";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { handOffEmail } from "@/components/auth/email-handoff";
+import { handOffEmail, takeHandedOffEmail } from "@/components/auth/email-handoff";
 import { describedBy, focusFirstInvalid, hasErrors, leaveSignIn, shownErrors } from "@/components/auth/field-errors";
 import { FormError } from "@/components/auth/form-error";
 import { PasswordInput } from "@/components/auth/password-input";
@@ -60,6 +60,12 @@ export function SignUpForm() {
     // Keeps ?returnTo, the only thing this page's URL carries.
     router.push(`/sign-in${window.location.search}`);
   }
+
+  // The order confirmation's "Create an account" hands the order's email over: fill it in.
+  useEffect(() => {
+    const email = takeHandedOffEmail();
+    if (email) form.setFieldValue("email", email);
+  }, [form]);
 
   return (
     <form

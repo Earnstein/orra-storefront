@@ -50,3 +50,11 @@ export async function fillCard(page: Page, number: string) {
 }
 
 export const TEST_CARDS = { visa: "4242424242424242", declined: "4000000000000002" } as const;
+
+/**
+ * Presses Pay. From the keyboard, not a click: Stripe's card frame keeps growing for a moment after
+ * the last field is typed, which can move the button between Playwright's scroll and its click.
+ */
+export async function pay(page: Page) {
+  await page.getByRole("button", { name: /^Pay \$/ }).press("Enter");
+}

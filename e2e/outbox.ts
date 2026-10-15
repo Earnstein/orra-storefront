@@ -28,3 +28,10 @@ export async function readResetLink(email: string): Promise<string> {
     .toBeTruthy();
   return link!;
 }
+
+/** The emails to `email` whose subject contains `subject`, as they are now (no waiting). */
+export async function readEmails(email: string, subject: string): Promise<{ subject: string; text: string }[]> {
+  const files = (await readdir(OUTBOX_DIR).catch(() => [])).filter((file) => file.endsWith(`-${email}.json`));
+  const emails = await Promise.all(files.map(async (file) => JSON.parse(await readFile(path.join(OUTBOX_DIR, file), "utf8")) as { subject: string; text: string }));
+  return emails.filter((message) => message.subject.includes(subject));
+}
