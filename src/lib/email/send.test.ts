@@ -50,7 +50,7 @@ afterEach(async () => {
 describe("sendEmail", () => {
   it("writes to the outbox instead of sending when EMAIL_OUTBOX_DIR is set", async () => {
     vi.stubEnv("EMAIL_OUTBOX_DIR", outbox);
-    await sendEmail(email);
+    await expect(sendEmail(email)).resolves.toEqual({ ok: true });
 
     const files = await readdir(outbox);
     expect(files).toHaveLength(1);
@@ -68,16 +68,22 @@ describe("sendEmail", () => {
 
   it("sends through Resend from the test sender when a key is set", async () => {
     vi.stubEnv("RESEND_API_KEY", "re_test");
-    await sendEmail(email);
+    await expect(sendEmail(email)).resolves.toEqual({ ok: true });
     expect(resendConstructed).toHaveBeenCalledWith("re_test");
     expect(resendSend).toHaveBeenCalledWith({ from: EMAIL_FROM, ...email });
     expect(EMAIL_FROM).toBe("Orra <onboarding@resend.dev>");
   });
 
+  it("passes an idempotency key to Resend", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    await sendEmail(email, { idempotencyKey: "order-confirmation/o1" });
+    expect(resendSend).toHaveBeenCalledWith({ from: EMAIL_FROM, ...email }, { idempotencyKey: "order-confirmation/o1" });
+  });
+
   it("logs a failed send once without the body, and doesn't throw", async () => {
     vi.stubEnv("RESEND_API_KEY", "re_test");
     resendSend.mockRejectedValue(new Error("network down"));
-    await expect(sendEmail(email)).resolves.toBeUndefined();
+    await expect(sendEmail(email)).resolves.toEqual({ ok: false });
     expect(console.error).toHaveBeenCalledTimes(1);
     const logged = vi.mocked(console.error).mock.calls[0].join(" ");
     expect(logged).toContain("network down");
@@ -88,13 +94,13 @@ describe("sendEmail", () => {
   it("treats an error answer from Resend as a failure", async () => {
     vi.stubEnv("RESEND_API_KEY", "re_test");
     resendSend.mockResolvedValue({ data: null, error: { name: "validation_error", message: "domain not verified" } });
-    await sendEmail(email);
+    await expect(sendEmail(email)).resolves.toEqual({ ok: false });
     expect(console.error).toHaveBeenCalledTimes(1);
     expect(vi.mocked(console.error).mock.calls[0].join(" ")).toContain("domain not verified");
   });
 
-  it("without a key, logs the recipient and, outside production, the link", async () => {
-    await sendEmail(email);
+  it("without a key, logs the recipient and, outside production, the link (not sent, so not ok)", async () => {
+    await expect(sendEmail(email)).resolves.toEqual({ ok: false });
     const logged = vi.mocked(console.info).mock.calls.map((call) => call.join(" ")).join("\n");
     expect(logged).toContain("[email] to=ada@example.test subject=Reset your Orra password");
     expect(logged).toContain("https://x.test/reset?token=abc");
@@ -112,7 +118,7 @@ describe("sendEmail", () => {
 
   it("logs a bad env as a failure instead of throwing", async () => {
     vi.stubEnv("DATABASE_URL", "");
-    await expect(sendEmail(email)).resolves.toBeUndefined();
+    await expect(sendEmail(email)).resolves.toEqual({ ok: false });
     expect(console.error).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,11 +1,11 @@
 import { InvalidWebhookError, type PaymentCheck, type PaymentEvent, type PaymentProvider, type StartPaymentInput } from "./types";
 
-type FakePayment = PaymentCheck & { input: StartPaymentInput; settled: number; undone: number; resumed: number; settleFails: boolean };
+type FakePayment = PaymentCheck & { input: StartPaymentInput; settled: number; undone: number; resumed: number; settleFails: boolean; undoFails: boolean };
 
 /**
  * An in-memory payment provider for tests (never used by the app). Starting the same checkout
  * again returns the same payment, as Stripe's idempotency key does. Each started payment is
- * `pending` until a test moves it on with `set`; `failSettle` makes the next settles throw.
+ * `pending` until a test moves it on with `set`; `failSettle` and `failUndo` make those calls throw.
  * Webhooks are JSON events "signed" with the header `x-fake-signature: valid`.
  */
 export function createFakeProvider() {
@@ -33,7 +33,7 @@ export function createFakeProvider() {
       const reference = `fake_${started}`;
       byCheckout.set(input.checkoutId, reference);
       const amount = input.lines.reduce((total, line) => total + line.unitPrice * line.quantity, 0);
-      payments.set(reference, { status: "pending", amount, currency: input.currency, summary: null, shipping: null, input, settled: 0, undone: 0, resumed: 0, settleFails: false });
+      payments.set(reference, { status: "pending", amount, currency: input.currency, summary: null, shipping: null, input, settled: 0, undone: 0, resumed: 0, settleFails: false, undoFails: false });
       return { reference, clientSecret: `${reference}_secret` };
     },
     async resume(reference) {
@@ -56,6 +56,7 @@ export function createFakeProvider() {
     },
     async undo(reference) {
       const payment = get(reference);
+      if (payment.undoFails) throw new Error("fake: undo failed");
       payment.undone += 1;
       payment.status = payment.status === "pending" ? "expired" : "failed";
     },
@@ -78,6 +79,9 @@ export function createFakeProvider() {
     },
     failSettle(reference: string, fails = true) {
       get(reference).settleFails = fails;
+    },
+    failUndo(reference: string, fails = true) {
+      get(reference).undoFails = fails;
     },
   };
 }

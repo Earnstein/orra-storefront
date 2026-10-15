@@ -78,7 +78,7 @@ export const authOptions = {
  * Builds `emailAndPassword.sendResetPassword` around a sender, so the app passes the real
  * `sendEmail` and tests pass an in-memory outbox.
  */
-export function resetPasswordSender(send: (email: Email) => Promise<void>) {
+export function resetPasswordSender(send: (email: Email) => Promise<unknown>) {
   return async ({ user, url }: { user: { email: string }; url: string }) => {
     await send({ to: user.email, ...resetPasswordEmail({ url }) });
   };
