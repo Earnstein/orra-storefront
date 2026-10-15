@@ -13,14 +13,23 @@ export type Email = { to: string; subject: string; html: string; text: string };
 /** Resend's test sender: until M7 adds a domain, it only delivers to the Resend account's owner. */
 export const EMAIL_FROM = `${site.name} <onboarding@resend.dev>`;
 
+export type SendOptions = {
+  /** Resend skips a second send with the same key within 24 hours (a send that went out but wasn't recorded). */
+  idempotencyKey?: string;
+  /** With no provider, the first link is logged outside production (for local resets); false for links that carry a secret. */
+  logLink?: boolean;
+};
+
 /**
  * Sends an email, never throwing: failures are logged (without the body) so a caller such as a
- * password reset answers the same whether or not the email went out.
+ * password reset answers the same whether or not the email went out. Answers `ok` when the email
+ * was accepted (by Resend, or written to the outbox), so a caller that must send once can retry.
  * - `EMAIL_OUTBOX_DIR` set (local runs and CI; ignored on Vercel): writes it there as JSON instead.
  * - `RESEND_API_KEY` set: sends through Resend.
- * - Neither: logs the recipient and, outside production, the first link, so local resets work.
+ * - Neither: logs the recipient and, outside production, the first link, so local resets work
+ *   (not `ok`: nothing was sent).
  */
-export async function sendEmail(email: Email): Promise<void> {
+export async function sendEmail(email: Email, options: SendOptions = {}): Promise<{ ok: boolean }> {
   try {
     const env = serverEnv();
     const production = env.VERCEL_ENV === "production";
@@ -31,21 +40,24 @@ export async function sendEmail(email: Email): Promise<void> {
       const file = path.join(env.EMAIL_OUTBOX_DIR, `${Date.now()}-${fileSafe(email.to)}.json`);
       await writeFile(file, JSON.stringify(message, null, 2));
       console.info(`[email] to=${email.to} subject=${email.subject} outbox=${file}`);
-      return;
+      return { ok: true };
     }
 
     if (env.RESEND_API_KEY) {
-      const { error } = await new Resend(env.RESEND_API_KEY).emails.send(message);
+      const resend = new Resend(env.RESEND_API_KEY);
+      const { error } = options.idempotencyKey ? await resend.emails.send(message, { idempotencyKey: options.idempotencyKey }) : await resend.emails.send(message);
       if (error) throw new Error(`${error.name}: ${error.message}`);
-      return;
+      return { ok: true };
     }
 
     console.info(`[email] to=${email.to} subject=${email.subject} (not sent: no RESEND_API_KEY)`);
-    const link = production ? undefined : email.text.match(/https?:\/\/\S+/)?.[0];
+    const link = production || options.logLink === false ? undefined : email.text.match(/https?:\/\/\S+/)?.[0];
     if (link) console.info(`[email] link: ${link}`);
+    return { ok: false };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     console.error(`[email] failed to send to=${email.to} subject=${email.subject}: ${reason}`);
+    return { ok: false };
   }
 }
 

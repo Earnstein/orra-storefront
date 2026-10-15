@@ -132,4 +132,38 @@ describe("M5 migrations", () => {
     ]);
     expect(await columns("checkout_items")).toEqual(["checkout_id", "product_id", "name", "unit_price", "quantity"]);
   });
+
+  it("add orders numbered from 10001, order_items and payment_events", async () => {
+    const client = createPGlite();
+    const tags = migrationTags();
+    expect(tags).toContain("0010_orders");
+    await applyMigrations(client, tags);
+    const columns = async (table: string) =>
+      (
+        await client.query<{ column_name: string }>(
+          `select column_name from information_schema.columns where table_name = '${table}' order by ordinal_position`,
+        )
+      ).rows.map((row) => row.column_name);
+    expect(await columns("orders")).toEqual([
+      "id",
+      "number",
+      "checkout_id",
+      "user_id",
+      "email",
+      "status",
+      "subtotal",
+      "currency",
+      "shipping",
+      "payment_provider",
+      "payment_reference",
+      "payment_summary",
+      "guest_key_hash",
+      "email_attempted_at",
+      "email_sent_at",
+      "created_at",
+    ]);
+    expect(await columns("order_items")).toEqual(["id", "order_id", "product_id", "name", "unit_price", "quantity", "image"]);
+    expect(await columns("payment_events")).toEqual(["id", "provider", "received_at"]);
+    expect((await client.query<{ n: string }>("select nextval('order_number_seq') as n")).rows[0]?.n).toBe(10001);
+  });
 });
