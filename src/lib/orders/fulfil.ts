@@ -68,8 +68,10 @@ async function readCheckout(db: SeedDatabase, checkoutId: string, lock = false):
  * 4. in one transaction with the checkout row locked: an open hold (run out or not, its stock is
  *    still held) becomes an order; a released one takes its stock again, or is cancelled when
  *    the stock has gone;
- * 5. after the commit: capture, then mark the order `paid` (a failed capture puts the stock back,
- *    cancels the order and undoes the payment); the confirmation email goes out after the response.
+ * 5. after the commit: capture, then mark the order `paid` (see `finish`: a capture the provider
+ *    says can't complete cancels the order and returns its stock; anything uncertain throws, to be
+ *    retried); the confirmation email goes out after the response.
+ * Failures to undo or capture throw rather than answer, so the webhook's retry finishes the job.
  */
 export async function fulfil(deps: FulfilDeps, checkoutId: string): Promise<FulfilResult> {
   const checkout = await readCheckout(deps.db, checkoutId);
@@ -119,8 +121,8 @@ export async function fulfil(deps: FulfilDeps, checkoutId: string): Promise<Fulf
   });
 
   if (outcome.kind === "sold-out") {
-    // No money is taken: the authorisation is cancelled. A later call repeats this if it fails.
-    await undoQuietly(deps, reference);
+    // No money is taken: the authorisation is cancelled (throws on failure; a later call repeats it).
+    await deps.provider.undo(reference);
     return { status: "sold-out", items: await itemNames(deps.db, checkoutId, outcome.short) };
   }
   // Another call fulfilled or cancelled it first: answer as that call did (step 1 again).
@@ -155,38 +157,44 @@ async function createOrder(
     await tx.execute(sql`
       update cart_items c set quantity = c.quantity - i.quantity
       from checkout_items i
-      where i.checkout_id = ${checkout.id} and c.cart_id = ${checkout.cart_id} and c.product_id = i.product_id`);
+      where i.checkout_id = ${checkout.id} and c.cart_id = ${checkout.cart_id} and c.product_id = i.product_id and c.quantity > i.quantity`);
   }
 }
 
-/** A fulfilled checkout's order: captured (if an earlier call stopped before), then confirmed. */
+/**
+ * A fulfilled checkout's order: captured (if an earlier call stopped before), then confirmed. A
+ * capture that fails while the payment can still be taken (a concurrent call's capture in flight,
+ * Stripe unreachable) throws, leaving the order `pending_capture`: the webhook answers 500 so
+ * Stripe retries, and the success page keeps checking. Only a payment the provider says can no
+ * longer complete cancels the order.
+ */
 async function finish(deps: FulfilDeps, checkoutId: string): Promise<FulfilResult> {
-  const order = await readOrderByCheckout(deps.db, checkoutId);
+  let order = await readOrderByCheckout(deps.db, checkoutId);
   if (!order) return FAILED;
   if (order.status === "pending_capture") {
     try {
       await deps.provider.settle(order.paymentReference);
     } catch (error) {
-      // Another call may have captured it a moment ago; only a payment that really wasn't taken is cancelled.
-      const paid = await deps.provider
-        .verify(order.paymentReference)
-        .then((check) => check.status === "paid")
-        .catch(() => false);
-      if (!paid) {
-        console.error("orders: the capture failed; cancelling the order", order.number, error instanceof Error ? error.message : error);
+      // verify throwing propagates too: unknown isn't "not taken".
+      const { status } = await deps.provider.verify(order.paymentReference);
+      if (status === "failed" || status === "expired") {
+        console.error("orders: the payment can't be captured; cancelling the order", order.number, error instanceof Error ? error.message : error);
         await cancelOrder(deps.db, order.id);
-        await undoQuietly(deps, order.paymentReference);
         return FAILED;
       }
+      if (status !== "paid") throw new CaptureUnsettled(order.number, error);
     }
     await deps.db.execute(sql`update orders set status = 'paid' where id = ${order.id} and status = 'pending_capture'`);
-    order.status = "paid";
+    // Read back rather than assume: only the database says what the order is now.
+    order = (await readOrderByCheckout(deps.db, checkoutId))!;
   }
   if (order.status === "cancelled") {
     await undoIfAuthorised(deps, order.paymentReference);
     return FAILED;
   }
-  deps.defer(() => sendOrderConfirmation(deps, order.id));
+  if (order.status !== "paid") throw new CaptureUnsettled(order.number, null);
+  const { id } = order;
+  deps.defer(() => sendOrderConfirmation(deps, id));
   return { status: "confirmed", order };
 }
 
@@ -227,22 +235,14 @@ async function itemNames(db: SeedDatabase, checkoutId: string, short: number[] |
   return (named.length > 0 ? named : rows).map((row) => row.name);
 }
 
-async function undoQuietly(deps: FulfilDeps, reference: string) {
-  try {
-    await deps.provider.undo(reference);
-  } catch (error) {
-    // The next call (the webhook's retry, the success page) tries again while it's still authorised.
-    console.error("orders: couldn't undo a payment", reference, error instanceof Error ? error.message : error);
-  }
-}
-
+/**
+ * Releases a payment that must not be taken, if it's still held. Throws when that fails, so the
+ * webhook answers 500 and Stripe retries (the success page keeps checking): a later call finds the
+ * cancelled checkout or order and tries again.
+ */
 async function undoIfAuthorised(deps: FulfilDeps, reference: string) {
-  try {
-    const { status } = await deps.provider.verify(reference);
-    if (status === "authorised" || status === "paid") await deps.provider.undo(reference);
-  } catch (error) {
-    console.error("orders: couldn't undo a payment", reference, error instanceof Error ? error.message : error);
-  }
+  const { status } = await deps.provider.verify(reference);
+  if (status === "authorised" || status === "paid") await deps.provider.undo(reference);
 }
 
 /** A claim on the email older than this was abandoned (a cut-off function) and can be taken over. */
@@ -276,13 +276,22 @@ export async function sendOrderConfirmation(deps: Pick<FulfilDeps, "db" | "baseU
       delivery: deliveryWindow(order.createdAt),
       url,
     });
-    ({ ok: sent } = await deps.send({ to: order.email, ...content }, { idempotencyKey: `order-confirmation/${order.id}` }));
+    // logLink: false — a guest's link carries their order key, which mustn't reach logs.
+    ({ ok: sent } = await deps.send({ to: order.email, ...content }, { idempotencyKey: `order-confirmation/${order.id}`, logLink: false }));
   } catch (error) {
     console.error("orders: the confirmation email failed", orderId, error instanceof Error ? error.message : error);
   }
   await deps.db.execute(
     sent ? sql`update orders set email_sent_at = now() where id = ${orderId}` : sql`update orders set email_attempted_at = null where id = ${orderId} and email_sent_at is null`,
   );
+}
+
+/** The money can still be taken but wasn't yet: retry later (never "not charged"). */
+class CaptureUnsettled extends Error {
+  constructor(number: string, cause: unknown) {
+    super(`capture of ${number} not finished`, { cause });
+    this.name = "CaptureUnsettled";
+  }
 }
 
 class ShortStock extends Error {

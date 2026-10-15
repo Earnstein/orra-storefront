@@ -108,6 +108,13 @@ describe("sendEmail", () => {
     expect(resendSend).not.toHaveBeenCalled();
   });
 
+  it("without a key, doesn't log a link that carries a secret (logLink: false)", async () => {
+    await sendEmail(email, { logLink: false });
+    const logged = vi.mocked(console.info).mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(logged).toContain("[email] to=ada@example.test");
+    expect(logged).not.toContain("token=abc");
+  });
+
   it("without a key on production, doesn't log the link", async () => {
     vi.stubEnv("VERCEL_ENV", "production");
     await sendEmail(email);

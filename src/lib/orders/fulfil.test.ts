@@ -72,6 +72,14 @@ async function paidHold(lines: Record<string, number>, { authorise = true, userI
   return { cartId, checkoutId: result.data.checkoutId, reference };
 }
 
+/** The next capture finds the payment can no longer be taken (the authorisation lapsed). */
+function lapseAtCapture(reference: string) {
+  vi.spyOn(fake.provider, "settle").mockImplementationOnce(async () => {
+    fake.set(reference, { status: "failed" });
+    throw new Error("the authorisation expired");
+  });
+}
+
 /** Makes a hold lapse and be swept (its stock returned), as if the shopper paid at the last second. */
 async function lapse(checkoutId: string) {
   await db.update(checkouts).set({ expiresAt: new Date(Date.now() - 10 * 60_000) }).where(eq(checkouts.id, checkoutId));
@@ -187,12 +195,14 @@ describe("fulfil", () => {
     expect(tote.stock).toBeGreaterThan(0);
   });
 
-  it("repeats the undo of a cancelled checkout while the payment is still authorised", async () => {
+  it("throws when the undo of a cancelled checkout fails, and repeats it on the next call while the payment is still authorised", async () => {
     const { checkoutId, reference } = await paidHold({ "double-monk-shoe": 1 });
     await lapse(checkoutId);
     await setStock("double-monk-shoe", 0);
     fake.failUndo(reference);
-    expect(await fulfil(deps, checkoutId)).toMatchObject({ status: "sold-out" });
+    // Throwing makes the webhook answer 500, so Stripe redelivers.
+    await expect(fulfil(deps, checkoutId)).rejects.toThrow("undo failed");
+    expect(await statusOf(checkoutId)).toBe("cancelled");
     expect(fake.payments.get(reference)).toMatchObject({ status: "authorised", undone: 0 });
 
     fake.failUndo(reference, false);
@@ -200,16 +210,44 @@ describe("fulfil", () => {
     expect(fake.payments.get(reference)).toMatchObject({ status: "failed", undone: 1 });
   });
 
-  it("cancels the order when the capture fails: the stock goes back and the authorisation is undone", async () => {
+  it("leaves the order pending_capture and throws when the capture fails but the money can still be taken; the next call captures", async () => {
     const { checkoutId, reference } = await paidHold({ "leather-tote-tan": 2 });
     const held = await stockOf("leather-tote-tan");
     fake.failSettle(reference);
 
+    await expect(fulfil(deps, checkoutId)).rejects.toThrow("not finished");
+    expect((await allOrders())[0]?.status).toBe("pending_capture");
+    expect(await stockOf("leather-tote-tan")).toBe(held);
+    expect(fake.payments.get(reference)).toMatchObject({ status: "authorised", undone: 0 });
+
+    // The provider can't be reached to check either: still not "not charged".
+    vi.spyOn(fake.provider, "verify").mockRejectedValueOnce(new Error("Stripe unreachable"));
+    await expect(fulfil(deps, checkoutId)).rejects.toThrow();
+    expect((await allOrders())[0]?.status).toBe("pending_capture");
+
+    fake.failSettle(reference, false);
+    expect(await fulfil(deps, checkoutId)).toMatchObject({ status: "confirmed", order: { status: "paid" } });
+    expect(fake.payments.get(reference)?.settled).toBe(1);
+    expect(await allOrders()).toHaveLength(1);
+  });
+
+  it("marks the order paid when the capture call fails but the money was taken (another call captured it)", async () => {
+    const { checkoutId, reference } = await paidHold({ "leather-tote-tan": 1 });
+    fake.failSettle(reference);
+    fake.set(reference, { status: "paid" });
+    expect(await fulfil(deps, checkoutId)).toMatchObject({ status: "confirmed", order: { status: "paid" } });
+  });
+
+  it("cancels the order when the payment can no longer be captured: the stock goes back once, nothing is charged", async () => {
+    const { checkoutId, reference } = await paidHold({ "leather-tote-tan": 2 });
+    const held = await stockOf("leather-tote-tan");
+    // The capture finds the authorisation lapsed (or cancelled at the bank).
+    lapseAtCapture(reference);
+
     expect(await fulfil(deps, checkoutId)).toEqual({ status: "failed" });
-    const [order] = await allOrders();
-    expect(order?.status).toBe("cancelled");
+    expect((await allOrders())[0]?.status).toBe("cancelled");
     expect(await stockOf("leather-tote-tan")).toBe(held + 2);
-    expect(fake.payments.get(reference)).toMatchObject({ undone: 1, settled: 0 });
+    expect(fake.payments.get(reference)).toMatchObject({ settled: 0 });
 
     // Calling again changes nothing: no second order, the stock isn't returned twice.
     expect(await fulfil(deps, checkoutId)).toEqual({ status: "failed" });
@@ -217,6 +255,16 @@ describe("fulfil", () => {
     expect(await stockOf("leather-tote-tan")).toBe(held + 2);
     await settleDeferred();
     expect(sent).toHaveLength(0);
+  });
+
+  it("repeats the undo of a cancelled order while its payment is still authorised", async () => {
+    const { checkoutId, reference } = await paidHold({ "leather-tote-tan": 1 });
+    lapseAtCapture(reference);
+    await fulfil(deps, checkoutId);
+    // Say the bank later reports it held after all.
+    fake.set(reference, { status: "authorised" });
+    expect(await fulfil(deps, checkoutId)).toEqual({ status: "failed" });
+    expect(fake.payments.get(reference)?.undone).toBe(1);
   });
 
   it("resumes an order an earlier call left in pending_capture: captures it without a second order or touching stock", async () => {
@@ -296,7 +344,7 @@ describe("the confirmation email", () => {
     expect(email.to).toBe("shopper@example.test");
     expect(email.subject).toBe("Your Orra order ORR-10001 is confirmed");
     expect(email.text).toContain(`https://orra.test/orders/ORR-10001?key=${guestOrderKey(deps.secret, order!.id)}`);
-    expect(options).toEqual({ idempotencyKey: `order-confirmation/${order!.id}` });
+    expect(options).toEqual({ idempotencyKey: `order-confirmation/${order!.id}`, logLink: false });
     expect(order?.emailSentAt).toBeInstanceOf(Date);
   });
 

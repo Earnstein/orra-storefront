@@ -34,7 +34,10 @@ export async function handlePaymentWebhook(deps: FulfilDeps, rawBody: string, he
     // one of ours (another app on the same account) is acknowledged and left alone.
     const [checkout] = rowsOf<{ id: string }>(await deps.db.execute(sql`select id from checkouts where payment_reference = ${event.reference}`));
     if (!checkout) console.warn("payments: a webhook for a payment we don't know", event.reference);
-    else if (event.type === "payment.completed") await fulfil(deps, checkout.id);
+    else if (event.type === "payment.completed") {
+      // Stripe says it completed: if the payment still reads as pending, ask for the event again later.
+      if ((await fulfil(deps, checkout.id)).status === "pending") throw new Error("the payment is still pending");
+    }
     else await releaseHold(deps.db, checkout.id);
   } catch (error) {
     console.error("payments: webhook handling failed", event.id, error instanceof Error ? error.message : error);

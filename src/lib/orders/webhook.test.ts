@@ -100,6 +100,16 @@ describe("the payment webhook", () => {
     expect(await db.select().from(orders)).toHaveLength(1);
   });
 
+  it("asks for a completed event again (500) while the payment still reads as pending", async () => {
+    const { checkoutId, reference } = await hold();
+    const event: PaymentEvent = { id: "evt_7", type: "payment.completed", reference, checkoutId };
+    expect(await deliver(event)).toMatchObject({ status: 500 });
+    expect(await db.select().from(paymentEvents)).toHaveLength(0);
+    fake.set(reference, { status: "authorised" });
+    expect(await deliver(event)).toMatchObject({ status: 200 });
+    expect(await db.select().from(orders)).toHaveLength(1);
+  });
+
   it("acknowledges events for payments it doesn't know, and events it doesn't use", async () => {
     expect(await deliver({ id: "evt_5", type: "payment.completed", reference: "fake_999", checkoutId: null })).toMatchObject({ status: 200 });
     const other = JSON.stringify({ id: "evt_6", type: "customer.created", reference: "x", checkoutId: null });

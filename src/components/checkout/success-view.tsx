@@ -22,6 +22,8 @@ import { cn } from "@/lib/utils";
 /** How long the page keeps re-checking a payment that's still processing. */
 const CHECK_EVERY_MS = 2000;
 const CHECK_FOR_MS = 30_000;
+const HEADING_ID = "success-heading";
+const headingProps = { id: HEADING_ID, tabIndex: -1, className: "text-title uppercase outline-none" } as const;
 
 const dateFormat = new Intl.DateTimeFormat(site.locale, { weekday: "short", day: "numeric", month: "short" });
 
@@ -77,14 +79,18 @@ function Confirmation({ checkout }: { checkout: string }) {
     return () => window.clearTimeout(timeout);
   }, [answer?.status, startedAt]);
 
-  // The bought lines left the bag: the header count (its cookie was just set) and the bag catch up.
+  const settled = answer !== undefined && (answer.status !== "pending" || gaveUp);
+
   useEffect(() => {
-    if (answer?.status !== "confirmed") return;
+    if (!settled) return;
+    // The header count (its cookie was just set) and the bag catch up with what was bought.
     notifyBagCount();
     void queryClient.invalidateQueries({ queryKey: bagQueryKey });
-  }, [answer?.status, queryClient]);
+    // The answer replaced "Confirming your payment…": take focus to it, so it's read out.
+    document.getElementById(HEADING_ID)?.focus();
+  }, [settled, queryClient]);
 
-  if (!answer || (answer.status === "pending" && !gaveUp)) {
+  if (!settled) {
     return (
       <div className="flex flex-col gap-block" aria-busy>
         <h1 className="text-title uppercase">Confirming your payment…</h1>
@@ -115,7 +121,7 @@ function Received() {
 function Notice({ title, message, backToBag = false }: { title: string; message: string; backToBag?: boolean }) {
   return (
     <div className="flex flex-col items-start gap-4">
-      <h1 className="text-title uppercase">{title}</h1>
+      <h1 {...headingProps}>{title}</h1>
       <p role={backToBag ? "alert" : "status"} className="text-body">
         {message}
       </p>
@@ -140,7 +146,7 @@ function Confirmed({ order, signedIn }: { order: ConfirmedOrder; signedIn: boole
     <div className="flex flex-col gap-block">
       <div className="flex flex-col gap-3">
         <p className="eyebrow">Order confirmed</p>
-        <h1 className="text-title uppercase">Thank you — order <span className="whitespace-nowrap">{order.number}</span> is confirmed</h1>
+        <h1 {...headingProps}>Thank you — order <span className="whitespace-nowrap">{order.number}</span> is confirmed</h1>
         <p className="text-body">
           We&apos;ve emailed a confirmation to <span className="break-all">{order.email}</span>.
         </p>
@@ -227,8 +233,8 @@ function OrderSummary({ order }: { order: ConfirmedOrder }) {
         Order summary
       </h2>
       <ul className="flex flex-col gap-4">
-        {order.items.map((item) => (
-          <li key={item.name} className="grid grid-cols-[4rem_1fr_auto] gap-4 text-caption">
+        {order.items.map((item, index) => (
+          <li key={index} className="grid grid-cols-[4rem_1fr_auto] gap-4 text-caption">
             <Media>{item.image && <Image src={item.image.src} alt={item.image.alt} fill sizes="64px" className="object-cover" />}</Media>
             <div className="flex min-w-0 flex-col gap-1">
               <p className="uppercase">{item.name}</p>

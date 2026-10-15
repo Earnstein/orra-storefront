@@ -16,6 +16,8 @@ export const EMAIL_FROM = `${site.name} <onboarding@resend.dev>`;
 export type SendOptions = {
   /** Resend skips a second send with the same key within 24 hours (a send that went out but wasn't recorded). */
   idempotencyKey?: string;
+  /** With no provider, the first link is logged outside production (for local resets); false for links that carry a secret. */
+  logLink?: boolean;
 };
 
 /**
@@ -49,7 +51,7 @@ export async function sendEmail(email: Email, options: SendOptions = {}): Promis
     }
 
     console.info(`[email] to=${email.to} subject=${email.subject} (not sent: no RESEND_API_KEY)`);
-    const link = production ? undefined : email.text.match(/https?:\/\/\S+/)?.[0];
+    const link = production || options.logLink === false ? undefined : email.text.match(/https?:\/\/\S+/)?.[0];
     if (link) console.info(`[email] link: ${link}`);
     return { ok: false };
   } catch (error) {
