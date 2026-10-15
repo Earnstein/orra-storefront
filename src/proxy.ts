@@ -12,10 +12,12 @@ import { signInPath } from "@/lib/auth/return-to";
  * "signed out" in its own result instead of receiving a redirect.
  */
 export function proxy(request: NextRequest) {
-  // A guest's order page carries its key in the address: never cached anywhere.
-  if (request.nextUrl.pathname.startsWith("/orders/")) {
+  // A guest's order page carries its key in the address: never cached, never sent on as a referrer.
+  const { pathname: path } = request.nextUrl;
+  if (path === "/orders" || path.startsWith("/orders/")) {
     const response = NextResponse.next();
     response.headers.set("Cache-Control", "private, no-store");
+    response.headers.set("Referrer-Policy", "no-referrer");
     return response;
   }
   if (request.method !== "GET" && request.method !== "HEAD") return NextResponse.next();

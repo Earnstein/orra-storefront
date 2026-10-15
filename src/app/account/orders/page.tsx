@@ -6,7 +6,7 @@ import { Container } from "@/components/primitives";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/db";
 import { requireUser } from "@/lib/auth/session";
-import { getOrdersForUser } from "@/lib/orders/queries";
+import { countOrdersForUser, getOrdersForUser } from "@/lib/orders/queries";
 
 export const metadata: Metadata = {
   title: "Orders",
@@ -26,7 +26,8 @@ export default function OrdersPage() {
 
 async function Orders() {
   const user = await requireUser("/account/orders");
-  return <OrderList orders={await getOrdersForUser(db, user.id)} />;
+  const [orders, total] = await Promise.all([getOrdersForUser(db, user.id), countOrdersForUser(db, user.id)]);
+  return <OrderList orders={orders} total={total} />;
 }
 
 function OrdersSkeleton() {

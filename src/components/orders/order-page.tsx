@@ -12,11 +12,16 @@ import { OrderFacts, OrderSummary } from "./order-detail";
 // Server-rendered, so dates use one zone (UTC, as the confirmation email does) rather than the
 // server's or the visitor's.
 const placedFormat = new Intl.DateTimeFormat(site.locale, { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+const DAY = 24 * 60 * 60 * 1000;
 const deliveryFormat = new Intl.DateTimeFormat(site.locale, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
-/** One order in full: number, date and status, then the address, delivery, payment and items. */
-export function OrderPage({ order, back }: { order: Order; back?: { href: string; label: string } }) {
-  const delivery = order.status === "cancelled" ? null : deliveryWindow(order.createdAt);
+/**
+ * One order in full: number, date and status, then the address, delivery, payment and items. The
+ * estimated delivery shows only until its last day has passed (`now`, read by the page).
+ */
+export function OrderPage({ order, now, back }: { order: Order; now: Date; back?: { href: string; label: string } }) {
+  const estimate = order.status === "cancelled" ? null : deliveryWindow(order.createdAt);
+  const delivery = estimate && estimate.latest.getTime() + DAY >= now.getTime() ? estimate : null;
   return (
     <div className="flex flex-col gap-block">
       <header className="flex flex-col gap-3">
@@ -48,7 +53,8 @@ export function OrderPage({ order, back }: { order: Order; back?: { href: string
             </Link>
           </div>
         </div>
-        <OrderSummary order={order} />
+        {/* Only the lines and total: the summary is shared with a client component. */}
+        <OrderSummary order={{ items: order.items.map(({ name, unitPrice, quantity, image }) => ({ name, unitPrice, quantity, image })), subtotal: order.subtotal }} />
       </div>
     </div>
   );

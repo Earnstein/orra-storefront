@@ -69,6 +69,7 @@ test.describe("@writes order history", () => {
       await expect(otherPage.getByRole("heading", { level: 1, name: "Page not found" })).toBeVisible({ timeout: 15_000 });
       await expect(otherPage.getByText(product.name, { exact: true })).toHaveCount(0);
     } finally {
+      await giveBack(page).catch(() => {});
       await otherPage.context().close();
       await deleteTestUser(browser, baseURL!, user);
       await deleteTestUser(browser, baseURL!, other);
@@ -88,13 +89,14 @@ test.describe("@writes order history", () => {
       await expect
         .poll(async () => {
           const [email] = await readEmails(GUEST_EMAIL, number);
-          link = email?.text.match(/https?:\/\/\S+\/orders\/ORR-\d+\?key=\S+/)?.[0] ?? "";
+          link = email?.text.match(/https?:\/\/\S+\/orders\/ORR-\d+\?key=[A-Za-z0-9_-]+/)?.[0] ?? "";
           return link;
         }, { timeout: 15_000 })
         .toMatch(new RegExp(`/orders/${number}\\?key=`));
 
       const response = await page.goto(link, { waitUntil: "domcontentloaded" });
       expect(response?.headers()["cache-control"]).toBe("private, no-store");
+      expect(response?.headers()["referrer-policy"]).toBe("no-referrer");
       await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
       await expect(page.locator('meta[name="referrer"]')).toHaveAttribute("content", "no-referrer");
       const main = page.getByRole("main");

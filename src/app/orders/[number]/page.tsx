@@ -38,5 +38,7 @@ async function GuestOrder({ params, searchParams }: { params: Promise<{ number: 
   const key = typeof query.key === "string" ? query.key : null;
   const order = parsed === null ? null : await getOrderForGuestKey(db, parsed, key);
   if (!order) notFound();
-  return <OrderPage order={order} />;
+  // After the session or key was read, so the clock is request time.
+  const now = new Date();
+  return <OrderPage order={order} now={now} />;
 }

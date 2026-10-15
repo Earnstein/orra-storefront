@@ -13,14 +13,15 @@ import { cn } from "@/lib/utils";
 const dateFormat = new Intl.DateTimeFormat(site.locale, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 /** The account's orders, newest first: number, date, status, total and the first item photos. */
-export function OrderList({ orders }: { orders: OrderListItem[] }) {
+export function OrderList({ orders, total }: { orders: OrderListItem[]; total: number }) {
   return (
     <div className="flex flex-col gap-block">
       <header className="flex flex-col gap-3">
         <Link href="/account" className="eyebrow link-quiet self-start text-muted-foreground">
           My account
         </Link>
-        <h1 className="text-title uppercase">Orders ({orders.length})</h1>
+        <h1 className="text-title uppercase">Orders ({total})</h1>
+        {total > orders.length && <p className="text-caption text-muted-foreground">Showing your latest {orders.length}</p>}
       </header>
 
       {orders.length === 0 ? (

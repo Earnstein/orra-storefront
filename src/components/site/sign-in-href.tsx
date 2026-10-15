@@ -25,7 +25,9 @@ export function SignInHref({ children }: Props) {
 
 function WithQuery({ children }: Props) {
   const pathname = usePathname();
-  const query = useSearchParams().toString();
+  const params = useSearchParams();
+  // A guest's order link carries its key in the query: never copy it into another URL.
+  const query = pathname.startsWith("/orders/") ? "" : params.toString();
   return children(signInHref(query ? `${pathname}?${query}` : pathname));
 }
 

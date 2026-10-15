@@ -38,5 +38,7 @@ async function AccountOrder({ params }: { params: Promise<{ number: string }> })
   const parsed = parseOrderNumber(number);
   const order = parsed === null ? null : await getOrderForUser(db, user.id, parsed);
   if (!order) notFound();
-  return <OrderPage order={order} back={{ href: "/account/orders", label: "All orders" }} />;
+  // After the session or key was read, so the clock is request time.
+  const now = new Date();
+  return <OrderPage order={order} now={now} back={{ href: "/account/orders", label: "All orders" }} />;
 }

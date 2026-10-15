@@ -100,7 +100,8 @@ export function getOrderForUser(db: SeedDatabase, userId: string, number: number
  * hash matches the stored one, compared in constant time. Orders placed signed in have no key.
  */
 export async function getOrderForGuestKey(db: SeedDatabase, number: number, key: string | null): Promise<Order | null> {
-  if (!key) return null;
+  // Keys are 32 bytes in base64url (43 characters): anything else can't match, so skip the read.
+  if (!key || !/^[A-Za-z0-9_-]{43}$/.test(key)) return null;
   const [row] = rowsOf<{ id: string; guest_key_hash: string | null }>(await db.execute(sql`select id, guest_key_hash from orders where number = ${number}`));
   if (!row || !guestKeyMatches(key, row.guest_key_hash)) return null;
   return readOrderById(db, row.id);
