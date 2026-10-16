@@ -9,7 +9,7 @@ import { ProfileForm } from "@/components/account/profile-form";
 import type { CurrentUser } from "@/lib/auth/session";
 
 /** The signed-in account page: a greeting, the saved items and orders summaries, then each section. */
-export function AccountOverview({ user, savedCount }: { user: CurrentUser; savedCount: number }) {
+export function AccountOverview({ user, savedCount, orderCount }: { user: CurrentUser; savedCount: number; orderCount: number }) {
   return (
     <div className="flex flex-col gap-section">
       <header className="flex flex-col gap-3">
@@ -27,12 +27,13 @@ export function AccountOverview({ user, savedCount }: { user: CurrentUser; saved
             {savedCount === 0 ? "Save pieces to find them here, on every device." : "The pieces you've saved, on every device."}
           </span>
         </Link>
-        <section aria-labelledby="orders-heading" className="flex flex-col gap-3 bg-surface p-6 md:p-8">
-          <h2 id="orders-heading" className="eyebrow">
-            Orders
-          </h2>
-          <p className="text-caption text-muted-foreground">Your orders will appear here.</p>
-        </section>
+        <Link href="/account/orders" className="group flex flex-col gap-3 bg-surface p-6 md:p-8">
+          <span className="eyebrow flex items-center justify-between">
+            Orders ({orderCount})
+            <ArrowRightIcon aria-hidden className="size-4 transition-transform duration-200 ease-out-strong group-hover:translate-x-1" />
+          </span>
+          <span className="text-caption text-muted-foreground">{orderCount === 0 ? "Your orders will appear here." : "Your orders, with their details and status."}</span>
+        </Link>
       </div>
 
       <div>
