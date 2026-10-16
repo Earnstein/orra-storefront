@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { cartItems, products } from "@/db/schema";
 import type { SeedDatabase } from "@/db/seed";
@@ -134,6 +134,22 @@ describe("readBag", () => {
     expect(bag.subtotal).toBe(tote.unitPrice * 2);
     // The reduction is stored, so the next read has nothing to report.
     expect((await readBag(db, cart)).lines.find((line) => line.slug === "leather-tote-tan")!.note).toBeNull();
+  });
+
+  it("reads (and lowers) the bag in one database query, since each is a round trip to Neon", async () => {
+    const cart = await newCart();
+    await setStock("leather-tote-tan", 5);
+    await addLine(db, cart, "leather-tote-tan", 4);
+    await setStock("leather-tote-tan", 2);
+    const client = (db as unknown as { $client: { query: (...args: unknown[]) => unknown } }).$client;
+    const query = vi.spyOn(client, "query");
+    try {
+      const bag = await readBag(db, cart);
+      expect(query).toHaveBeenCalledTimes(1);
+      expect(bag.lines[0]).toMatchObject({ quantity: 2, stock: 2, note: "reduced" });
+    } finally {
+      query.mockRestore();
+    }
   });
 
   it("returns the card fields: name, colour, price and one image", async () => {
