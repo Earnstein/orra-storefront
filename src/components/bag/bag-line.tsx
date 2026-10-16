@@ -6,6 +6,7 @@ import { forwardRef } from "react";
 
 import { Media } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MAX_QUANTITY } from "@/lib/bag/limits";
 import type { BagLine as Line } from "@/lib/bag/types";
 import { formatPrice } from "@/lib/format";
@@ -20,11 +21,11 @@ type Props = {
 
 /**
  * One line of the bag: photo, name (linking to the product), colour and unit price, the quantity
- * (a native select: 1 up to the stock left, at most MAX_QUANTITY), the line total, and Move to
+ * (a Select: 1 up to the stock left, at most MAX_QUANTITY), the line total, and Move to
  * saved items / Remove. A line lowered to the stock left says so; a sold-out line keeps only its
  * actions and isn't counted.
  */
-export const BagLine = forwardRef<HTMLSelectElement, Props>(function BagLine({ line, onQuantity, onRemove, onMove }, quantityRef) {
+export const BagLine = forwardRef<HTMLButtonElement, Props>(function BagLine({ line, onQuantity, onRemove, onMove }, quantityRef) {
   const soldOut = line.note === "sold-out";
   const most = Math.max(Math.min(line.stock, MAX_QUANTITY), line.quantity);
   const id = `quantity-${line.slug}`;
@@ -53,23 +54,23 @@ export const BagLine = forwardRef<HTMLSelectElement, Props>(function BagLine({ l
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
           {!soldOut && (
             <div className="flex items-center gap-2">
-              <label htmlFor={id} className="eyebrow text-muted-foreground">
+              <span id={`${id}-label`} className="eyebrow text-muted-foreground">
                 Quantity
-              </label>
-              <select
-                ref={quantityRef}
-                id={id}
-                aria-label={`Quantity, ${line.name}`}
-                value={line.quantity}
-                onChange={(event) => onQuantity(Number(event.target.value))}
-                className="h-9 border-0 border-b border-border-strong bg-transparent pr-6 pl-1 text-body focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              >
-                {Array.from({ length: most }, (_, i) => i + 1).map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+              </span>
+              <Select value={line.quantity} onValueChange={(value) => value !== null && onQuantity(value)}>
+                <SelectTrigger ref={quantityRef} id={id} size="sm" aria-label={`Quantity, ${line.name}`} className="min-w-12 gap-3 text-body md:text-body">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false} align="start">
+                  <SelectGroup>
+                    {Array.from({ length: most }, (_, i) => i + 1).map((n) => (
+                      <SelectItem key={n} value={n}>
+                        {n}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </div>
           )}
           <Button type="button" variant="link" size="xs" className="px-0" onClick={onMove} aria-label={`Move to saved items: ${line.name}`}>

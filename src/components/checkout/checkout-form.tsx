@@ -1,6 +1,7 @@
 "use client";
 
-import { CheckoutElementsProvider, PaymentElement, ShippingAddressElement, useCheckoutElements } from "@stripe/react-stripe-js/checkout";
+import { Combobox as ComboboxPrimitive } from "@base-ui/react/combobox";
+import { CheckoutElementsProvider, PaymentElement, useCheckoutElements } from "@stripe/react-stripe-js/checkout";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
 import { useForm, useStore } from "@tanstack/react-form";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -8,10 +9,12 @@ import { z } from "zod";
 
 import { describedBy, focusFirstInvalid, hasErrors, shownErrors } from "@/components/auth/field-errors";
 import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
+import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from "@/components/ui/combobox";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { deliveryWindow } from "@/lib/catalog/delivery";
+import { addressSchema, toStripeShipping, US_STATES } from "@/lib/checkout/address";
 import { phoneSchema, usPhone } from "@/lib/checkout/phone";
 import { formatPrice } from "@/lib/format";
 import { site } from "@/lib/site";
@@ -41,7 +44,7 @@ const noopSubscribe = () => () => {};
 
 type Props = { publishableKey: string; clientSecret: string; total: number; onPaying: (paying: boolean) => void };
 
-/** Delivery (Stripe's address fields, US only) and Payment (Stripe's Payment Element), then Pay. */
+/** Delivery (our own address and phone fields, US only) and Payment (Stripe's Payment Element), then Pay. */
 export default function CheckoutForm({ publishableKey, clientSecret, total, onPaying }: Props) {
   return (
     <CheckoutElementsProvider stripe={stripeFor(publishableKey)} options={{ clientSecret, elementsOptions: stripeElementsOptions }}>
@@ -50,7 +53,25 @@ export default function CheckoutForm({ publishableKey, clientSecret, total, onPa
   );
 }
 
-const phoneForm = z.object({ phone: phoneSchema });
+// Delivery is our own form (the site's fields and a filterable State list); Stripe gets the address
+// when the shopper pays. Only the card fields are Stripe's, as card details must never reach us.
+const deliveryForm = addressSchema.extend({ phone: phoneSchema });
+type DeliveryValues = z.input<typeof deliveryForm>;
+
+// The State list stores the two-letter code and filters and shows by name.
+type StateCode = (typeof US_STATES)[number]["code"];
+const stateItems = ComboboxPrimitive.createItems([...US_STATES], { getValue: (state) => state.code, getLabel: (state) => state.name });
+
+// Field ids in page order, for focusing the first invalid one on Pay.
+const FIELD_IDS: [keyof DeliveryValues, string][] = [
+  ["name", "checkout-name"],
+  ["line1", "checkout-line1"],
+  ["line2", "checkout-line2"],
+  ["city", "checkout-city"],
+  ["state", "checkout-state"],
+  ["postalCode", "checkout-postal-code"],
+  ["phone", "checkout-phone"],
+];
 
 function Fields({ total, onPaying }: Pick<Props, "total" | "onPaying">) {
   const state = useCheckoutElements();
@@ -59,10 +80,10 @@ function Fields({ total, onPaying }: Pick<Props, "total" | "onPaying">) {
   const [error, setError] = useState<string | null>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
 
-  // Pay submits the phone number (ours) with Stripe's fields; Stripe validates its own.
+  // Pay submits our delivery fields with Stripe's card fields; Stripe validates its own.
   const form = useForm({
-    defaultValues: { phone: "" },
-    validators: { onChange: phoneForm, onSubmit: phoneForm },
+    defaultValues: { name: "", line1: "", line2: "", city: "", state: "", postalCode: "", phone: "" } as DeliveryValues,
+    validators: { onChange: deliveryForm, onSubmit: deliveryForm },
     onSubmit: async ({ value }) => {
       if (state.type !== "success") return;
       setError(null);
@@ -70,7 +91,7 @@ function Fields({ total, onPaying }: Pick<Props, "total" | "onPaying">) {
       // On success Stripe goes to the session's return URL (/checkout/success?checkout=…).
       let failure: string | null = null;
       try {
-        const result = await state.checkout.confirm({ phoneNumber: usPhone(value.phone) ?? undefined });
+        const result = await state.checkout.confirm({ phoneNumber: usPhone(value.phone) ?? undefined, shippingAddress: toStripeShipping(value) });
         if (result.type === "error") {
           console.error("checkout: payment not confirmed", result.error.code, result.error.message);
           // Stripe's messages are written for shoppers ("Your card was declined."), except the odd code.
@@ -100,37 +121,128 @@ function Fields({ total, onPaying }: Pick<Props, "total" | "onPaying">) {
       onSubmit={async (event) => {
         event.preventDefault();
         await form.handleSubmit();
-        focusFirstInvalid([["phone", "checkout-phone"]], (name) => hasErrors(form.getFieldMeta(name as "phone")));
+        focusFirstInvalid(FIELD_IDS, (name) => hasErrors(form.getFieldMeta(name as keyof DeliveryValues)));
       }}
     >
       <section aria-labelledby="delivery-heading" className="flex flex-col gap-4">
         <h2 id="delivery-heading" className="eyebrow">
           2 Delivery
         </h2>
-        {state.type === "loading" ? <Skeleton className="h-64 bg-surface" /> : <ShippingAddressElement />}
-        <form.Field name="phone">
-          {(field) => {
-            const errors = shownErrors(field.state.meta, submitted);
-            return (
-              <Field data-invalid={errors.length > 0 || undefined}>
-                <FieldLabel htmlFor="checkout-phone">Phone number</FieldLabel>
-                <Input
-                  id="checkout-phone"
-                  type="tel"
-                  autoComplete="tel-national"
-                  inputMode="tel"
-                  value={field.state.value}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  onBlur={field.handleBlur}
-                  aria-invalid={errors.length > 0 || undefined}
-                  aria-describedby={describedBy("checkout-phone-hint", errors.length > 0 && "checkout-phone-error")}
-                />
-                <FieldDescription id="checkout-phone-hint">For the courier, in case they need to reach you.</FieldDescription>
-                <FieldError id="checkout-phone-error" errors={errors} />
-              </Field>
-            );
-          }}
-        </form.Field>
+        <FieldGroup>
+          {(
+            [
+              { name: "name", label: "Full name", autoComplete: "name" },
+              { name: "line1", label: "Address", autoComplete: "address-line1" },
+              { name: "line2", label: "Apartment, suite, etc. (optional)", autoComplete: "address-line2" },
+              { name: "city", label: "City", autoComplete: "address-level2" },
+            ] as const
+          ).map(({ name, label, autoComplete }) => (
+            <form.Field key={name} name={name}>
+              {(field) => {
+                const errors = shownErrors(field.state.meta, submitted);
+                const id = FIELD_IDS.find(([key]) => key === name)![1];
+                return (
+                  <Field data-invalid={errors.length > 0 || undefined}>
+                    <FieldLabel htmlFor={id}>{label}</FieldLabel>
+                    <Input
+                      id={id}
+                      autoComplete={`shipping ${autoComplete}`}
+                      value={field.state.value}
+                      onChange={(event) => field.handleChange(event.target.value)}
+                      onBlur={field.handleBlur}
+                      aria-invalid={errors.length > 0 || undefined}
+                      aria-describedby={describedBy(errors.length > 0 && `${id}-error`)}
+                    />
+                    <FieldError id={`${id}-error`} errors={errors} />
+                  </Field>
+                );
+              }}
+            </form.Field>
+          ))}
+          <div className="grid gap-x-6 gap-y-7 sm:grid-cols-2">
+            <form.Field name="state">
+              {(field) => {
+                const errors = shownErrors(field.state.meta, submitted);
+                return (
+                  <Field data-invalid={errors.length > 0 || undefined}>
+                    <FieldLabel htmlFor="checkout-state">State</FieldLabel>
+                    <Combobox
+                      items={stateItems}
+                      value={(field.state.value || null) as StateCode | null}
+                      onValueChange={(code) => field.handleChange(code ?? "")}
+                      autoHighlight
+                    >
+                      <ComboboxInput
+                        id="checkout-state"
+                        placeholder="Select a state"
+                        autoComplete="shipping address-level1"
+                        onBlur={field.handleBlur}
+                        aria-invalid={errors.length > 0 || undefined}
+                        aria-describedby={describedBy(errors.length > 0 && "checkout-state-error")}
+                        className="w-full"
+                      />
+                      <ComboboxContent>
+                        <ComboboxEmpty>No state matches.</ComboboxEmpty>
+                        <ComboboxList aria-label="States">
+                          {(item: (typeof US_STATES)[number]) => (
+                            <ComboboxItem key={item.code} value={item.code}>
+                              {item.name}
+                            </ComboboxItem>
+                          )}
+                        </ComboboxList>
+                      </ComboboxContent>
+                    </Combobox>
+                    <FieldError id="checkout-state-error" errors={errors} />
+                  </Field>
+                );
+              }}
+            </form.Field>
+            <form.Field name="postalCode">
+              {(field) => {
+                const errors = shownErrors(field.state.meta, submitted);
+                return (
+                  <Field data-invalid={errors.length > 0 || undefined}>
+                    <FieldLabel htmlFor="checkout-postal-code">ZIP code</FieldLabel>
+                    <Input
+                      id="checkout-postal-code"
+                      autoComplete="shipping postal-code"
+                      inputMode="numeric"
+                      value={field.state.value}
+                      onChange={(event) => field.handleChange(event.target.value)}
+                      onBlur={field.handleBlur}
+                      aria-invalid={errors.length > 0 || undefined}
+                      aria-describedby={describedBy(errors.length > 0 && "checkout-postal-code-error")}
+                    />
+                    <FieldError id="checkout-postal-code-error" errors={errors} />
+                  </Field>
+                );
+              }}
+            </form.Field>
+          </div>
+          <form.Field name="phone">
+            {(field) => {
+              const errors = shownErrors(field.state.meta, submitted);
+              return (
+                <Field data-invalid={errors.length > 0 || undefined}>
+                  <FieldLabel htmlFor="checkout-phone">Phone number</FieldLabel>
+                  <Input
+                    id="checkout-phone"
+                    type="tel"
+                    autoComplete="shipping tel-national"
+                    inputMode="tel"
+                    value={field.state.value}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    onBlur={field.handleBlur}
+                    aria-invalid={errors.length > 0 || undefined}
+                    aria-describedby={describedBy("checkout-phone-hint", errors.length > 0 && "checkout-phone-error")}
+                  />
+                  <FieldDescription id="checkout-phone-hint">For the courier, in case they need to reach you.</FieldDescription>
+                  <FieldError id="checkout-phone-error" errors={errors} />
+                </Field>
+              );
+            }}
+          </form.Field>
+        </FieldGroup>
         <p className="text-caption text-muted-foreground">
           Complimentary delivery
           {delivery && (

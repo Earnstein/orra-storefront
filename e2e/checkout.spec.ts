@@ -102,6 +102,26 @@ test.describe("@writes paying", () => {
     expect(await seriousViolations(page)).toEqual([]);
   });
 
+  test("the delivery form checks the address before paying: missing fields, a non-US ZIP, a State picked from the list", async ({ page }) => {
+    await addToBag(page, POUCH);
+    await continueAsGuest(page);
+    const form = page.getByRole("form", { name: "Delivery and payment" });
+    await expect(page.getByRole("button", { name: /^Pay \$/ })).toBeEnabled({ timeout: 60_000 });
+    await pay(page);
+    await expect(form.getByRole("textbox", { name: "Full name" })).toBeFocused();
+    await expect(form.getByText("Enter your full name.")).toBeVisible();
+    await expect(form.getByText("Choose your state.")).toBeVisible();
+
+    await fillAddress(page);
+    await form.getByRole("textbox", { name: "ZIP code" }).fill("340221");
+    await pay(page);
+    await expect(form.getByRole("textbox", { name: "ZIP code" })).toBeFocused();
+    await expect(form.getByText("Enter a 5-digit US ZIP code, e.g. 11201.")).toBeVisible();
+    // The State list is ours (a combobox showing the name), not a native select.
+    await expect(form.getByRole("combobox", { name: "State" })).toHaveValue("New York");
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
   test("a declined card shows its error inline, takes focus and keeps the form", async ({ page }) => {
     await addToBag(page, POUCH);
     await continueAsGuest(page);

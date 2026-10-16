@@ -31,7 +31,7 @@ export function BagView() {
   const [announcement, setAnnouncement] = useState("");
   const [error, setError] = useState<string | null>(null);
   const undoRefs = useRef(new Map<string, HTMLElement>());
-  const quantityRefs = useRef(new Map<string, HTMLSelectElement>());
+  const quantityRefs = useRef(new Map<string, HTMLButtonElement>());
   const [focusUndo, setFocusUndo] = useState<string | null>(null);
   const [focusQuantity, setFocusQuantity] = useState<string | null>(null);
 
