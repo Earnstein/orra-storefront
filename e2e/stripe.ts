@@ -17,28 +17,24 @@ export function stripeConfigured(): boolean {
 }
 
 /**
- * Stripe's frames, one per Element. Link and Stripe's own tools add hidden frames with the same
+ * Stripe's card frame. Link and Stripe's own tools add hidden frames with the same
  * titles, so these take the visible one; locators inside then wait for Stripe to load (which can
  * take 20 s with several tests at once on a slow connection).
  */
-const addressFrame = (page: Page) => page.locator('iframe[title="Secure address input frame"]').visible().first().contentFrame();
 const paymentFrame = (page: Page) => page.locator('iframe[title="Secure payment input frame"]').visible().first().contentFrame();
 const STRIPE_LOAD = { timeout: 60_000 };
 
-/** Fills Stripe's address fields with a US address, and the phone number. */
+/** Fills the delivery fields (the site's own, beside Stripe's card fields) with a US address and phone. */
 export async function fillAddress(page: Page) {
-  const frame = addressFrame(page);
-  await frame.getByLabel("Full name").fill("Ada Lovelace", STRIPE_LOAD);
-  // One "Address" field that expands into line 1, line 2, city, state and ZIP once typed in; its
-  // suggestions list is closed with Escape.
-  const line1 = frame.getByLabel(/^Address( line 1)?$/);
-  await line1.fill("1 Main Street");
-  await line1.press("Escape");
-  await frame.getByLabel("City").fill("Brooklyn");
-  await frame.getByLabel("State").selectOption("NY");
-  await frame.getByLabel("ZIP code").fill("11201");
-  // The phone number is the site's own field, beside Stripe's.
-  await page.getByRole("textbox", { name: "Phone number" }).fill("(201) 555-0123");
+  const form = page.getByRole("form", { name: "Delivery and payment" });
+  await form.getByRole("textbox", { name: "Full name" }).fill("Ada Lovelace");
+  await form.getByRole("textbox", { name: "Address", exact: true }).fill("1 Main Street");
+  await form.getByRole("textbox", { name: "City" }).fill("Brooklyn");
+  // The State list filters as you type; choosing the option sets it.
+  await form.getByRole("combobox", { name: "State" }).fill("New Y");
+  await page.getByRole("option", { name: "New York" }).click();
+  await form.getByRole("textbox", { name: "ZIP code" }).fill("11201");
+  await form.getByRole("textbox", { name: "Phone number" }).fill("(201) 555-0123");
 }
 
 /** Types a card into Stripe's Payment Element (any future date, any CVC). */

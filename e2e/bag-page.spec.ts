@@ -13,6 +13,12 @@ const bagLink = (page: Page) => page.getByRole("link", { name: /^Bag(, \d+ items
 const lines = (page: Page) => page.getByRole("list", { name: "Items in your bag" }).getByRole("listitem");
 const line = (page: Page, name: string) => lines(page).filter({ has: page.getByRole("link", { name, exact: true }) });
 
+/** Opens a line's quantity list and picks a number, as a shopper does. */
+async function chooseQuantity(page: Page, name: string, quantity: number) {
+  await line(page, name).getByRole("combobox", { name: "Quantity" }).click();
+  await page.getByRole("option", { name: String(quantity), exact: true }).click();
+}
+
 async function add(page: Page, path: string) {
   await gotoHydrated(page, path, addButton);
   const answered = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/bag");
@@ -37,7 +43,7 @@ test("lists each line with its photo, name, colour, price and quantity, and tota
   const tote = line(page, "Leather tote");
   await expect(tote.getByRole("img")).toBeVisible();
   await expect(tote.getByText("Tan")).toBeVisible();
-  await expect(tote.getByRole("combobox", { name: "Quantity" })).toHaveValue("1");
+  await expect(tote.getByRole("combobox", { name: "Quantity" })).toHaveText("1");
 
   const prices = await lines(page).getByTestId("line-total").allTextContents();
   const subtotal = money(await page.getByTestId("subtotal").textContent());
@@ -53,7 +59,7 @@ test("changing a quantity updates the totals and the header count", async ({ pag
   await openBag(page);
   const unit = money(await page.getByTestId("subtotal").textContent());
   const answered = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/bag");
-  await line(page, "Leather tote").getByRole("combobox", { name: "Quantity" }).selectOption("3");
+  await chooseQuantity(page, "Leather tote", 3);
   await answered;
   await expect.poll(async () => money(await page.getByTestId("subtotal").textContent())).toBe(unit * 3);
   await expect(bagLink(page)).toHaveAccessibleName("Bag, 3 items");
@@ -144,10 +150,9 @@ test("after Undo has had focus, a later change keeps focus where the shopper is"
   await line(page, "Leather tote").getByRole("button", { name: "Remove" }).click();
   await expect(page.getByRole("button", { name: "Undo" })).toBeFocused();
   const quantity = line(page, "Double-monk shoe").getByRole("combobox", { name: "Quantity" });
-  // The shopper moves on to another line (selectOption alone doesn't move focus).
-  await quantity.focus();
+  // The shopper moves on to another line and picks a quantity there.
   const answered = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/bag");
-  await quantity.selectOption("2");
+  await chooseQuantity(page, "Double-monk shoe", 2);
   await answered;
   await expect(bagLink(page)).toHaveAccessibleName("Bag, 2 items");
   await expect(quantity).toBeFocused();
@@ -163,12 +168,12 @@ test("a failed change keeps the bag on screen and says what went wrong", async (
     reads += 1;
     return route.fulfill({ status: 500, body: "" });
   });
-  await line(page, "Leather tote").getByRole("combobox", { name: "Quantity" }).selectOption("2");
+  await chooseQuantity(page, "Leather tote", 2);
   // The re-read and its one retry both fail; then give React a couple of frames to show the result.
   await expect.poll(() => reads, { timeout: 10_000 }).toBe(2);
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await expect(page.getByRole("main").getByRole("alert")).toHaveText("Something went wrong. Try again.");
-  await expect(line(page, "Leather tote").getByRole("combobox", { name: "Quantity" })).toHaveValue("1");
+  await expect(line(page, "Leather tote").getByRole("combobox", { name: "Quantity" })).toHaveText("1");
   await expect(page.getByText("We couldn't load your bag.")).toHaveCount(0);
 });
 
