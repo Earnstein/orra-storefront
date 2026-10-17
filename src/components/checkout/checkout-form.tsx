@@ -128,15 +128,17 @@ function Fields({ total, onPaying }: Pick<Props, "total" | "onPaying">) {
         <h2 id="delivery-heading" className="eyebrow">
           2 Delivery
         </h2>
+        {/* Said once for every field; each required control also carries aria-required. */}
+        <p className="text-caption text-muted-foreground">All fields are required unless marked optional.</p>
         <FieldGroup>
           {(
             [
-              { name: "name", label: "Full name", autoComplete: "name" },
-              { name: "line1", label: "Address", autoComplete: "address-line1" },
-              { name: "line2", label: "Apartment, suite, etc. (optional)", autoComplete: "address-line2" },
-              { name: "city", label: "City", autoComplete: "address-level2" },
+              { name: "name", label: "Full name", autoComplete: "name", required: true },
+              { name: "line1", label: "Address", autoComplete: "address-line1", required: true },
+              { name: "line2", label: "Apartment, suite, etc. (optional)", autoComplete: "address-line2", required: false },
+              { name: "city", label: "City", autoComplete: "address-level2", required: true },
             ] as const
-          ).map(({ name, label, autoComplete }) => (
+          ).map(({ name, label, autoComplete, required }) => (
             <form.Field key={name} name={name}>
               {(field) => {
                 const errors = shownErrors(field.state.meta, submitted);
@@ -147,6 +149,7 @@ function Fields({ total, onPaying }: Pick<Props, "total" | "onPaying">) {
                     <Input
                       id={id}
                       autoComplete={`shipping ${autoComplete}`}
+                      aria-required={required || undefined}
                       value={field.state.value}
                       onChange={(event) => field.handleChange(event.target.value)}
                       onBlur={field.handleBlur}
@@ -176,6 +179,7 @@ function Fields({ total, onPaying }: Pick<Props, "total" | "onPaying">) {
                         id="checkout-state"
                         placeholder="Select a state"
                         autoComplete="shipping address-level1"
+                        aria-required
                         onBlur={field.handleBlur}
                         aria-invalid={errors.length > 0 || undefined}
                         aria-describedby={describedBy(errors.length > 0 && "checkout-state-error")}
@@ -206,6 +210,7 @@ function Fields({ total, onPaying }: Pick<Props, "total" | "onPaying">) {
                     <Input
                       id="checkout-postal-code"
                       autoComplete="shipping postal-code"
+                      aria-required
                       inputMode="numeric"
                       value={field.state.value}
                       onChange={(event) => field.handleChange(event.target.value)}
@@ -229,6 +234,7 @@ function Fields({ total, onPaying }: Pick<Props, "total" | "onPaying">) {
                     id="checkout-phone"
                     type="tel"
                     autoComplete="shipping tel-national"
+                    aria-required
                     inputMode="tel"
                     value={field.state.value}
                     onChange={(event) => field.handleChange(event.target.value)}

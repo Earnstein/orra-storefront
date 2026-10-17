@@ -107,6 +107,13 @@ test.describe("@writes paying", () => {
     await continueAsGuest(page);
     const form = page.getByRole("form", { name: "Delivery and payment" });
     await expect(page.getByRole("button", { name: /^Pay \$/ })).toBeEnabled({ timeout: 60_000 });
+    // Every field but the apartment is required, and says so to assistive tech as well as on screen.
+    await expect(form.getByText("All fields are required unless marked optional.")).toBeVisible();
+    for (const name of ["Full name", "Address", "City", "ZIP code", "Phone number"]) {
+      await expect(form.getByRole("textbox", { name, exact: true })).toHaveAttribute("aria-required", "true");
+    }
+    await expect(form.getByRole("combobox", { name: "State" })).toHaveAttribute("aria-required", "true");
+    await expect(form.getByRole("textbox", { name: "Apartment, suite, etc. (optional)" })).not.toHaveAttribute("aria-required");
     await pay(page);
     await expect(form.getByRole("textbox", { name: "Full name" })).toBeFocused();
     await expect(form.getByText("Enter your full name.")).toBeVisible();
