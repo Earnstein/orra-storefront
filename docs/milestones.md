@@ -17,6 +17,7 @@ Each milestone is a group of merged pull requests, recorded here with its tag an
     - The confirmation email is sent once, and retried after a failure.
   - **Order history** in the account (list and detail), and a guest order link carrying a key that's stored hashed.
 - **Pull requests:** [#31 M5 Bag & checkout spec and plan](https://github.com/Earnstein/orra-storefront/pull/31) · [#32 Move the bag to the server](https://github.com/Earnstein/orra-storefront/pull/32) · [#33 Add the bag page and the added-to-bag panel](https://github.com/Earnstein/orra-storefront/pull/33) · [#34 Compare the bag subtotal exactly in the quantity test](https://github.com/Earnstein/orra-storefront/pull/34) · [#35 Add checkout with stock held while you pay](https://github.com/Earnstein/orra-storefront/pull/35) · [#36 Add orders, the webhook and the confirmation email](https://github.com/Earnstein/orra-storefront/pull/36) · [#37 Add order history](https://github.com/Earnstein/orra-storefront/pull/37) · [#38 Read the bag in one statement](https://github.com/Earnstein/orra-storefront/pull/38) · [#39 Collect the delivery address in our own fields; shadcn selects](https://github.com/Earnstein/orra-storefront/pull/39) · [#40 Milestone log](https://github.com/Earnstein/orra-storefront/pull/40)
+- **Release:** https://github.com/Earnstein/orra-storefront/releases/tag/v0.6.0
 - **URL:** https://orra-storefront.vercel.app
 - **Budgets (measured on production; LCP on local builds, as in M3 and M4):**
   - **`GET /api/bag` server time:** 35–56 ms, median 36 ms (budget 50 ms).
