@@ -66,6 +66,8 @@ test.describe("the gate", () => {
 
   test("without Stripe keys, checkout says it isn't available", async ({ page }) => {
     test.skip(configured, "Stripe is configured here.");
+    // A deployed site's keys can't be seen from here (E2E_BASE_URL); production has them.
+    test.skip(Boolean(process.env.E2E_BASE_URL), "Can't tell whether the deployed site has Stripe keys.");
     await addToBag(page, POUCH);
     await continueAsGuest(page);
     await expect(page.getByRole("main").getByRole("alert")).toHaveText("Checkout isn't available right now.");
