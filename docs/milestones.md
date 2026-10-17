@@ -2,6 +2,57 @@
 
 Each milestone is a group of merged pull requests, recorded here with its tag and GitHub Release when the last one merges. Newest first. Process: see "How we ship" in `CLAUDE.md` and the roadmap spec in `docs/superpowers/specs/`.
 
+## v0.6.0 — Bag & checkout · 2026-10-17
+- **Scope:**
+  - **The bag on the server:** Postgres carts with a signed guest cookie, and a count cookie so the header makes no request. Quantities are capped at live stock and 10 per item. A guest's bag merges into the account on sign-in, and pre-M5 browser bags were imported once.
+  - **`/bag` and the added-to-bag panel:** quantity, Remove with Undo, Move to saved items, and stock notes.
+  - **Checkout on our own page:**
+    - an email gate (guest or sign in);
+    - our own delivery form, with a filterable State list and a US ZIP check;
+    - Stripe's card fields, in test mode.
+    - Stock is held for 31 minutes while the shopper pays, so two shoppers racing for the last unit get one hold and one "sold out".
+  - **Orders:** Stripe only authorises, and the money is captured once the order is recorded.
+    - A hold that ran out takes its stock again, or the payment is cancelled ("sold out while you were paying").
+    - The webhook and the success page can both fulfil, safely and at the same time. Anything uncertain is retried rather than answered as "not charged".
+    - The confirmation email is sent once, and retried after a failure.
+  - **Order history** in the account (list and detail), and a guest order link carrying a key that's stored hashed.
+- **Pull requests:** [#31 M5 Bag & checkout spec and plan](https://github.com/Earnstein/orra-storefront/pull/31) · [#32 Move the bag to the server](https://github.com/Earnstein/orra-storefront/pull/32) · [#33 Add the bag page and the added-to-bag panel](https://github.com/Earnstein/orra-storefront/pull/33) · [#34 Compare the bag subtotal exactly in the quantity test](https://github.com/Earnstein/orra-storefront/pull/34) · [#35 Add checkout with stock held while you pay](https://github.com/Earnstein/orra-storefront/pull/35) · [#36 Add orders, the webhook and the confirmation email](https://github.com/Earnstein/orra-storefront/pull/36) · [#37 Add order history](https://github.com/Earnstein/orra-storefront/pull/37) · [#38 Read the bag in one statement](https://github.com/Earnstein/orra-storefront/pull/38) · [#39 Collect the delivery address in our own fields; shadcn selects](https://github.com/Earnstein/orra-storefront/pull/39) · [#40 Milestone log](https://github.com/Earnstein/orra-storefront/pull/40)
+- **URL:** https://orra-storefront.vercel.app
+- **Budgets (measured on production; LCP on local builds, as in M3 and M4):**
+  - **`GET /api/bag` server time:** 35–56 ms, median 36 ms (budget 50 ms).
+    - It measured a median of 55 ms first; #38 read the bag in one statement instead of two.
+  - **`startCheckout`:** 1,556 ms for a new hold and its Stripe session, and 572 ms for a resumed one (budget 1.5 s).
+    - Both were measured from the client, so they include the network from Lagos to Vercel's `iad1`; the server's share is lower.
+  - **Webhook handling:** budget 1 s. Not measured here: Stripe's dashboard shows each delivery's response time.
+  - **Stripe's JavaScript:** loads only on `/checkout`, in the form's lazy chunk.
+  - **LCP against `v0.5.0`:** mobile emulation with 4× CPU and 1.6 Mbps / 150 ms, 5 runs each (budget: no worse).
+    - `/collections/women`: 1,156 against 1,156 ms.
+    - `/products/leather-tote-tan`: 3,420 against 3,432 ms.
+- **Exit check:**
+  - **e2e against production** (without `@writes`): 202 passed.
+    - The "checkout isn't available without Stripe keys" test failed there, because production now has keys. It now skips on deployed sites (this PR).
+  - **A test purchase on production** (exit criterion 1): a guest purchase by the owner went through and the confirmation email arrived.
+    - Stock dropping, the order in history and the email are also covered in e2e on the dev database, as a guest and signed in.
+  - **Production checkout up to Pay:** our delivery form and Stripe's card fields load with no console errors. The guest order page sends `private, no-store` and `no-referrer`.
+  - **Races on the Neon dev branch** (exit criteria 2 and 3), e2e and unit:
+    - two shoppers for the last unit get one hold and one "sold out";
+    - a hold that ran out while its stock sold gives no order and a cancelled payment.
+  - **Reviews:** fresh-context reviews of the checkout, orders and order-history branches. Their important findings are fixed: uncertain captures and failed undos are now retried, and past delivery estimates are hidden.
+- **Carried forward:**
+  - Before v1.0.0: rotate the Neon production database password, and add an email sending domain.
+  - M7 (with email verification):
+    - guest orders join the account whose verified email placed them;
+    - a guest who signs in between paying and the success page sees "Order received", though the order itself is fine.
+  - M6:
+    - its nightly job resends order emails that never went out;
+    - admin edits should call `updateTag("catalog")`, and keep the endpoints' CDN caching from lagging behind it;
+    - products should be archived, not deleted, once orders refer to them.
+  - **Delivery dates:** worked out in one store time zone, since the page uses the shopper's zone and the email UTC.
+  - **Order pages:** they answer 200 (the not-found page, noindex) for another shopper's order or a wrong key. A real 404 would need a database lookup in the proxy.
+  - **Stripe's address autocomplete** went with its address form (#39); browser autofill still works.
+  - **Checkout e2e tests that pay:** they need Stripe test keys, so they skip in CI until the keys are added as GitHub secrets.
+  - **Still open from M3 and M4:** keyset pagination and an index-friendly typo match at a much larger catalogue; not-found pages have no `<title>`; the saved-items and auth minors listed under v0.5.0. M5 did narrow the search triggers, as M3 asked.
+
 ## v0.5.0 — Accounts · 2026-10-11
 - **Scope:**
   - Better Auth with email and password on separate `/sign-in` and `/sign-up` pages, and password reset by email (Resend's test sender until M7 adds a domain).
