@@ -24,8 +24,8 @@ vi.mock("@/db", () => ({
   },
 }));
 vi.mock("next/headers", () => ({ headers: async () => request.headers }));
-// Our Blob store is "abc123" (its host is derived from the token).
-vi.mock("@/lib/env", () => ({ serverEnv: () => ({ BLOB_READ_WRITE_TOKEN: "vercel_blob_rw_ABC123_secret" }) }));
+// Our Blob store is "abc123" (its host comes from the store id).
+vi.mock("@/lib/env", () => ({ serverEnv: () => ({ BLOB_STORE_ID: "store_abc123" }) }));
 const updateTag = vi.hoisted(() => vi.fn());
 vi.mock("next/cache", () => ({ updateTag, cacheTag: () => {}, cacheLife: () => {} }));
 

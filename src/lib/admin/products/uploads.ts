@@ -33,12 +33,12 @@ export function isUploadPathname(pathname: string): boolean {
 }
 
 /**
- * Our Blob store's public host, from its read-write token (`vercel_blob_rw_<storeId>_<secret>`),
- * or null when there's no token. Saved photos must come from this store, under `products/`.
+ * Our Blob store's public host, from BLOB_STORE_ID (`store_<id>` or `<id>`, as the Blob SDK
+ * accepts), or null without one. Saved photos must come from this store, under `products/`.
  */
-export function blobStoreHost(token: string | undefined): string | null {
-  const storeId = token?.match(/^vercel_blob_rw_([a-z0-9]+)_/i)?.[1];
-  return storeId ? `${storeId.toLowerCase()}.public.blob.vercel-storage.com` : null;
+export function blobStoreHost(storeId: string | undefined): string | null {
+  const id = storeId?.trim().replace(/^store_/, "");
+  return id && /^[a-z0-9]+$/i.test(id) ? `${id.toLowerCase()}.public.blob.vercel-storage.com` : null;
 }
 
 /** Whether a photo URL may be saved: Unsplash, or our own store's `products/` uploads. */
