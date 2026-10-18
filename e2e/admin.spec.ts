@@ -27,6 +27,9 @@ test("@writes a shopper gets the not-found page, so the admin isn't advertised",
     await expect(page.getByRole("heading", { level: 1, name: "Page not found" })).toBeVisible({ timeout: AUTH_TIMEOUT });
     await expect(page.getByRole("navigation", { name: "Admin" })).toHaveCount(0);
   }
+  // Not even in the page's data: admin pages render their content only after requireAdmin.
+  await page.goto("/admin/products", { waitUntil: "load" });
+  expect(await page.content()).not.toContain("Add, edit and archive the catalogue");
 });
 
 test("@writes the demo admin sees the admin's own header and the demo band", async ({ page }) => {

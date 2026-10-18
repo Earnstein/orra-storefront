@@ -32,7 +32,9 @@ describe("roleCan", () => {
 
   it("reads comma-separated roles as Better Auth does", () => {
     expect(roleCan("user,demo-admin", { product: ["update"] })).toBe(true);
-    expect(roleCan("user, admin", { order: ["cancel"] })).toBe(true);
+    expect(roleCan("user,admin", { order: ["cancel"] })).toBe(true);
+    // The plugin doesn't trim, so neither do we: " admin" is no role.
+    expect(roleCan("user, admin", { order: ["cancel"] })).toBe(false);
   });
 });
 

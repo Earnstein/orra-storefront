@@ -43,5 +43,6 @@ export function roleCan(role: string | null | undefined, permission: Permission)
 }
 
 function splitRoles(role: string | null | undefined): string[] {
-  return (role ?? "").split(",").map((name) => name.trim()).filter(Boolean);
+  // Exactly as the admin plugin splits them (no trimming), so our checks and its endpoints agree.
+  return (role ?? "").split(",").filter(Boolean);
 }
