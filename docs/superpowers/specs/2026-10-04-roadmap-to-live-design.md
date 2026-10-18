@@ -158,8 +158,8 @@ Homepage with hero carousel. Product detail pages with gallery, Add to bag and S
 | Module | Delivers |
 |---|---|
 | Roles | Better Auth `admin` plugin, regenerated auth schema. Roles: `admin` (owner) and `demo-admin`. Every admin route and server action checks the role on the server. |
-| Products | `/admin/products`: TanStack Table v9 list with search and sort. Create and edit with TanStack Form: fields, category, audience, colour family, material, price, stock, details, images uploaded to Vercel Blob with alt text. Edits refresh the affected storefront pages immediately. |
-| Orders | `/admin/orders`: list, detail, status changes (paid → fulfilled, cancel). |
+| Products | `/admin/products`: TanStack Table v9 list with search and sort. Create and edit with TanStack Form: fields, category, audience, colour family, material, price, stock, details, images uploaded to Vercel Blob with alt text. Edits refresh the affected storefront pages immediately. Products are archived, not deleted ([M6 spec](2026-10-18-m6-admin-design.md)). |
+| Orders | `/admin/orders`: list, detail, status changes (paid → fulfilled, cancel with a refund). The demo admin reads orders with customers' details masked and can't change them. |
 | Demo admin | A "Try the admin" button signs into the shared `demo-admin` account. It's rate-limited and can't manage users, roles or the owner account. |
 | Demo reset | A nightly Vercel Cron job hits a secret-protected route. It restores the catalogue and stock to the seed, deletes products that aren't in the seed, and clears orders and carts older than the reset window. It also sends any order confirmation email that never went out (from the M5 spec: `email_sent_at` is set only after a confirmed send). On the demo, the seed is the catalogue's source of truth: catalogue changes meant to last (including the owner's) go into the seed. Users, roles and the owner's account are never reset. |
 
@@ -204,7 +204,7 @@ Added at the user's request during M5's brainstorming: Stripe first, Paystack on
 | M3 | `products.search` (`tsvector` kept current by a trigger, GIN index) and a `pg_trgm` index for typo tolerance. |
 | M4 | `saved_items(user_id, product_id, created_at)`, PK on both ids, cascading deletes. |
 | M5 | `carts(id, user_id unique nullable, …)`, `cart_items(cart_id, product_id, quantity > 0)`, `checkouts` and `checkout_items` (stock holds), `orders(id, number, checkout_id unique, user_id nullable, email, status, subtotal, currency, payment_provider, payment_reference unique, created_at, …)`, `order_items(order_id, product_id, name, unit_price, quantity)`, `payment_events(id, provider, received_at)`. |
-| M6 | Better Auth admin fields (`role`, …) via `auth:generate`. |
+| M6 | Better Auth admin fields (`role`, `banned`, …) via `auth:generate`; `products.archived_at`; the `fulfilled` order status with `fulfilled_at` and `cancelled_at`. |
 
 **Reads and writes.**
 - Pages are server components that read through `src/lib/**/queries.ts`; components never import `@/db`.
@@ -221,7 +221,7 @@ Added at the user's request during M5's brainstorming: Stripe first, Paystack on
 | TanStack Query | Fetching and caching on the client: listings and search in M3, admin tables in M6. |
 | TanStack Pacer | Debouncing the search text (`useDebouncedValue`) in M3. It's beta, so the version is pinned and its use kept narrow. |
 
-TanStack DB was evaluated for search during M2's brainstorming. Its live queries run in the browser and have no full-text search or relevance ranking, so it isn't used there. M4 and M5 revisited it for saved items and the bag and kept TanStack Query's optimistic mutations instead (M5: it's at 0.13, not 1.0, and about 95 KB gzipped). Revisit it for the admin tables (M6).
+TanStack DB was evaluated for search during M2's brainstorming. Its live queries run in the browser and have no full-text search or relevance ranking, so it isn't used there. M4 and M5 revisited it for saved items and the bag and kept TanStack Query's optimistic mutations instead (M5: it's at 0.13, not 1.0, and about 95 KB gzipped). M6 doesn't adopt it for the admin tables either: they're server-paged reads TanStack Query already handles ([M6 spec](2026-10-18-m6-admin-design.md)).
 
 **Transactions.** The webhook and stock decrement need a transaction whose later statements depend on earlier results. The neon-http driver can't do that, so this path uses Neon's WebSocket driver (`drizzle-orm/neon-serverless` with a `Pool`). The decrement is `UPDATE … SET stock = stock - $q WHERE id = $id AND stock >= $q`; zero rows updated means out of stock. From M5, stock is taken when checkout starts (a hold) and taken again at fulfilment only if the hold lapsed; when it's gone, the payment's authorisation is cancelled.
 
@@ -265,7 +265,7 @@ Tests are written first (red → green) for every behaviour a plan task introduc
   - approved on a contact sheet.
 - **Pagination style and price filter control (M3): settled** in the [M3 spec](2026-10-05-m3-find-design.md): a "Load more" button, and price bands with counts.
 - **Function region (M3): settled.** Neon runs in AWS US East, next to Vercel's default `iad1`, so no change is needed.
-- **Demo reset window (M6).** How long demo orders and carts live before the nightly reset clears them.
+- **Demo reset window (M6): settled** in the [M6 spec](2026-10-18-m6-admin-design.md): 30 days for carts, checkouts and orders.
 - **Monitoring vendor (M7).** Which error-monitoring service; free tier only.
 
 ## Risks
