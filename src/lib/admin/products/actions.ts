@@ -12,7 +12,8 @@ import { productInput, type ProductField, type ProductInput, type ProductResult 
 // The admin's product actions. Each checks the admin and the permission first (uncached session),
 // parses everything it's sent, and on success refreshes the catalogue: updateTag("catalog")
 // expires every cached catalogue read, and on Vercel purges the CDN's copies of the public
-// catalogue routes, which carry the same tag (Vercel-Cache-Tag).
+// catalogue routes, which carry the same tag (Vercel-Cache-Tag). A prerendered page's first visit
+// after a save can still get its previous render while it re-renders; the next visit is current.
 
 const FAILED = { ok: false, error: "failed", message: "Something went wrong. Try again." } as const;
 const id = z.number().int().positive();

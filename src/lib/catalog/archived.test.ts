@@ -12,6 +12,7 @@ import {
   getCollectionProducts,
   getNewArrivals,
   getProduct,
+  getProductPage,
   getProductsBySlugs,
   getRelatedProducts,
   getSpotlightProduct,
@@ -40,8 +41,11 @@ beforeAll(async () => {
 });
 
 describe("archived products", () => {
-  it("have no product page and aren't prerendered", async () => {
+  it("aren't prerendered, and their page says they're no longer available", async () => {
     expect(await getProduct(newest.slug)).toBeUndefined();
+    expect(await getProductPage(newest.slug)).toMatchObject({ slug: newest.slug, archived: true });
+    expect(await getProductPage(seedProducts[2].slug)).toMatchObject({ archived: false });
+    expect(await getProductPage("no-such-product")).toBeUndefined();
     expect(await getAllProductSlugs()).not.toContain(newest.slug);
     expect(await getAllProductSlugs()).toHaveLength(seedProducts.length - archived.length);
   });

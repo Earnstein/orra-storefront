@@ -38,7 +38,10 @@ export const productInput = z.object({
     .trim()
     .min(1, "Enter a slug.")
     .max(SLUG_MAX, `Use at most ${SLUG_MAX} characters.`)
-    .regex(SLUG_PATTERN, "Use lower-case letters, digits and single hyphens."),
+    // Only once something's typed, so an empty slug says just "Enter a slug."
+    .refine((slug) => slug === "" || SLUG_PATTERN.test(slug), "Use lower-case letters, digits and single hyphens.")
+    // /admin/products/new is the editor for a new product.
+    .refine((slug) => slug !== "new", "This slug is reserved."),
   categorySlug: z.string().min(1, "Choose a category."),
   audience: z.enum(AUDIENCES, "Choose who it's for."),
   colour: text("the colour", 60),
@@ -78,3 +81,29 @@ export function slugify(name: string): string {
 export type ProductResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: "signed-out" | "forbidden" | "invalid" | "not-found" | "failed"; message: string; field?: ProductField };
+
+// The editor's values: price in dollars and stock as typed, converted by toProductInput.
+const dollars = z
+  .string()
+  .trim()
+  .min(1, "Enter a price.")
+  .refine((value) => value === "" || /^\d+(\.\d{1,2})?$/.test(value), "Use a price like 1290 or 1290.50.")
+  .refine((value) => Math.round(Number(value) * 100) <= PRICE_MAX, "The price can be at most $1,000,000.");
+const units = z
+  .string()
+  .trim()
+  .min(1, "Enter the stock.")
+  .refine((value) => value === "" || /^\d+$/.test(value), "Use a whole number.")
+  .refine((value) => Number(value) <= STOCK_MAX, `Stock can be at most ${STOCK_MAX.toLocaleString("en-US")}.`);
+
+export const productFormSchema = productInput.extend({ price: dollars, stock: units });
+export type ProductFormValues = z.input<typeof productFormSchema>;
+
+export function toProductInput(values: ProductFormValues): ProductInput {
+  return { ...values, price: Math.round(Number(values.price) * 100), stock: Number(values.stock) };
+}
+
+/** A product's values as the editor shows them (price in dollars). */
+export function toFormValues(input: ProductInput): ProductFormValues {
+  return { ...input, price: (input.price / 100).toFixed(2).replace(/\.00$/, ""), stock: String(input.stock) };
+}

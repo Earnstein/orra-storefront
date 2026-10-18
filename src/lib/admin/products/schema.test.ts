@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isProductImageUrl, PRICE_MAX, productInput, slugify, STOCK_MAX, type ProductInput } from "./schema";
+import { isProductImageUrl, PRICE_MAX, productFormSchema, productInput, slugify, STOCK_MAX, toFormValues, toProductInput, type ProductInput } from "./schema";
 
 const valid: ProductInput = {
   name: "Leather tote",
@@ -41,6 +41,7 @@ describe("productInput", () => {
 
   it("refuses a malformed slug and an unknown vocabulary value", () => {
     expect(issues({ ...valid, slug: "Leather Tote" })[0]?.[0]).toBe("slug");
+    expect(issues({ ...valid, slug: "new" })).toEqual([["slug", "This slug is reserved."]]);
     expect(issues({ ...valid, material: "unobtainium" })[0]?.[0]).toBe("material");
   });
 
@@ -67,5 +68,28 @@ describe("slugify", () => {
     expect(slugify("!!!")).toBe("");
     expect(slugify("a".repeat(99) + " bc").length).toBeLessThanOrEqual(100);
     expect(slugify("a".repeat(99) + " bc")).not.toMatch(/-$/);
+  });
+});
+
+describe("the editor's values", () => {
+  it("enter the price in dollars and convert to cents both ways", () => {
+    expect(toFormValues(valid)).toMatchObject({ price: "1290", stock: "4" });
+    expect(toFormValues({ ...valid, price: 129_050 })).toMatchObject({ price: "1290.50" });
+    expect(toProductInput({ ...toFormValues(valid), price: "1290.5" })).toMatchObject({ price: 129_050, stock: 4 });
+    expect(toProductInput({ ...toFormValues(valid), price: "0.29" }).price).toBe(29);
+  });
+
+  it("refuse prices and stock that aren't plain numbers in range", () => {
+    const form = (overrides: object) => productFormSchema.safeParse({ ...toFormValues(valid), ...overrides }).error?.issues[0]?.message;
+    expect(form({ price: "12,90" })).toBe("Use a price like 1290 or 1290.50.");
+    expect(form({ price: "1.999" })).toBe("Use a price like 1290 or 1290.50.");
+    expect(form({ price: "1000000.01" })).toBe("The price can be at most $1,000,000.");
+    expect(form({ stock: "2.5" })).toBe("Use a whole number.");
+    expect(form({ stock: "100001" })).toBe("Stock can be at most 100,000.");
+    expect(form({})).toBeUndefined();
+    const all = (overrides: object) => productFormSchema.safeParse({ ...toFormValues(valid), ...overrides }).error?.issues.map((issue) => issue.message);
+    expect(all({ price: "" })).toEqual(["Enter a price."]);
+    expect(all({ stock: "" })).toEqual(["Enter the stock."]);
+    expect(all({ slug: "" })).toEqual(["Enter a slug."]);
   });
 });

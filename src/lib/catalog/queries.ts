@@ -7,7 +7,7 @@ import { categories, products } from "@/db/schema";
 import type { CollectionScope } from "./collections";
 import { NEW_ARRIVALS_LIMIT, spotlightSlug } from "./merchandising";
 import { liveProduct, productColumns } from "./product-columns";
-import type { Category, Product } from "./types";
+import type { Category, Product, ProductPageProduct } from "./types";
 
 // Catalogue reads. Components depend on these signatures and the Product type, not on the
 // table layout. Every read is cached (Cache Components) under the `catalog` tag with the
@@ -29,6 +29,24 @@ export async function getProduct(slug: string): Promise<Product | undefined> {
   cacheTag("catalog");
   cacheLife("catalog");
   const [product] = await selectProducts(eq(products.slug, slug)).limit(1);
+  return product;
+}
+
+/**
+ * The product page's product, archived or not (flagged): an archived product's page says it's no
+ * longer available. It can't 404 instead: the page was prerendered, and Next keeps serving the
+ * last good render when regenerating it throws (notFound() included) until the next deploy.
+ */
+export async function getProductPage(slug: string): Promise<ProductPageProduct | undefined> {
+  "use cache";
+  cacheTag("catalog");
+  cacheLife("catalog");
+  const [product] = await db
+    .select({ ...productColumns, archived: sql<boolean>`${products.archivedAt} is not null` })
+    .from(products)
+    .innerJoin(categories, eq(products.categoryId, categories.id))
+    .where(eq(products.slug, slug))
+    .limit(1);
   return product;
 }
 

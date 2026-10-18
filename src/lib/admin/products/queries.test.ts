@@ -6,7 +6,7 @@ import type { SeedDatabase } from "@/db/seed";
 import { products as seedProducts } from "@/db/seed/catalog";
 import { ADMIN_PAGE_SIZE, type AdminProductParams } from "@/lib/admin/table-params";
 import { createTestDb } from "@/test/db";
-import { listAdminProducts } from "./queries";
+import { getAdminProduct, listAdminProducts } from "./queries";
 
 let db: SeedDatabase;
 const base: AdminProductParams = { q: "", sort: "newest", dir: null, status: "active", page: 1 };
@@ -64,5 +64,14 @@ describe("listAdminProducts", () => {
     expect(row).toMatchObject({ slug: seedProducts[2].slug, held: 0, archived: false });
     expect(typeof row.category).toBe("string");
     expect(row.image?.src).toMatch(/^https:\/\//);
+  });
+});
+
+describe("getAdminProduct", () => {
+  it("loads a product for the editor, archived ones too", async () => {
+    const product = await getAdminProduct(db, archived[0]);
+    expect(product).toMatchObject({ slug: archived[0], archived: true, held: 0, categorySlug: seedProducts[0].category });
+    expect(product?.images.length).toBeGreaterThan(0);
+    expect(await getAdminProduct(db, "no-such-product")).toBeUndefined();
   });
 });
