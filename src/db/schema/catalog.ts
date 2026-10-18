@@ -53,6 +53,11 @@ export const products = pgTable(
     images: jsonb().$type<ProductImage[]>().notNull(),
     /** Units available to sell. Status (in stock / low / sold out) is derived in lib/catalog/stock.ts. */
     stock: integer().notNull().default(0),
+    /**
+     * Set when the admin archives the product (its soft delete): it leaves every storefront read
+     * and can't be bought, while orders, holds and saved items keep their rows. Null = live.
+     */
+    archivedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true })
       .notNull()

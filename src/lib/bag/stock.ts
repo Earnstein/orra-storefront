@@ -5,12 +5,13 @@ import { sql, type SQL } from "drizzle-orm";
  * this bag may count: its own (without it, a shopper holding 2 of 3 would see their own line
  * lowered to the 1 left, on /bag in another tab or when adding one more) and any that ran out
  * more than HOLD_GRACE (2 minutes, holds.ts) ago but haven't been swept yet (they're only swept
- * when a checkout starts, so a product held in full would otherwise read as sold out until then). `product` names the products row in the
- * surrounding query (e.g. `sql.raw("p")`).
+ * when a checkout starts, so a product held in full would otherwise read as sold out until then).
+ * An archived product has none to sell: it can't be added, and checkout leaves it out. `product`
+ * names the products row in the surrounding query (e.g. `sql.raw("p")`).
  */
 export function availableTo(cartId: string, product: SQL): SQL<number> {
-  return sql<number>`(${product}.stock + coalesce((
+  return sql<number>`(case when ${product}.archived_at is not null then 0 else ${product}.stock + coalesce((
     select sum(h.quantity) from checkout_items h join checkouts c on c.id = h.checkout_id
     where c.status = 'open' and (c.cart_id = ${cartId} or c.expires_at < now() - interval '2 minutes') and h.product_id = ${product}.id
-  ), 0))::int`;
+  ), 0) end)::int`;
 }

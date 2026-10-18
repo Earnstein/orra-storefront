@@ -6,7 +6,7 @@ import type { SeedDatabase } from "@/db/seed";
 import type { CatalogImage } from "@/lib/catalog/types";
 import { MAX_QUANTITY } from "./limits";
 import { availableTo } from "./stock";
-import type { Bag, BagLine } from "./types";
+import { isBuyable, type Bag, type BagLine } from "./types";
 
 /** Rows from `db.execute`, which both drivers (Neon HTTP and PGlite) return as `{ rows }`. */
 export function rowsOf<T>(result: unknown): T[] {
@@ -15,8 +15,8 @@ export function rowsOf<T>(result: unknown): T[] {
 
 /**
  * The bag with live stock (not the catalogue cache). A line above stock is lowered in the same
- * request and marked "reduced"; a line with no stock stays, marked "sold-out" and left out of the
- * count and subtotal. Newest lines first. One statement (each is a round trip to Neon): the
+ * request and marked "reduced"; a line with no stock stays, marked "sold-out" (or "unavailable"
+ * when the product was archived) and left out of the count and subtotal. Newest lines first. One statement (each is a round trip to Neon): the
  * lowering runs in a CTE, and the read takes each lowered line's new quantity from it, since the
  * statement's snapshot still holds the old one.
  */
@@ -32,6 +32,7 @@ export async function readBag(db: SeedDatabase, cartId: string): Promise<Bag> {
     stock: number;
     quantity: number;
     reduced: boolean;
+    archived: boolean;
   }>(
     await db.execute(sql`
       with reduced as (
@@ -41,7 +42,8 @@ export async function readBag(db: SeedDatabase, cartId: string): Promise<Bag> {
         returning ci.product_id, ci.quantity
       )
       select p.id as product_id, p.slug, p.name, p.colour, p.price as unit_price, p.images -> 0 as image, ${available} as stock,
-        coalesce(r.quantity, ci.quantity) as quantity, r.product_id is not null as reduced
+        coalesce(r.quantity, ci.quantity) as quantity, r.product_id is not null as reduced,
+        p.archived_at is not null as archived
       from cart_items ci
       join products p on p.id = ci.product_id
       left join reduced r on r.product_id = ci.product_id
@@ -60,10 +62,10 @@ export async function readBag(db: SeedDatabase, cartId: string): Promise<Bag> {
       image: typeof row.image === "string" ? (JSON.parse(row.image) as CatalogImage) : row.image,
       stock,
       quantity: Number(row.quantity),
-      note: stock === 0 ? "sold-out" : row.reduced ? "reduced" : null,
+      note: row.archived ? "unavailable" : stock === 0 ? "sold-out" : row.reduced ? "reduced" : null,
     };
   });
-  const buyable = lines.filter((line) => line.note !== "sold-out");
+  const buyable = lines.filter(isBuyable);
   return {
     lines,
     count: buyable.reduce((total, line) => total + line.quantity, 0),

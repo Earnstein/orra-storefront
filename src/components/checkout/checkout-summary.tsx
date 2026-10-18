@@ -5,7 +5,7 @@ import { useSyncExternalStore } from "react";
 
 import { Media } from "@/components/primitives";
 import { Separator } from "@/components/ui/separator";
-import type { Bag } from "@/lib/bag/types";
+import { isBuyable, type Bag } from "@/lib/bag/types";
 import { formatPrice } from "@/lib/format";
 import { site } from "@/lib/site";
 
@@ -18,13 +18,13 @@ export function holdTime(expiresAt: string): string {
 }
 
 /**
- * What's being bought: the lines (sold-out ones left out), subtotal, complimentary delivery and the
+ * What's being bought: the lines (ones that can't be bought left out), subtotal, complimentary delivery and the
  * total, and, while stock is held, until when. Times use the visitor's clock, so they render after
  * hydration.
  */
 export function CheckoutSummary({ bag, expiresAt }: { bag: Bag; expiresAt?: string }) {
   const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
-  const lines = bag.lines.filter((line) => line.note !== "sold-out");
+  const lines = bag.lines.filter(isBuyable);
   return (
     <section aria-labelledby="checkout-summary-heading" className="flex flex-col gap-5 bg-surface p-6">
       <h2 id="checkout-summary-heading" className="eyebrow">

@@ -1,12 +1,12 @@
 import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
-import { desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
 
 import { db } from "@/db";
 import { categories, products } from "@/db/schema";
 import type { CollectionScope } from "./collections";
 import { NEW_ARRIVALS_LIMIT, spotlightSlug } from "./merchandising";
-import { productColumns } from "./product-columns";
+import { liveProduct, productColumns } from "./product-columns";
 import type { Category, Product } from "./types";
 
 // Catalogue reads. Components depend on these signatures and the Product type, not on the
@@ -14,16 +14,21 @@ import type { Category, Product } from "./types";
 // `catalog` lifetime (next.config.ts): an edit shows on the first visit after the 5-minute
 // refresh has run, or at once after updateTag("catalog") in a Server Action.
 // queries-cache.test.ts checks that every exported read keeps its three cache lines.
+// Archived products (archived_at set by the admin) are left out of every read here.
 
-function selectProducts() {
-  return db.select(productColumns).from(products).innerJoin(categories, eq(products.categoryId, categories.id));
+function selectProducts(where?: SQL) {
+  return db
+    .select(productColumns)
+    .from(products)
+    .innerJoin(categories, eq(products.categoryId, categories.id))
+    .where(and(liveProduct, where));
 }
 
 export async function getProduct(slug: string): Promise<Product | undefined> {
   "use cache";
   cacheTag("catalog");
   cacheLife("catalog");
-  const [product] = await selectProducts().where(eq(products.slug, slug)).limit(1);
+  const [product] = await selectProducts(eq(products.slug, slug)).limit(1);
   return product;
 }
 
@@ -31,7 +36,7 @@ export async function getAllProductSlugs(): Promise<string[]> {
   "use cache";
   cacheTag("catalog");
   cacheLife("catalog");
-  const rows = await db.select({ slug: products.slug }).from(products);
+  const rows = await db.select({ slug: products.slug }).from(products).where(liveProduct);
   return rows.map((row) => row.slug);
 }
 
@@ -41,7 +46,7 @@ export async function getProductsBySlugs(slugs: string[]): Promise<Product[]> {
   cacheTag("catalog");
   cacheLife("catalog");
   if (slugs.length === 0) return [];
-  const rows = await selectProducts().where(inArray(products.slug, slugs));
+  const rows = await selectProducts(inArray(products.slug, slugs));
   const bySlug = new Map(rows.map((product) => [product.slug, product]));
   return slugs.flatMap((slug) => bySlug.get(slug) ?? []);
 }
@@ -69,13 +74,9 @@ export async function getCollectionProducts(scope: CollectionScope): Promise<Pro
     case "new":
       return getNewArrivals(scope.limit);
     case "audience":
-      return selectProducts()
-        .where(inArray(products.audience, [scope.audience, "unisex"]))
-        .orderBy(desc(products.createdAt), products.id);
+      return selectProducts(inArray(products.audience, [scope.audience, "unisex"])).orderBy(desc(products.createdAt), products.id);
     case "category":
-      return selectProducts()
-        .where(eq(categories.slug, scope.categorySlug))
-        .orderBy(desc(products.createdAt), products.id);
+      return selectProducts(eq(categories.slug, scope.categorySlug)).orderBy(desc(products.createdAt), products.id);
   }
 }
 
@@ -87,12 +88,15 @@ export async function getCategories(): Promise<Category[]> {
   return db.select({ slug: categories.slug, name: categories.name }).from(categories).orderBy(categories.id);
 }
 
+/** The editorial pick in merchandising.ts, or the newest live product when it's archived. */
 export async function getSpotlightProduct(): Promise<Product> {
   "use cache";
   cacheTag("catalog");
   cacheLife("catalog");
-  const product = await getProduct(spotlightSlug);
-  if (!product) throw new Error(`Spotlight product "${spotlightSlug}" is missing from the catalogue`);
+  // The newest live product stands in when the spotlight is archived (or missing), so archiving
+  // it in the admin can't break the homepage.
+  const product = (await getProduct(spotlightSlug)) ?? (await getNewArrivals(1))[0];
+  if (!product) throw new Error("The catalogue has no live products to put in the spotlight");
   return product;
 }
 
@@ -102,8 +106,7 @@ export async function getRelatedProducts(product: Product, limit = 4): Promise<P
   cacheTag("catalog");
   cacheLife("catalog");
   const sameCategory = sql`${categories.slug} = ${product.category.slug}`;
-  return selectProducts()
-    .where(ne(products.slug, product.slug))
+  return selectProducts(ne(products.slug, product.slug))
     .orderBy(desc(sameCategory), desc(products.createdAt), products.id)
     .limit(limit);
 }

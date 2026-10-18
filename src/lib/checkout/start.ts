@@ -7,7 +7,7 @@ import type { SeedDatabase } from "@/db/seed";
 import type { Transact } from "@/db/tx";
 import { findCart, type CartRef } from "@/lib/bag/cart";
 import { readBag } from "@/lib/bag/queries";
-import type { Bag, BagLine } from "@/lib/bag/types";
+import { isBuyable, type Bag, type BagLine } from "@/lib/bag/types";
 import { closeReleasedPayment } from "@/lib/payments/close";
 import { PaymentsUnavailableError, type PaymentProvider } from "@/lib/payments/types";
 import { rowsOf } from "@/lib/bag/queries";
@@ -21,7 +21,8 @@ import { allowCheckoutStart } from "./rate-limit";
  */
 export const HOLD_MINUTES = 31;
 
-export type ShortLine = { slug: string; name: string; available: number };
+/** A line checkout couldn't hold as it was: lowered, sold out, or (`unavailable`) archived. */
+export type ShortLine = { slug: string; name: string; available: number; unavailable?: boolean };
 
 export type StartResult =
   | { ok: true; data: { checkoutId: string; clientSecret: string; expiresAt: string; summary: Bag } }
@@ -59,7 +60,9 @@ export function shortMessage(short: ShortLine[]): string {
   if (short.length > 1 || !first) return "Some items in your bag sold out or ran low — your bag has been updated";
   return first.available > 0
     ? `Only ${first.available} ${first.name} ${first.available === 1 ? "was" : "were"} left — your bag has been updated`
-    : `The ${first.name} sold out — your bag has been updated`;
+    : first.unavailable
+      ? `The ${first.name} is no longer available — your bag has been updated`
+      : `The ${first.name} sold out — your bag has been updated`;
 }
 
 const sameHold = (hold: OpenHold, email: string, lines: HoldLine[]) =>
@@ -103,10 +106,15 @@ export async function startCheckoutWith(deps: StartDeps, { cart: ref, email, ip 
     throw error;
   }
 
-  const changed = bag.lines.filter((line) => line.note === "reduced" || (line.note === "sold-out" && bag.count === 0));
-  if (changed.length > 0) return shortAnswer(bag, changed.map((line) => ({ slug: line.slug, name: line.name, available: line.stock })));
+  const changed = bag.lines.filter((line) => line.note === "reduced" || (!isBuyable(line) && bag.count === 0));
+  if (changed.length > 0) {
+    return shortAnswer(
+      bag,
+      changed.map((line) => ({ slug: line.slug, name: line.name, available: line.stock, ...(line.note === "unavailable" && { unavailable: true }) })),
+    );
+  }
 
-  const buyable = bag.lines.filter((line) => line.note !== "sold-out");
+  const buyable = bag.lines.filter(isBuyable);
   const lines = await holdLines(db, buyable);
   const existing = await findOpenHold(db, cart.id);
 

@@ -8,7 +8,7 @@ import { Media } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MAX_QUANTITY } from "@/lib/bag/limits";
-import type { BagLine as Line } from "@/lib/bag/types";
+import { isBuyable, type BagLine as Line } from "@/lib/bag/types";
 import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -22,11 +22,13 @@ type Props = {
 /**
  * One line of the bag: photo, name (linking to the product), colour and unit price, the quantity
  * (a Select: 1 up to the stock left, at most MAX_QUANTITY), the line total, and Move to
- * saved items / Remove. A line lowered to the stock left says so; a sold-out line keeps only its
- * actions and isn't counted.
+ * saved items / Remove. A line lowered to the stock left says so; a sold-out line, or one whose
+ * product was archived ("No longer available", its name no longer a link), keeps only its actions
+ * and isn't counted.
  */
 export const BagLine = forwardRef<HTMLButtonElement, Props>(function BagLine({ line, onQuantity, onRemove, onMove }, quantityRef) {
-  const soldOut = line.note === "sold-out";
+  const soldOut = !isBuyable(line);
+  const unavailable = line.note === "unavailable";
   const most = Math.max(Math.min(line.stock, MAX_QUANTITY), line.quantity);
   const id = `quantity-${line.slug}`;
   return (
@@ -37,9 +39,13 @@ export const BagLine = forwardRef<HTMLButtonElement, Props>(function BagLine({ l
       <div className="flex min-w-0 flex-col gap-3">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 flex-col gap-1">
-            <Link href={`/products/${line.slug}`} className="link-quiet text-caption uppercase">
-              {line.name}
-            </Link>
+            {unavailable ? (
+              <p className="text-caption uppercase">{line.name}</p>
+            ) : (
+              <Link href={`/products/${line.slug}`} className="link-quiet text-caption uppercase">
+                {line.name}
+              </Link>
+            )}
             <p className="text-caption text-muted-foreground">{line.colour}</p>
             <p className="text-caption">{formatPrice(line.unitPrice)}</p>
           </div>
@@ -49,7 +55,7 @@ export const BagLine = forwardRef<HTMLButtonElement, Props>(function BagLine({ l
         </div>
 
         {line.note === "reduced" && <p className="text-caption">Only {line.stock} left — we&apos;ve updated your bag</p>}
-        {soldOut && <p className="text-caption text-muted-foreground">Sold out</p>}
+        {soldOut && <p className="text-caption text-muted-foreground">{unavailable ? "No longer available" : "Sold out"}</p>}
 
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
           {!soldOut && (

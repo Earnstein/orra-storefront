@@ -160,3 +160,34 @@ describe("readBag", () => {
     expect(bag.lines[0].image).toMatchObject({ src: expect.any(String), alt: expect.any(String) });
   });
 });
+
+describe("archived products", () => {
+  const archive = (slug: string, archived: boolean) =>
+    db.update(products).set({ archivedAt: archived ? new Date() : null }).where(eq(products.slug, slug));
+
+  it("can't be added, and a line already in the bag shows as no longer available, out of the totals", async () => {
+    const cart = await newCart();
+    await setStock("leather-tote-tan", 5);
+    await setStock("double-monk-shoe", 5);
+    await addLine(db, cart, "leather-tote-tan", 2);
+    await addLine(db, cart, "double-monk-shoe", 1);
+    await archive("leather-tote-tan", true);
+    try {
+      const refused = await addLine(db, cart, "leather-tote-tan", 1);
+      expect(refused.capped).toBe(true);
+      expect(await stored(cart, "leather-tote-tan")).toBe(2);
+
+      const bag = await readBag(db, cart);
+      const line = bag.lines.find((l) => l.slug === "leather-tote-tan")!;
+      expect(line).toMatchObject({ note: "unavailable", stock: 0, quantity: 2 });
+      expect(bag.count).toBe(1);
+      expect(bag.subtotal).toBe(bag.lines.find((l) => l.slug === "double-monk-shoe")!.unitPrice);
+
+      await setLineQuantity(db, cart, "leather-tote-tan", 1);
+      expect(await stored(cart, "leather-tote-tan")).toBe(2);
+    } finally {
+      await archive("leather-tote-tan", false);
+    }
+    expect((await readBag(db, cart)).lines.find((l) => l.slug === "leather-tote-tan")).toMatchObject({ note: null, quantity: 2 });
+  });
+});
