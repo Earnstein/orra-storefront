@@ -2,8 +2,10 @@ import { dash } from "@better-auth/infra";
 import type { BetterAuthOptions } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
+import { admin } from "better-auth/plugins/admin";
 
 import { PASSWORD_MAX, PASSWORD_MIN } from "@/lib/auth/password";
+import { ac, roles } from "@/lib/auth/permissions";
 import type { Email } from "@/lib/email/send";
 import { resetPasswordEmail } from "@/lib/email/templates";
 
@@ -69,6 +71,9 @@ export const authOptions = {
   plugins: [
     // Better Auth Infra dashboard; reads BETTER_AUTH_API_KEY from the environment.
     dash(),
+    // Roles (src/lib/auth/permissions.ts). Only the owner counts as an admin to the plugin's own
+    // user and session endpoints; the demo admin's role grants none of them.
+    admin({ ac, roles, adminRoles: ["admin"], defaultRole: "user" }),
     // nextCookies must stay last so Server Actions can set cookies.
     nextCookies(),
   ],
