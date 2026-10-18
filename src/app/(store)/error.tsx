@@ -7,7 +7,7 @@ import { StatusMessage } from "@/components/site/status-message";
 import { Button } from "@/components/ui/button";
 
 /**
- * Error boundary for every page under the root layout, so the header and footer stay. Shoppers
+ * Error boundary for every storefront page (inside the (store) layout, so the header and footer stay). Shoppers
  * never see the error itself; it's logged for debugging (server errors carry a digest that
  * matches the server log).
  */

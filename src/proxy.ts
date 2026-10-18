@@ -4,8 +4,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { signInPath } from "@/lib/auth/return-to";
 
 /**
- * Marks guest order pages (`/orders/…?key=…`) private and uncacheable. Then, for account pages:
- * sends visitors without a session cookie from account pages to sign in before anything renders.
+ * Marks guest order pages (`/orders/…?key=…`) private and uncacheable. Then, for account and
+ * admin pages: sends visitors without a session cookie to sign in before anything renders.
  * A convenience only: it checks that the cookie exists, not that the session is valid, so pages
  * and server actions still check the session themselves (src/lib/auth/session.ts). Requests
  * other than GET/HEAD (server actions post to the page's URL) pass through, so an action answers
@@ -27,5 +27,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/account/:path*", "/orders/:path*"],
+  matcher: ["/account/:path*", "/admin/:path*", "/orders/:path*"],
 };
