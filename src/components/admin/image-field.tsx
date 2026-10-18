@@ -3,7 +3,7 @@
 import { upload } from "@vercel/blob/client";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import Image from "next/image";
-import { useId, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { IMAGES_MAX } from "@/lib/admin/products/schema";
@@ -26,7 +26,6 @@ export function AddPhoto({
   libraryPhotos: CatalogImage[];
   onAdd: (image: CatalogImage) => void;
 }) {
-  const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
   const full = count >= IMAGES_MAX;
@@ -52,10 +51,12 @@ export function AddPhoto({
         <div className="flex flex-wrap items-center gap-4">
           <input
             ref={input}
-            id={id}
             type="file"
             accept={UPLOAD_TYPES.join(",")}
             className="sr-only"
+            // Out of the Tab order and the accessibility tree: the button below opens it.
+            tabIndex={-1}
+            aria-hidden
             disabled={full || status.busy}
             onChange={(event) => {
               const file = event.target.files?.[0];

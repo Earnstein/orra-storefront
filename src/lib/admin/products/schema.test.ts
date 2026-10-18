@@ -25,7 +25,7 @@ describe("productInput", () => {
   });
 
   it("keeps price and stock inside their limits, in whole units", () => {
-    expect(issues({ ...valid, price: -1 })).toEqual([["price", "The price can't be negative."]]);
+    expect(issues({ ...valid, price: 49 })).toEqual([["price", "The price must be at least $0.50."]]);
     expect(issues({ ...valid, price: PRICE_MAX + 1 })).toEqual([["price", "The price can be at most $1,000,000."]]);
     expect(issues({ ...valid, price: 10.5 })).toEqual([["price", "Use whole cents."]]);
     expect(issues({ ...valid, stock: -1 })).toEqual([["stock", "Stock can't be negative."]]);
@@ -54,6 +54,7 @@ describe("isProductImageUrl", () => {
   it("allows Unsplash and our Blob store over https only", () => {
     expect(isProductImageUrl("https://images.unsplash.com/photo-123")).toBe(true);
     expect(isProductImageUrl("https://abc123.public.blob.vercel-storage.com/products/x.webp")).toBe(true);
+    expect(isProductImageUrl("https://abc123.public.blob.vercel-storage.com/other/x.webp")).toBe(false);
     expect(isProductImageUrl("http://images.unsplash.com/photo-123")).toBe(false);
     expect(isProductImageUrl("https://images.unsplash.com.evil.example/x")).toBe(false);
     expect(isProductImageUrl("https://user@images.unsplash.com/photo-1")).toBe(false);
@@ -76,7 +77,7 @@ describe("the editor's values", () => {
     expect(toFormValues(valid)).toMatchObject({ price: "1290", stock: "4" });
     expect(toFormValues({ ...valid, price: 129_050 })).toMatchObject({ price: "1290.50" });
     expect(toProductInput({ ...toFormValues(valid), price: "1290.5" })).toMatchObject({ price: 129_050, stock: 4 });
-    expect(toProductInput({ ...toFormValues(valid), price: "0.29" }).price).toBe(29);
+    expect(toProductInput({ ...toFormValues(valid), price: "0.5" }).price).toBe(50);
   });
 
   it("refuse prices and stock that aren't plain numbers in range", () => {
@@ -84,6 +85,7 @@ describe("the editor's values", () => {
     expect(form({ price: "12,90" })).toBe("Use a price like 1290 or 1290.50.");
     expect(form({ price: "1.999" })).toBe("Use a price like 1290 or 1290.50.");
     expect(form({ price: "1000000.01" })).toBe("The price can be at most $1,000,000.");
+    expect(form({ price: "0.49" })).toBe("The price must be at least $0.50.");
     expect(form({ stock: "2.5" })).toBe("Use a whole number.");
     expect(form({ stock: "100001" })).toBe("Stock can be at most 100,000.");
     expect(form({})).toBeUndefined();

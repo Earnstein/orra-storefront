@@ -90,12 +90,13 @@ export function ProductForm({ product, initial, categories, uploads, libraryPhot
     setServerError(null);
     const result = await (product.archived ? restoreProduct(product.id) : archiveProduct(product.id)).catch(() => null);
     setBusy(false);
+    if (result && !result.ok && result.error === "signed-out") return window.location.assign(signInPath(window.location.pathname));
     if (!result?.ok) return setServerError({ message: result?.message ?? "Something went wrong. Try again." });
     setStatus(product.archived ? "Restored: it's on the storefront again." : "Archived: it's off the storefront.");
     router.refresh();
   }
 
-  function textField(name: "name" | "slug" | "colour", fieldLabel: string, hint?: string) {
+  function textField(name: "name" | "slug" | "colour", fieldLabel: string, hint?: string, readOnly = false) {
     return (
       <form.Field name={name}>
         {(field) => {
@@ -106,6 +107,7 @@ export function ProductForm({ product, initial, categories, uploads, libraryPhot
               <FieldLabel htmlFor={id}>{fieldLabel}</FieldLabel>
               <Input
                 id={id}
+                readOnly={readOnly}
                 value={field.state.value}
                 onChange={(event) => {
                   clearServerError(name);
@@ -174,6 +176,8 @@ export function ProductForm({ product, initial, categories, uploads, libraryPhot
         await form.handleSubmit();
         const first = ORDER.find((name) => hasErrors(form.getFieldMeta(name)));
         if (first) document.getElementById(`product-${first}`)?.focus();
+        // Errors inside the details and photos lists sit on their own inputs.
+        else (event.currentTarget.querySelector('[aria-invalid="true"]') as HTMLElement | null)?.focus();
       }}
     >
       {product?.archived && (
@@ -184,7 +188,9 @@ export function ProductForm({ product, initial, categories, uploads, libraryPhot
         <FieldLegend className="eyebrow">Basics</FieldLegend>
         <FieldGroup className="grid gap-6 md:grid-cols-2">
           {textField("name", "Name")}
-          {textField("slug", "Slug", "The product's address: /products/<slug>.")}
+          {product
+            ? textField("slug", "Slug", "The product's address. It can't change once created: bags, saved items and links use it.", true)
+            : textField("slug", "Slug", "The product's address: /products/<slug>. It can't change once created.")}
           {selectField("categorySlug", "Category", categories.map((category) => ({ value: category.slug, label: category.name })))}
           {selectField("audience", "For", options(AUDIENCES))}
           {textField("colour", "Colour", "As shoppers see it, e.g. Tan.")}
@@ -368,7 +374,8 @@ export function ProductForm({ product, initial, categories, uploads, libraryPhot
       </form.Field>
 
       <div className="flex flex-col gap-4 border-t pt-block">
-        <FormError message={serverError && !serverError.field ? serverError.message : null} className="mb-0" />
+        {/* The server's answers about a field show on it; about the lists (no single input), here. */}
+        <FormError message={serverError && (!serverError.field || serverError.field === "details" || serverError.field === "images") ? serverError.message : null} className="mb-0" />
         <p role="status" className="text-caption empty:hidden">
           {status}
         </p>

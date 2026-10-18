@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isUploadPathname, uploadPathname, uploadProblem, UPLOAD_MAX_BYTES } from "./uploads";
+import { blobStoreHost, isAllowedPhoto, isUploadPathname, uploadPathname, uploadProblem, UPLOAD_MAX_BYTES } from "./uploads";
 
 describe("uploads", () => {
   it("allows JPEG, PNG and WebP up to 4 MB", () => {
@@ -22,5 +22,19 @@ describe("uploads", () => {
     for (const pathname of ["avatars/x.jpg", "products/../x.jpg", "products/x.svg", "products/x", "products/a/b.jpg", "/products/x.jpg"]) {
       expect(isUploadPathname(pathname), pathname).toBe(false);
     }
+  });
+});
+
+describe("our Blob store", () => {
+  it("is found from the token, and only its products/ uploads are allowed", () => {
+    const host = blobStoreHost("vercel_blob_rw_AbC123_s3cret");
+    expect(host).toBe("abc123.public.blob.vercel-storage.com");
+    expect(blobStoreHost(undefined)).toBeNull();
+    expect(blobStoreHost("not-a-token")).toBeNull();
+    expect(isAllowedPhoto("https://images.unsplash.com/photo-1", null)).toBe(true);
+    expect(isAllowedPhoto(`https://${host}/products/a-x1.webp`, host)).toBe(true);
+    expect(isAllowedPhoto(`https://${host}/other/a.webp`, host)).toBe(false);
+    expect(isAllowedPhoto("https://zzz.public.blob.vercel-storage.com/products/a.webp", host)).toBe(false);
+    expect(isAllowedPhoto(`https://${host}/products/a.webp`, null)).toBe(false);
   });
 });

@@ -79,9 +79,11 @@ export const BagLine = forwardRef<HTMLButtonElement, Props>(function BagLine({ l
               </Select>
             </div>
           )}
-          <Button type="button" variant="link" size="xs" className="px-0" onClick={onMove} aria-label={`Move to saved items: ${line.name}`}>
-            Move to saved items
-          </Button>
+          {!unavailable && (
+            <Button type="button" variant="link" size="xs" className="px-0" onClick={onMove} aria-label={`Move to saved items: ${line.name}`}>
+              Move to saved items
+            </Button>
+          )}
           <Button type="button" variant="link" size="xs" className="px-0" onClick={onRemove} aria-label={`Remove ${line.name}`}>
             Remove
           </Button>

@@ -117,15 +117,12 @@ test("@writes archiving takes a product off the store and restoring puts it back
   }
 });
 
-test("@writes a slug another product uses is refused on the slug field", async ({ page }, info) => {
+test("@writes a product's slug can't be edited once it exists", async ({ page }, info) => {
   const slug = productsFor(info.project.name).edit;
   created = await signUpAsAdmin(page);
   await gotoHydrated(page, `/admin/products/${slug}`, (p) => p.getByRole("button", { name: "Save changes" }));
-  await page.getByRole("textbox", { name: "Slug" }).fill("gold-hoop-earrings");
-  await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByText("Another product already uses this slug.")).toBeVisible({ timeout: AUTH_TIMEOUT });
-  await expect(page.getByRole("textbox", { name: "Slug" })).toBeFocused();
-  await expect(page.getByRole("textbox", { name: "Slug" })).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByRole("textbox", { name: "Slug" })).toHaveAttribute("readonly", "");
+  await expect(page.getByRole("textbox", { name: "Slug" })).toHaveValue(slug);
 });
 
 test("@writes the stock field says how many units checkouts hold", async ({ page }, info) => {

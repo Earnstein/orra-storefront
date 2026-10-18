@@ -6,6 +6,8 @@ import { SLUG_MAX, SLUG_PATTERN } from "@/lib/saved/limits";
 // What the admin's product form sends (client-safe: the form validates with it too, and the
 // server actions parse every request with it). Prices are integer cents.
 
+/** $0.50, Stripe's smallest charge, in cents. */
+export const PRICE_MIN = 50;
 /** $1,000,000, in cents. */
 export const PRICE_MAX = 100_000_000;
 export const STOCK_MAX = 100_000;
@@ -21,7 +23,9 @@ export function isProductImageUrl(value: string): boolean {
     return false;
   }
   if (url.protocol !== "https:" || url.username || url.password || url.port) return false;
-  return url.hostname === "images.unsplash.com" || url.hostname.endsWith(".public.blob.vercel-storage.com");
+  if (url.hostname === "images.unsplash.com") return true;
+  // Which store is checked on the server (isAllowedPhoto in uploads.ts), which knows its token.
+  return url.hostname.endsWith(".public.blob.vercel-storage.com") && url.pathname.startsWith("/products/");
 }
 
 const text = (label: string, max: number) =>
@@ -47,7 +51,7 @@ export const productInput = z.object({
   colour: text("the colour", 60),
   colourFamily: z.enum(COLOUR_FAMILIES, "Choose a colour family."),
   material: z.enum(MATERIALS, "Choose a material."),
-  price: z.number("Enter a price.").int("Use whole cents.").min(0, "The price can't be negative.").max(PRICE_MAX, "The price can be at most $1,000,000."),
+  price: z.number("Enter a price.").int("Use whole cents.").min(PRICE_MIN, "The price must be at least $0.50.").max(PRICE_MAX, "The price can be at most $1,000,000."),
   stock: z.number("Enter the stock.").int("Use a whole number.").min(0, "Stock can't be negative.").max(STOCK_MAX, `Stock can be at most ${STOCK_MAX.toLocaleString("en-US")}.`),
   description: text("a description", 2000),
   details: z.array(z.object({ term: text("a label", 40), value: text("a value", 200) })).max(DETAILS_MAX, `Add at most ${DETAILS_MAX} details.`),
@@ -88,6 +92,7 @@ const dollars = z
   .trim()
   .min(1, "Enter a price.")
   .refine((value) => value === "" || /^\d+(\.\d{1,2})?$/.test(value), "Use a price like 1290 or 1290.50.")
+  .refine((value) => value === "" || Math.round(Number(value) * 100) >= PRICE_MIN, "The price must be at least $0.50.")
   .refine((value) => Math.round(Number(value) * 100) <= PRICE_MAX, "The price can be at most $1,000,000.");
 const units = z
   .string()

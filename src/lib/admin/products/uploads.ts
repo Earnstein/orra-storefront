@@ -31,3 +31,19 @@ export function isUploadPathname(pathname: string): boolean {
   const match = /^products\/[a-z0-9]+(?:-[a-z0-9]+)*\.([a-z]+)$/.exec(pathname);
   return Boolean(match && match[1] in EXTENSIONS);
 }
+
+/**
+ * Our Blob store's public host, from its read-write token (`vercel_blob_rw_<storeId>_<secret>`),
+ * or null when there's no token. Saved photos must come from this store, under `products/`.
+ */
+export function blobStoreHost(token: string | undefined): string | null {
+  const storeId = token?.match(/^vercel_blob_rw_([a-z0-9]+)_/i)?.[1];
+  return storeId ? `${storeId.toLowerCase()}.public.blob.vercel-storage.com` : null;
+}
+
+/** Whether a photo URL may be saved: Unsplash, or our own store's `products/` uploads. */
+export function isAllowedPhoto(src: string, storeHost: string | null): boolean {
+  const url = new URL(src);
+  if (url.hostname === "images.unsplash.com") return true;
+  return storeHost !== null && url.hostname === storeHost && url.pathname.startsWith("/products/");
+}

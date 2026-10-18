@@ -24,11 +24,13 @@ vi.mock("@/db", () => ({
   },
 }));
 vi.mock("next/headers", () => ({ headers: async () => request.headers }));
+// Our Blob store is "abc123" (its host is derived from the token).
+vi.mock("@/lib/env", () => ({ serverEnv: () => ({ BLOB_READ_WRITE_TOKEN: "vercel_blob_rw_ABC123_secret" }) }));
 const updateTag = vi.hoisted(() => vi.fn());
 vi.mock("next/cache", () => ({ updateTag, cacheTag: () => {}, cacheLife: () => {} }));
 
 const { archiveProduct, restoreProduct, saveProduct } = await import("./actions");
-const { editorialSlugs, heldUnits } = await import("./mutations");
+const { heldUnits } = await import("./mutations");
 const { getProduct } = await import("@/lib/catalog/queries");
 
 let t: Awaited<ReturnType<typeof createTestAuth>>;
@@ -86,8 +88,7 @@ function asNew(form: ProductInput & { id?: number; expectedStock?: number }): Pr
   return copy;
 }
 
-const plain = seedProducts.find((p) => !editorialSlugs.has(p.slug))!;
-const editorial = [...editorialSlugs][0];
+const plain = seedProducts[3];
 
 describe("saveProduct", () => {
   it("creates a product the storefront then shows, and refreshes the catalogue", async () => {
@@ -105,25 +106,38 @@ describe("saveProduct", () => {
     expect(await getProduct(plain.slug)).toMatchObject({ name: "Renamed", price: 4_200 });
   });
 
-  it("refuses a slug another product uses, on the slug field", async () => {
+  it("refuses a new product's slug that another product uses, on the slug field", async () => {
     await signInAs("admin");
-    const form = await loaded(plain.slug);
     const other = seedProducts.find((p) => p.slug !== plain.slug)!.slug;
-    expect(await saveProduct({ ...form, slug: other })).toMatchObject({ ok: false, error: "invalid", field: "slug" });
-    expect(await saveProduct({ ...asNew(form), slug: other })).toMatchObject({ ok: false, error: "invalid", field: "slug" });
+    expect(await saveProduct({ ...asNew(await loaded(plain.slug)), slug: other })).toMatchObject({ ok: false, error: "invalid", field: "slug" });
     expect(updateTag).not.toHaveBeenCalled();
   });
 
-  it("won't change the slug of a product a story or landing page uses", async () => {
+  it("never changes a product's slug once it exists", async () => {
     await signInAs("admin");
-    const form = await loaded(editorial);
-    expect(await saveProduct({ ...form, slug: `${editorial}-2` })).toEqual({
+    const form = await loaded(plain.slug);
+    expect(await saveProduct({ ...form, slug: `${plain.slug}-2` })).toEqual({
       ok: false,
       error: "invalid",
       field: "slug",
-      message: "Used by a story or landing page, so the slug can't change.",
+      message: "A product's slug can't change once it's created.",
     });
-    expect(await saveProduct({ ...form, name: "Still editable" })).toMatchObject({ ok: true });
+    expect(await getProduct(plain.slug)).toBeDefined();
+  });
+
+  it("only saves photos from Unsplash or our own Blob store's products/ uploads", async () => {
+    await signInAs("admin");
+    const form = await loaded(plain.slug);
+    const withPhoto = (src: string) => saveProduct({ ...form, images: [{ src, alt: "A photo" }] });
+    expect(await withPhoto("https://abc123.public.blob.vercel-storage.com/products/tote-x1.webp")).toMatchObject({ ok: true });
+    expect(await withPhoto("https://other99.public.blob.vercel-storage.com/products/tote.webp")).toMatchObject({ ok: false, field: "images" });
+    expect(await withPhoto("https://abc123.public.blob.vercel-storage.com/avatars/me.webp")).toMatchObject({ ok: false, field: "images" });
+  });
+
+  it("needs the stock the form loaded to save an edit", async () => {
+    await signInAs("admin");
+    const form = await loaded(plain.slug);
+    expect(await saveProduct({ ...form, expectedStock: undefined })).toMatchObject({ ok: false, error: "invalid", message: "This form is out of date — reload it." });
   });
 
   it("refuses a stock change when a sale moved the stock since the form loaded, but keeps other edits saving", async () => {
@@ -147,6 +161,7 @@ describe("saveProduct", () => {
     await signInAs("admin");
     const form = await loaded(plain.slug);
     expect(await saveProduct({ ...form, price: -5 })).toMatchObject({ ok: false, error: "invalid", field: "price" });
+    expect(await saveProduct({ ...form, price: 49 })).toMatchObject({ ok: false, error: "invalid", field: "price", message: "The price must be at least $0.50." });
     expect(await saveProduct({ ...form, id: -1 })).toMatchObject({ ok: false, error: "invalid" });
     expect(await saveProduct({ ...form, categorySlug: "no-such-category" })).toMatchObject({ ok: false, field: "categorySlug" });
     expect(await saveProduct({ ...form, id: 999_999 })).toMatchObject({ ok: false, error: "not-found" });
