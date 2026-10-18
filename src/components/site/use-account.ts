@@ -18,18 +18,19 @@ export function useAccount() {
  * pages rendered for the signed-in user, such as a prefetched /account, which mustn't outlive the
  * session on a shared computer. If signing out fails, says so and stays, so nobody walks away from
  * a computer believing they're signed out when they aren't. Better Auth's client is loaded only
- * here, on demand, so it isn't part of every page.
+ * here, on demand, so it isn't part of every page. Answers whether the page is now leaving.
  */
-export async function signOutToHome() {
+export async function signOutToHome(): Promise<boolean> {
   const { error } = await import("@/lib/auth-client")
     .then(({ authClient }) => authClient.signOut())
     .catch(() => ({ error: true }));
   if (error) {
     window.alert("We couldn't sign you out. Check your connection and try again.");
-    return;
+    return false;
   }
   markSignedOut();
   window.location.replace("/");
+  return true;
 }
 
 /**

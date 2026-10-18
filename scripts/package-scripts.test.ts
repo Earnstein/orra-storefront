@@ -20,6 +20,10 @@ describe("database npm scripts", () => {
     expect(scripts["db:clear-accounts"]).toBe("tsx scripts/clear-accounts.ts");
   });
 
+  it("grants the admin role through the guarded script", () => {
+    expect(scripts["admin:grant"]).toBe("tsx scripts/grant-admin.ts");
+  });
+
   it("makes every direct drizzle-kit command read .env.local before .env", () => {
     const direct = Object.entries(scripts).filter(([, command]) => /\bdrizzle-kit\b/.test(command));
     expect(direct.map(([name]) => name).sort()).toEqual(["db:generate", "db:push", "db:studio"]);

@@ -66,14 +66,15 @@ export function describeTarget(env: { databaseUrl: string | undefined; productio
 export type ProductionMode = "refuse" | "require" | "allow";
 
 /**
- * Why `npm run db:seed` or `db:migrate` must stop, or undefined. When PRODUCTION_DB_HOST is unset
- * (CI), the target is unknown: the default lets it through, `--production` can't confirm it.
+ * Why `npm run db:seed`, `db:migrate` or `admin:grant` must stop, or undefined. When
+ * PRODUCTION_DB_HOST is unset (CI), the target is unknown: the default lets it through,
+ * `--production` can't confirm it.
  */
 export function productionGuardError(env: {
   databaseUrl: string | undefined;
   productionDbHost: string | undefined;
   production: ProductionMode;
-  action: "seed" | "migrate";
+  action: "seed" | "migrate" | "update roles in";
 }): string | undefined {
   const target = databaseTarget(env);
   if (env.production === "allow") return undefined;

@@ -22,15 +22,22 @@ describe("proxy", () => {
     expect(response.headers.get("x-middleware-next")).toBe("1");
   });
 
+  it("sends a visitor without a session cookie from the admin to sign in", () => {
+    expect(getRedirectUrl(proxy(request("/admin/products")))).toBe("https://orra.test/sign-in?returnTo=%2Fadmin%2Fproducts");
+  });
+
   it("lets server actions through, so they answer signed-out themselves", () => {
     const response = proxy(request("/account", { method: "POST" }));
     expect(response.headers.get("x-middleware-next")).toBe("1");
   });
 
-  it("runs only on account pages", () => {
+  it("runs only on account, admin and guest order pages", () => {
     const matches = (url: string) => unstable_doesMiddlewareMatch({ config, url });
     expect(matches("/account")).toBe(true);
     expect(matches("/account/settings")).toBe(true);
+    expect(matches("/admin")).toBe(true);
+    expect(matches("/admin/products")).toBe(true);
+    expect(matches("/administration")).toBe(false);
     expect(matches("/")).toBe(false);
     expect(matches("/products/leather-tote-tan")).toBe(false);
     expect(matches("/accounts")).toBe(false);

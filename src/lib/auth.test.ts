@@ -1,7 +1,7 @@
-import { count, like } from "drizzle-orm";
+import { count, eq, like } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { rateLimit } from "@/db/schema";
+import { rateLimit, user as users } from "@/db/schema";
 import { authOptions } from "@/lib/auth.options";
 import { cookiesFrom, createTestAuth } from "@/test/auth";
 
@@ -152,6 +152,74 @@ describe("deleting an account", () => {
     await t.auth.api.deleteUser({ body: { password: ada.password }, headers: cookies });
     expect(await codeOf(t.auth.api.signInEmail({ body: { email: ada.email, password: ada.password } })))
       .toBe("INVALID_EMAIL_OR_PASSWORD");
+  });
+});
+
+/** The HTTP status a rejected API call carries. */
+async function statusOf(call: Promise<unknown>): Promise<number | undefined> {
+  try {
+    await call;
+  } catch (error) {
+    return (error as { statusCode?: number }).statusCode;
+  }
+  throw new Error("expected the call to fail");
+}
+
+describe("roles", () => {
+  /** Signs up, gives the account a role in the database, then signs in again so the session carries it. */
+  async function signUpAs(role: string) {
+    const { user } = await signUp();
+    await t.db.update(users).set({ role }).where(eq(users.id, user.id));
+    const { headers } = await t.auth.api.signInEmail({ body: { email: ada.email, password: ada.password }, returnHeaders: true });
+    return { cookies: cookiesFrom(headers), user };
+  }
+
+  async function roleOf(id: string) {
+    const [row] = await t.db.select({ role: users.role }).from(users).where(eq(users.id, id));
+    return row.role;
+  }
+
+  it("makes every new account a shopper, and refuses a sign-up that asks for a role", async () => {
+    expect(await statusOf(t.auth.api.signUpEmail({ body: { ...ada, role: "admin" } as typeof ada }))).toBe(400);
+    const { user } = await signUp();
+    expect(await roleOf(user.id)).toBe("user");
+  });
+
+  it("lets the owner list users", async () => {
+    const shopper = await signUp({ ...ada, email: `listed-${next}@example.test` });
+    const { cookies } = await signUpAs("admin");
+    const { users: listed } = await t.auth.api.listUsers({ query: { limit: 1000 }, headers: cookies });
+    expect(listed.map((row) => row.id)).toContain(shopper.user.id);
+  });
+
+  it("refuses the demo admin every user and session action, and leaves its role alone", async () => {
+    const { cookies, user } = await signUpAs("demo-admin");
+    const shopper = await signUp({ ...ada, email: `shopper-${next}@example.test` });
+
+    expect(await statusOf(t.auth.api.listUsers({ query: {}, headers: cookies }))).toBe(403);
+    expect(await statusOf(t.auth.api.setRole({ body: { userId: user.id, role: "admin" }, headers: cookies }))).toBe(403);
+    expect(await statusOf(t.auth.api.impersonateUser({ body: { userId: shopper.user.id }, headers: cookies }))).toBe(403);
+    expect(await statusOf(t.auth.api.revokeUserSessions({ body: { userId: shopper.user.id }, headers: cookies }))).toBe(403);
+    const target = { userId: shopper.user.id };
+    const refused = {
+      createUser: () => t.auth.api.createUser({ body: { email: `made-${next}@example.test`, password: "correct-horse", name: "Made" }, headers: cookies }),
+      adminUpdateUser: () => t.auth.api.adminUpdateUser({ body: { ...target, data: { name: "Changed" } }, headers: cookies }),
+      banUser: () => t.auth.api.banUser({ body: target, headers: cookies }),
+      unbanUser: () => t.auth.api.unbanUser({ body: target, headers: cookies }),
+      setUserPassword: () => t.auth.api.setUserPassword({ body: { ...target, newPassword: "new-password-1" }, headers: cookies }),
+      listUserSessions: () => t.auth.api.listUserSessions({ body: target, headers: cookies }),
+      revokeUserSession: () => t.auth.api.revokeUserSession({ body: { sessionToken: "any-token" }, headers: cookies }),
+      removeUser: () => t.auth.api.removeUser({ body: target, headers: cookies }),
+    };
+    for (const [name, call] of Object.entries(refused)) expect(await statusOf(call()), name).toBe(403);
+
+    expect(await roleOf(user.id)).toBe("demo-admin");
+    expect(await t.auth.api.getSession({ headers: shopper.cookies, query: { disableCookieCache: true } })).not.toBeNull();
+  });
+
+  it("refuses shoppers too", async () => {
+    const { cookies } = await signUp();
+    expect(await statusOf(t.auth.api.listUsers({ query: {}, headers: cookies }))).toBe(403);
   });
 });
 

@@ -18,12 +18,20 @@ export type CurrentUser = { id: string; name: string; email: string };
  */
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => (await getCurrentSession())?.user ?? null);
 
-/** The signed-in user and this request's session id (to tell this device from others), or null. */
-export const getCurrentSession = cache(async (): Promise<{ user: CurrentUser; sessionId: string } | null> => {
+export type CurrentSession = {
+  user: CurrentUser;
+  /** This request's session (to tell this device from others). */
+  sessionId: string;
+  /** Better Auth's roles, comma-separated (src/lib/auth/permissions.ts); null for accounts made before roles. */
+  role: string | null;
+};
+
+/** The signed-in user, this request's session id and the user's role, or null. */
+export const getCurrentSession = cache(async (): Promise<CurrentSession | null> => {
   const session = await auth.api.getSession({ headers: await headers(), query: { disableCookieCache: true } });
   if (!session) return null;
-  const { id, name, email } = session.user;
-  return { user: { id, name, email }, sessionId: session.session.id };
+  const { id, name, email, role } = session.user;
+  return { user: { id, name, email }, sessionId: session.session.id, role: role ?? null };
 });
 
 /** The signed-in user, or a redirect to sign in that comes back to `returnTo`. */
