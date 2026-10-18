@@ -4,9 +4,11 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { user as users } from "@/db/schema";
 import { cookiesFrom, createTestAuth } from "@/test/auth";
 
-// The route runs against Better Auth on PGlite; Blob's handleUpload is stood in for, calling the
-// route's onBeforeGenerateToken the way the real one does and answering what it returned.
+// The route runs against Better Auth on PGlite. Blob's helpers are stood in for:
+// handleUploadPresigned calls the route's getSignedToken the way the real one does, and
+// issueSignedToken records the scope it was asked for.
 const request = vi.hoisted(() => ({ auth: undefined as unknown, headers: new Headers(), env: {} as Record<string, string | undefined> }));
+const issued = vi.hoisted(() => [] as unknown[]);
 vi.mock("@/lib/auth", () => ({
   get auth() {
     return request.auth;
@@ -15,12 +17,24 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("next/headers", () => ({ headers: async () => request.headers }));
 vi.mock("@/lib/env", () => ({
   serverEnv: () => request.env,
-  uploadsConfigured: (env: { BLOB_READ_WRITE_TOKEN?: string }) => Boolean(env.BLOB_READ_WRITE_TOKEN),
+  uploadsConfigured: (env: { BLOB_STORE_ID?: string; BLOB_WEBHOOK_PUBLIC_KEY?: string }) => Boolean(env.BLOB_STORE_ID && env.BLOB_WEBHOOK_PUBLIC_KEY),
+}));
+vi.mock("@vercel/blob", () => ({
+  issueSignedToken: async (options: unknown) => {
+    issued.push(options);
+    return { delegationToken: "delegation", clientSigningToken: "signing", validUntil: 0 };
+  },
 }));
 vi.mock("@vercel/blob/client", () => ({
-  handleUpload: async ({ body, onBeforeGenerateToken }: { body: { payload: { pathname: string; multipart: boolean } }; onBeforeGenerateToken: (p: string, c: null, m: boolean) => Promise<unknown> }) => ({
-    type: "blob.generate-client-token",
-    options: await onBeforeGenerateToken(body.payload.pathname, null, body.payload.multipart),
+  handleUploadPresigned: async ({
+    body,
+    getSignedToken,
+  }: {
+    body: { payload: { pathname: string; multipart: boolean } };
+    getSignedToken: (p: string, c: null, m: boolean) => Promise<{ urlOptions?: unknown }>;
+  }) => ({
+    type: "blob.generate-presigned-url",
+    urlOptions: (await getSignedToken(body.payload.pathname, null, body.payload.multipart)).urlOptions,
   }),
 }));
 
@@ -35,7 +49,8 @@ beforeAll(async () => {
 
 beforeEach(() => {
   request.headers = new Headers();
-  request.env = { BLOB_READ_WRITE_TOKEN: "vercel_blob_rw_test_token" };
+  request.env = { BLOB_STORE_ID: "store_abc123", BLOB_WEBHOOK_PUBLIC_KEY: "public-key" };
+  issued.length = 0;
 });
 
 async function signInAs(role: string) {
@@ -46,43 +61,46 @@ async function signInAs(role: string) {
   request.headers = cookiesFrom(headers);
 }
 
-const token = (pathname: string, multipart = false) =>
+const presign = (pathname: string, multipart = false) =>
   POST(
     new Request("http://localhost:3000/api/admin/uploads", {
       method: "POST",
-      body: JSON.stringify({ type: "blob.generate-client-token", payload: { pathname, multipart, clientPayload: null } }),
+      body: JSON.stringify({ type: "blob.generate-presigned-url", payload: { pathname, multipart, clientPayload: null } }),
     }),
   );
 
+const LIMITS = { allowedContentTypes: ["image/jpeg", "image/png", "image/webp"], maximumSizeInBytes: 4 * 1024 * 1024 };
+
 describe("POST /api/admin/uploads", () => {
-  it("issues tokens only to admins who may upload", async () => {
-    expect((await token("products/a.jpg")).status).toBe(401);
+  it("signs uploads only for admins who may upload", async () => {
+    expect((await presign("products/a.jpg")).status).toBe(401);
     await signInAs("user");
-    expect((await token("products/a.jpg")).status).toBe(404);
+    expect((await presign("products/a.jpg")).status).toBe(404);
+    expect(issued).toEqual([]);
   });
 
-  it("limits the token to JPEG, PNG and WebP of at most 4 MB under products/, with a random suffix", async () => {
+  it("scopes the signed upload to one products/ pathname, JPEG, PNG or WebP of at most 4 MB, with a random suffix", async () => {
     await signInAs("demo-admin");
-    const response = await token("products/tote.webp");
+    const response = await presign("products/tote.webp");
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
-    expect(await response.json()).toMatchObject({
-      options: { allowedContentTypes: ["image/jpeg", "image/png", "image/webp"], maximumSizeInBytes: 4 * 1024 * 1024, addRandomSuffix: true },
-    });
+    expect(issued).toEqual([expect.objectContaining({ pathname: "products/tote.webp", operations: ["put"], ...LIMITS })]);
+    expect(await response.json()).toMatchObject({ urlOptions: { ...LIMITS, addRandomSuffix: true } });
   });
 
   it("refuses other pathnames, multipart uploads and other events", async () => {
     await signInAs("admin");
-    expect((await token("avatars/me.jpg")).status).toBe(400);
-    expect((await token("products/x.svg")).status).toBe(400);
-    expect((await token("products/big.jpg", true)).status).toBe(400);
+    expect((await presign("avatars/me.jpg")).status).toBe(400);
+    expect((await presign("products/x.svg")).status).toBe(400);
+    expect((await presign("products/big.jpg", true)).status).toBe(400);
+    expect(issued).toEqual([]);
     const completed = await POST(new Request("http://localhost:3000/api/admin/uploads", { method: "POST", body: JSON.stringify({ type: "blob.upload-completed", payload: {} }) }));
     expect(completed.status).toBe(400);
   });
 
-  it("answers 503 until Blob is configured", async () => {
+  it("answers 503 until the Blob store is connected", async () => {
     await signInAs("admin");
     request.env = {};
-    expect((await token("products/a.jpg")).status).toBe(503);
+    expect((await presign("products/a.jpg")).status).toBe(503);
   });
 });

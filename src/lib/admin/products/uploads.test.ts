@@ -13,7 +13,7 @@ describe("uploads", () => {
 
   it("puts every upload under products/ with a safe name and the type's extension", () => {
     expect(uploadPathname("My Tote (front).JPG", "image/jpeg")).toBe("products/my-tote-front.jpg");
-    expect(uploadPathname("../../etc/passwd", "image/png")).toBe("products/passwd.png");
+    expect(uploadPathname("../../outside/photo", "image/png")).toBe("products/photo.png");
     expect(uploadPathname("....", "image/webp")).toBe("products/photo.webp");
     for (const name of ["a.jpg", "x y.png", "../../z.webp"]) expect(isUploadPathname(uploadPathname(name, "image/jpeg"))).toBe(true);
   });
@@ -26,11 +26,12 @@ describe("uploads", () => {
 });
 
 describe("our Blob store", () => {
-  it("is found from the token, and only its products/ uploads are allowed", () => {
-    const host = blobStoreHost("vercel_blob_rw_AbC123_s3cret");
+  it("is found from the store id, and only its products/ uploads are allowed", () => {
+    const host = blobStoreHost("store_AbC123");
     expect(host).toBe("abc123.public.blob.vercel-storage.com");
+    expect(blobStoreHost("abc123")).toBe(host);
     expect(blobStoreHost(undefined)).toBeNull();
-    expect(blobStoreHost("not-a-token")).toBeNull();
+    expect(blobStoreHost("not a store")).toBeNull();
     expect(isAllowedPhoto("https://images.unsplash.com/photo-1", null)).toBe(true);
     expect(isAllowedPhoto(`https://${host}/products/a-x1.webp`, host)).toBe(true);
     expect(isAllowedPhoto(`https://${host}/other/a.webp`, host)).toBe(false);

@@ -1,6 +1,6 @@
 "use client";
 
-import { upload } from "@vercel/blob/client";
+import { uploadPresigned } from "@vercel/blob/client";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import Image from "next/image";
 import { useRef, useState } from "react";
@@ -11,7 +11,7 @@ import { UPLOAD_TYPES, uploadPathname, uploadProblem } from "@/lib/admin/product
 import type { CatalogImage } from "@/lib/catalog/types";
 
 /**
- * Adding photos to a product: upload one (straight to Vercel Blob, with a token from
+ * Adding photos to a product: upload one (straight to Vercel Blob, to a presigned URL from
  * /api/admin/uploads), or, when uploads aren't configured, pick one of the catalogue's existing
  * photos. The list of photos itself (alt text, order, removing) is rendered by the form.
  */
@@ -35,7 +35,11 @@ export function AddPhoto({
     if (problem) return setStatus({ busy: false, error: problem });
     setStatus({ busy: true, error: null });
     try {
-      const blob = await upload(uploadPathname(file.name, file.type), file, { access: "public", handleUploadUrl: "/api/admin/uploads", contentType: file.type });
+      const blob = await uploadPresigned(uploadPathname(file.name, file.type), file, {
+        access: "public",
+        handleUploadUrl: "/api/admin/uploads",
+        contentType: file.type,
+      });
       onAdd({ src: blob.url, alt: "" });
       setStatus({ busy: false, error: null });
     } catch {

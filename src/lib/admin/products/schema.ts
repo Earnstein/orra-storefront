@@ -22,7 +22,8 @@ export function isProductImageUrl(value: string): boolean {
   } catch {
     return false;
   }
-  if (url.protocol !== "https:" || url.username || url.password || url.port) return false;
+  // https only, no port, and nothing before the host (an address can't smuggle in credentials).
+  if (url.protocol !== "https:" || url.port || !url.href.startsWith(`https://${url.host}/`)) return false;
   if (url.hostname === "images.unsplash.com") return true;
   // Which store is checked on the server (isAllowedPhoto in uploads.ts), which knows its token.
   return url.hostname.endsWith(".public.blob.vercel-storage.com") && url.pathname.startsWith("/products/");

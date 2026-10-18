@@ -48,7 +48,7 @@ export async function saveProduct(
       const [issue] = parsed.error.issues;
       return { ok: false, error: "invalid", message: issue.message, field: issue.path[0] as ProductField };
     }
-    const storeHost = blobStoreHost(serverEnv().BLOB_READ_WRITE_TOKEN);
+    const storeHost = blobStoreHost(serverEnv().BLOB_STORE_ID);
     if (!parsed.data.images.every((image) => isAllowedPhoto(image.src, storeHost))) {
       return { ok: false, error: "invalid", field: "images", message: "Use an uploaded photo or an images.unsplash.com address." };
     }
