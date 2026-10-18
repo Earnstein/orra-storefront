@@ -4,14 +4,15 @@ import { notFound } from "next/navigation";
 import { ProductGallery } from "@/components/product/product-gallery";
 import { ProductInfo } from "@/components/product/product-info";
 import { RelatedProducts } from "@/components/product/related-products";
-import { getAllProductSlugs, getProduct, getRelatedProducts } from "@/lib/catalog/queries";
+import { ArchivedProduct } from "@/components/product/archived-product";
+import { getAllProductSlugs, getProductPage, getRelatedProducts } from "@/lib/catalog/queries";
 import { stockStatus } from "@/lib/catalog/stock";
 import { ogImage } from "@/lib/metadata";
 import { site } from "@/lib/site";
 
 // Product pages are prerendered from cached catalogue reads, so stock and price edits show up
-// within 5 minutes without a deploy. Products added after the build render on first request;
-// unknown slugs 404.
+// within 5 minutes without a deploy (at once after an admin save). Products added after the build
+// render on first request; unknown slugs 404; archived products say they're no longer available.
 
 // Params outside generateStaticParams (including unknown slugs) render on request and must block
 // rather than stream, so notFound() still returns a real 404 (streaming would send a 200 first).
@@ -22,8 +23,9 @@ export async function generateStaticParams() {
 }
 
 export async function generateMetadata({ params }: PageProps<"/products/[slug]">): Promise<Metadata> {
-  const product = await getProduct((await params).slug);
+  const product = await getProductPage((await params).slug);
   if (!product) return {};
+  if (product.archived) return { title: product.name, robots: { index: false } };
   return {
     title: product.name,
     description: product.description,
@@ -32,8 +34,9 @@ export async function generateMetadata({ params }: PageProps<"/products/[slug]">
 }
 
 export default async function ProductPage({ params }: PageProps<"/products/[slug]">) {
-  const product = await getProduct((await params).slug);
+  const product = await getProductPage((await params).slug);
   if (!product) notFound();
+  if (product.archived) return <ArchivedProduct name={product.name} />;
 
   const availability = {
     in_stock: "https://schema.org/InStock",

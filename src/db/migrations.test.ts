@@ -167,3 +167,21 @@ describe("M5 migrations", () => {
     expect((await client.query<{ n: string }>("select nextval('order_number_seq') as n")).rows[0]?.n).toBe(10001);
   });
 });
+
+describe("M6 migrations", () => {
+  it("add products.archived_at, leaving every existing product live", async () => {
+    const client = createPGlite();
+    const tags = migrationTags();
+    expect(tags).toContain("0012_product_archive");
+    // Products from before M2 (the oldest shape), carried through every migration since.
+    const firstM2 = tags.indexOf("0002_audience");
+    await applyMigrations(client, tags.slice(0, firstM2));
+    await insertLegacyCatalogue(client, ["legacy-product"]);
+    await applyMigrations(client, tags.slice(firstM2));
+    const { rows } = await client.query<{ total: number; archived: number }>(
+      "select count(*)::int as total, count(archived_at)::int as archived from products",
+    );
+    expect(rows[0]!.total).toBeGreaterThan(0);
+    expect(rows[0]!.archived).toBe(0);
+  });
+});

@@ -13,6 +13,7 @@ describe("GET /api/search/suggest", () => {
     const res = await get("?q=tote");
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("public, s-maxage=300, stale-while-revalidate=600");
+    expect(res.headers.get("vercel-cache-tag")).toBe("catalog");
     expect(res.headers.get("server-timing")).toMatch(/^db;dur=\d+(\.\d+)?$/);
     const suggestions: Suggestions = await res.json();
     expect(suggestions.products.map((product) => product.slug)).toContain("leather-tote-tan");

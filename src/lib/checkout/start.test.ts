@@ -226,6 +226,26 @@ describe("startCheckout", () => {
     expect(await start({ userId: null, guestCartId: null }, unavailable)).toMatchObject({ ok: false, reason: "empty" });
   });
 
+  it("leaves out a line whose product was archived, taking none of its stock", async () => {
+    const { cart } = await guestBag({ "leather-tote-tan": 1, "double-monk-shoe": 1 });
+    await db.update(products).set({ archivedAt: new Date() }).where(eq(products.slug, "double-monk-shoe"));
+    const stock = await stockOf("double-monk-shoe");
+    const result = await start(cart);
+    if (!result.ok) throw new Error(result.message);
+    expect(fake.payments.get("fake_1")?.input.lines.map((l) => l.name)).toEqual(["Leather tote"]);
+    expect(await stockOf("double-monk-shoe")).toBe(stock);
+  });
+
+  it("answers short when the only line's product was archived", async () => {
+    const { cart } = await guestBag({ "double-monk-shoe": 1 });
+    await db.update(products).set({ archivedAt: new Date() }).where(eq(products.slug, "double-monk-shoe"));
+    expect(await start(cart)).toMatchObject({
+      ok: false,
+      reason: "short",
+      message: "The Double-monk shoe is no longer available — your bag has been updated",
+    });
+  });
+
   it("answers short (nothing to hold) when every line has sold out", async () => {
     const { cart } = await guestBag({ "double-monk-shoe": 1 });
     await setStock("double-monk-shoe", 0);

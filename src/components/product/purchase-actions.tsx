@@ -8,6 +8,7 @@ import { Container } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
 import { AddedPanel, type AddedItem } from "@/components/bag/added-panel";
 import { MAX_QUANTITY } from "@/lib/bag/limits";
+import { isBuyable } from "@/lib/bag/types";
 import { useBag } from "@/lib/bag/use-bag";
 import { useSaved } from "@/lib/saved/use-saved";
 import { deliveryWindow } from "@/lib/catalog/delivery";
@@ -91,7 +92,7 @@ export function PurchaseActions({ product }: { product: PurchasableProduct }) {
       const { bag: next, capped } = await bag.add(product.slug);
       const line = next.lines.find((l) => l.slug === product.slug);
       // The server caps at live stock, which may be lower than this (cached) page says.
-      if (!line || line.note === "sold-out") {
+      if (!line || !isBuyable(line)) {
         setSoldOutSince(true);
         setInBag(0);
         setAnnouncement(`${product.name} is sold out.`);

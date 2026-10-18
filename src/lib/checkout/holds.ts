@@ -25,7 +25,8 @@ export type OpenHold = {
 /**
  * Takes each line's quantity out of stock, only where enough is left (`stock >= quantity`, which
  * Postgres re-checks after waiting for a concurrent taker's row lock, so stock never goes below
- * zero). On any short line the caller must roll back; `available` is the stock left now.
+ * zero), and never from an archived product (none to sell). On any short line the caller must
+ * roll back; `available` is the stock left now.
  */
 export async function takeStock(tx: SeedDatabase, lines: { productId: number; quantity: number }[]): Promise<{ ok: true } | { ok: false; short: { productId: number; available: number }[] }> {
   if (lines.length === 0) return { ok: true };
@@ -44,7 +45,7 @@ export async function takeStock(tx: SeedDatabase, lines: { productId: number; qu
       with wanted (product_id, quantity) as (values ${wanted})
       update products p set stock = p.stock - w.quantity
       from wanted w
-      where p.id = w.product_id and p.stock >= w.quantity
+      where p.id = w.product_id and p.stock >= w.quantity and p.archived_at is null
       returning p.id`),
   );
   const done = new Set(taken.map((row) => Number(row.id)));
@@ -52,7 +53,7 @@ export async function takeStock(tx: SeedDatabase, lines: { productId: number; qu
   if (missing.length === 0) return { ok: true };
   // A fresh statement sees what another shopper's committed hold left.
   const left = rowsOf<{ id: number; stock: number }>(
-    await tx.execute(sql`select id, stock from products where id in (${sql.join(missing.map((id) => sql`${id}`), sql`, `)})`),
+    await tx.execute(sql`select id, case when archived_at is null then stock else 0 end as stock from products where id in (${sql.join(missing.map((id) => sql`${id}`), sql`, `)})`),
   );
   const stock = new Map(left.map((row) => [Number(row.id), Number(row.stock)]));
   return { ok: false, short: missing.map((productId) => ({ productId, available: stock.get(productId) ?? 0 })) };

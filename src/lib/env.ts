@@ -18,6 +18,9 @@ const serverSchema = z
     RESEND_API_KEY: optional(z.string()),
     // Local runs and CI only: also write each email to a file here, so e2e tests can read links.
     EMAIL_OUTBOX_DIR: optional(z.string()),
+    // Vercel Blob, for product photos uploaded in the admin. Without it the admin offers the
+    // catalogue's existing photos instead.
+    BLOB_READ_WRITE_TOKEN: optional(z.string()),
     // Stripe, test mode only: the store promises "no real money". Without the secret and
     // publishable keys, checkout says it's unavailable. Messages never include the value.
     STRIPE_SECRET_KEY: optional(z.string().regex(/^(sk|rk)_test_/, { error: "must be a Stripe test-mode secret key (sk_test_ or rk_test_)" })),
@@ -42,6 +45,10 @@ export function parseServerEnv(raw: Record<string, string | undefined>): ServerE
 }
 
 /** Whether checkout can take payments: Stripe's secret and publishable keys are both set. */
+export function uploadsConfigured(env: Pick<ServerEnv, "BLOB_READ_WRITE_TOKEN">): boolean {
+  return Boolean(env.BLOB_READ_WRITE_TOKEN);
+}
+
 export function paymentsConfigured(env: Pick<ServerEnv, "STRIPE_SECRET_KEY" | "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY">): boolean {
   return Boolean(env.STRIPE_SECRET_KEY && env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 }

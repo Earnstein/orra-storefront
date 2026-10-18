@@ -15,7 +15,7 @@ import {
   type ResultsQuery,
 } from "./filters";
 import { NEW_ARRIVALS_PAGE_LIMIT } from "./merchandising";
-import { productSummaryColumns } from "./product-columns";
+import { liveProduct, productSummaryColumns } from "./product-columns";
 import { buildSearchQuery } from "./search";
 import type { ProductSummary } from "./types";
 
@@ -119,7 +119,7 @@ function toSummary({ slug, name, price, stock, images }: ProductSummary & { tota
 
 /** Products among the newest N (New arrivals, and the "New in" filter). */
 const newest = (limit: number) =>
-  sql`${products.id} in (select ${products.id} from ${products} order by ${products.createdAt} desc, ${products.id} limit ${limit})`;
+  sql`${products.id} in (select ${products.id} from ${products} where ${products.archivedAt} is null order by ${products.createdAt} desc, ${products.id} limit ${limit})`;
 
 /**
  * Typo tolerance: a word's trigram word similarity to a product's search_text must reach this. pg_trgm's default (0.6, used by the `<%` operator) misses one-letter slips in common words
@@ -153,7 +153,7 @@ function matches(search: SearchQuery): SQL {
 /** Every condition for the query, optionally leaving one facet's own selection out (for its counts). */
 function conditions(query: ResultsQuery, search: SearchQuery | undefined, without?: FacetKey): SQL[] {
   const { scope, tab, filters } = query;
-  const where: SQL[] = [];
+  const where: SQL[] = [liveProduct];
   if (scope.kind === "new") where.push(newest(scope.limit));
   if (scope.kind === "audience") where.push(inArray(products.audience, [scope.audience, "unisex"]));
   if (scope.kind === "category") where.push(eq(categories.slug, scope.categorySlug));

@@ -165,6 +165,13 @@ describe("fulfil", () => {
     expect(await statusOf(checkoutId)).toBe("fulfilled");
   });
 
+  it("still fulfils a hold whose product was archived after the shopper paid", async () => {
+    const { checkoutId } = await paidHold({ "leather-tote-tan": 1 });
+    await db.update(products).set({ archivedAt: new Date() }).where(eq(products.slug, "leather-tote-tan"));
+    expect(await fulfil(deps, checkoutId)).toMatchObject({ status: "confirmed" });
+    expect(await statusOf(checkoutId)).toBe("fulfilled");
+  });
+
   it("an open hold that ran out but wasn't swept still holds its stock, so it becomes the order as it is", async () => {
     const { checkoutId } = await paidHold({ "leather-tote-tan": 1 });
     const held = await stockOf("leather-tote-tan");

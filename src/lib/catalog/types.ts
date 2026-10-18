@@ -27,3 +27,6 @@ export type Product = {
  * each listing page's embedded data) stay small. `images` holds just the card image.
  */
 export type ProductSummary = Pick<Product, "slug" | "name" | "price" | "stock" | "images">;
+
+/** The product page's product: archived ones too, which the page shows as no longer available. */
+export type ProductPageProduct = Product & { archived: boolean };

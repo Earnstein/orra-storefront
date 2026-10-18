@@ -15,6 +15,7 @@ describe("GET /api/products", () => {
     const res = await get("?collection=bags&colour=black");
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("public, s-maxage=300, stale-while-revalidate=600");
+    expect(res.headers.get("vercel-cache-tag")).toBe("catalog");
     expect(res.headers.get("server-timing")).toMatch(/^db;dur=\d+(\.\d+)?$/);
     const results: Results = await res.json();
     expect(results.total).toBeGreaterThan(0);

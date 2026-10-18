@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { BagLine as Line } from "@/lib/bag/types";
+import { isBuyable, type BagLine as Line } from "@/lib/bag/types";
 import { useBag } from "@/lib/bag/use-bag";
 import { formatPrice } from "@/lib/format";
 import { useSaved } from "@/lib/saved/use-saved";
@@ -105,7 +105,7 @@ export function BagView() {
       return;
     }
     const line = result.bag.lines.find((l) => l.slug === entry.slug);
-    if (!line || line.note === "sold-out") {
+    if (!line || !isBuyable(line)) {
       updateRemoved(entry.slug, { state: "sold-out" });
       setFocusUndo(entry.slug);
       setAnnouncement(`${entry.name} is sold out.`);

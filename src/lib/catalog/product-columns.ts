@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { isNull, sql } from "drizzle-orm";
 
 import { categories, products } from "@/db/schema";
 import type { CatalogImage } from "./types";
@@ -24,3 +24,6 @@ export const productSummaryColumns = {
   stock: products.stock,
   images: sql<CatalogImage[]>`jsonb_build_array(${products.images} -> 0)`,
 };
+
+/** Live (not archived) products: every storefront read filters by this (archived_at, the admin's soft delete). */
+export const liveProduct = isNull(products.archivedAt);

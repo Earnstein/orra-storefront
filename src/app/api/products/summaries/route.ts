@@ -1,3 +1,4 @@
+import { CATALOG_CDN_HEADERS } from "@/lib/catalog/cdn";
 import { getProductSummaries } from "@/lib/saved/queries";
 import { isSlug, SAVED_LIMIT } from "@/lib/saved/limits";
 
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
     { products },
     {
       headers: {
-        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+        ...CATALOG_CDN_HEADERS,
         "Server-Timing": `db;dur=${Math.round(performance.now() - started)}`,
       },
     },

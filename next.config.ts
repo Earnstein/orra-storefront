@@ -17,7 +17,11 @@ const nextConfig: NextConfig = {
     deviceSizes: [640, 750, 828, 1080, 1200, 1440, 1920, 2048, 2560, 2880, 3840],
     qualities: [60, 75], // 60 for full-bleed hero photography, 75 default
     // Catalogue and editorial imagery (product images in the database, src/lib/content.ts). Replace with the real CDN.
-    remotePatterns: [{ protocol: "https", hostname: "images.unsplash.com", pathname: "/**" }],
+    // Admin uploads live in our Vercel Blob store (src/app/api/admin/uploads).
+    remotePatterns: [
+      { protocol: "https", hostname: "images.unsplash.com", pathname: "/**" },
+      { protocol: "https", hostname: "*.public.blob.vercel-storage.com", pathname: "/products/**" },
+    ],
   },
 };
 

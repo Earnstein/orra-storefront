@@ -1,5 +1,5 @@
 import { MAX_QUANTITY } from "./limits";
-import type { Bag, BagLine } from "./types";
+import { isBuyable, type Bag, type BagLine } from "./types";
 
 export type BagChangeRequest =
   | { kind: "add"; slug: string; quantity: number }
@@ -8,7 +8,7 @@ export type BagChangeRequest =
   | { kind: "move"; slug: string };
 
 function totals(lines: BagLine[]): Bag {
-  const buyable = lines.filter((line) => line.note !== "sold-out");
+  const buyable = lines.filter(isBuyable);
   return {
     lines,
     count: buyable.reduce((total, line) => total + line.quantity, 0),
@@ -26,7 +26,7 @@ export function applyChange(bag: Bag, change: BagChangeRequest): Bag {
   if (change.kind === "set") {
     return totals(
       bag.lines.map((line) =>
-        line.slug === change.slug && line.note !== "sold-out"
+        line.slug === change.slug && isBuyable(line)
           ? { ...line, quantity: Math.max(1, Math.min(change.quantity, line.stock, MAX_QUANTITY)), note: null }
           : line,
       ),
