@@ -63,3 +63,16 @@ export async function adminCheck(permission: Permission): Promise<AdminUser | Re
   const { status, error } = REFUSALS[check.reason];
   return Response.json({ error }, { status, headers: PRIVATE });
 }
+
+/**
+ * The admin for a server action, or the answer to return instead: "signed-out", or "forbidden"
+ * both without an admin role and without `permission` (an action has no page to 404).
+ */
+export async function adminForAction(
+  permission: Permission,
+): Promise<{ ok: true; admin: AdminUser } | { ok: false; error: "signed-out" | "forbidden"; message: string }> {
+  const check = await checkAdmin(permission);
+  if (check.ok) return check;
+  if (check.reason === "signed-out") return { ok: false, error: "signed-out", message: "You've been signed out." };
+  return { ok: false, error: "forbidden", message: "Your account can't do that." };
+}

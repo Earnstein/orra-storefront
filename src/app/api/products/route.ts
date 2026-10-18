@@ -1,3 +1,4 @@
+import { CATALOG_CDN_HEADERS } from "@/lib/catalog/cdn";
 import { resolveCollection } from "@/lib/catalog/collections";
 import type { ResultsScope } from "@/lib/catalog/filters";
 import { getCategories } from "@/lib/catalog/queries";
@@ -10,7 +11,6 @@ import { loadResultsParams, toResultsQuery } from "@/lib/catalog/search-params";
 // page's own URL, so a hand-edited request gets sensible results rather than an error. ?slice=1
 // returns page ?page on its own (Load more); otherwise the first pages up to it, with facets.
 
-const CACHE_CONTROL = "public, s-maxage=300, stale-while-revalidate=600";
 
 const notFound = () => Response.json({ error: "Not found" }, { status: 404 });
 
@@ -38,6 +38,6 @@ export async function GET(request: Request): Promise<Response> {
   const duration = (performance.now() - start).toFixed(1);
 
   return Response.json(results, {
-    headers: { "Cache-Control": CACHE_CONTROL, "Server-Timing": `db;dur=${duration}` },
+    headers: { ...CATALOG_CDN_HEADERS, "Server-Timing": `db;dur=${duration}` },
   });
 }

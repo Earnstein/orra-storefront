@@ -13,6 +13,7 @@ describe("GET /api/products/summaries", () => {
     const { products } = (await response.json()) as { products: { slug: string }[] };
     expect(products.map((product) => product.slug)).toEqual(["double-monk-shoe", "leather-tote-tan"]);
     expect(response.headers.get("cache-control")).toBe("public, s-maxage=300, stale-while-revalidate=600");
+    expect(response.headers.get("vercel-cache-tag")).toBe("catalog");
     expect(response.headers.get("server-timing")).toMatch(/^db;dur=\d+/);
   });
 
