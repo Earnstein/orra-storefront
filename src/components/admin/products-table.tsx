@@ -50,6 +50,12 @@ async function fetchPage(path: string, signal: AbortSignal): Promise<AdminProduc
 export function ProductsTable({ initial, initialPath }: { initial: AdminProductsPage; initialPath: string }) {
   const [params, setParams] = useQueryStates(adminProductParsers, { history: "push" });
   const [text, setText] = useState(params.q);
+  // Back and Forward change ?q without typing: show what the URL searches for.
+  const [shownQ, setShownQ] = useState(params.q);
+  if (params.q !== shownQ) {
+    setShownQ(params.q);
+    if (params.q !== text.trim()) setText(params.q);
+  }
   const search = useDebouncedCallback((q: string) => void setParams({ q: q.trim() || null, page: null }, { history: "replace" }), { wait: 300 });
 
   const path = adminProductsPath(params);
