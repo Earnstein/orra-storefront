@@ -75,6 +75,8 @@ export async function getAdminOrder(db: SeedDatabase, number: number, { masked }
   const order = await readOrder(db, sql`number = ${number}`);
   if (!order) return null;
   const cancelled = order.status === "cancelled";
+  // How long ago the owner's cancel started, while the order is still paid.
+  const claimAge = order.status === "paid" && order.cancelledAt ? Date.now() - order.cancelledAt.getTime() : null;
   const full: AdminOrder = {
     id: order.id,
     number: order.number,
@@ -83,7 +85,8 @@ export async function getAdminOrder(db: SeedDatabase, number: number, { masked }
     fulfilledAt: order.fulfilledAt && iso(order.fulfilledAt),
     cancelledAt: cancelled && order.cancelledAt ? iso(order.cancelledAt) : null,
     refunded: order.refundedAt !== null,
-    cancelling: order.status === "paid" && order.cancelledAt !== null && Date.now() - order.cancelledAt.getTime() < CANCEL_CLAIM_MINUTES * 60_000,
+    cancelling: claimAge !== null && claimAge < CANCEL_CLAIM_MINUTES * 60_000,
+    cancelCutOff: claimAge !== null && claimAge >= CANCEL_CLAIM_MINUTES * 60_000,
     account: order.userId !== null,
     subtotal: order.subtotal,
     currency: order.currency,

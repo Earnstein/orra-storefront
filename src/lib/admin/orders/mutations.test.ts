@@ -106,7 +106,7 @@ describe("cancelOrder", () => {
     expect(fake.payments.get(reference)!.undone).toBe(0);
   });
 
-  it("a fulfil while the refund is in flight is refused; a claim left by a cut-off cancel lapses after 10 minutes", async () => {
+  it("a fulfil while the refund is in flight is refused", async () => {
     const { orderId, reference } = await placeOrder(db, fake, { "leather-tote-tan": 1 });
     let fulfilDuringRefund: Awaited<ReturnType<typeof fulfilOrder>> | undefined;
     vi.spyOn(fake.provider, "undo").mockImplementationOnce(async () => {
@@ -116,9 +116,45 @@ describe("cancelOrder", () => {
     expect(await cancelOrder(deps(), orderId)).toMatchObject({ ok: true });
     expect(fulfilDuringRefund).toMatchObject({ ok: false, error: "invalid", message: "This order is being cancelled." });
     expect((await orderRow(orderId)).status).toBe("cancelled");
+  });
 
-    const stuck = await placeOrder(db, fake, { "double-monk-shoe": 1 });
-    await db.execute(sql`update orders set cancelled_at = now() - interval '11 minutes' where id = ${stuck.orderId}`);
-    expect(await fulfilOrder(deps(), stuck.orderId)).toMatchObject({ ok: true });
+  it("a cancel cut off after its refund can't be fulfilled later; cancelling again finishes it, refunding once", async () => {
+    const { orderId, reference } = await placeOrder(db, fake, { "leather-tote-tan": 1 });
+    const before = await stockOf("leather-tote-tan");
+    // The refund went through, then the function stopped before recording it; the claim lapsed.
+    await fake.provider.undo(reference);
+    await db.execute(sql`update orders set cancelled_at = now() - interval '11 minutes' where id = ${orderId}`);
+
+    expect(await fulfilOrder(deps(), orderId)).toMatchObject({
+      ok: false,
+      error: "invalid",
+      message: "A cancel of this order didn't finish. Cancel it again to complete the refund.",
+    });
+    expect(await cancelOrder(deps(), orderId)).toMatchObject({ ok: true });
+    expect(fake.payments.get(reference)!.undone).toBe(1);
+    expect((await orderRow(orderId)).status).toBe("cancelled");
+    expect(await stockOf("leather-tote-tan")).toBe(before + 1);
+  });
+
+  it("finishes the cancel when the refund call fails but the refund was made", async () => {
+    const { orderId, reference } = await placeOrder(db, fake, { "leather-tote-tan": 1 });
+    vi.spyOn(fake.provider, "undo").mockImplementationOnce(async () => {
+      fake.set(reference, { status: "failed" });
+      throw new Error("timed out after the refund");
+    });
+    expect(await cancelOrder(deps(), orderId)).toMatchObject({ ok: true });
+    expect(await orderRow(orderId)).toMatchObject({ status: "cancelled" });
+  });
+
+  it("keeps the claim when the refund can't be confirmed either way: no fulfil until it's cancelled again", async () => {
+    const { orderId, reference } = await placeOrder(db, fake, { "leather-tote-tan": 1 });
+    const before = await stockOf("leather-tote-tan");
+    fake.failUndo(reference);
+    vi.spyOn(fake.provider, "verify").mockRejectedValueOnce(new Error("provider unreachable"));
+    expect(await cancelOrder(deps(), orderId)).toMatchObject({ ok: false, error: "failed", message: "We couldn't confirm the refund. Try cancelling again in 10 minutes." });
+    expect(await orderRow(orderId)).toMatchObject({ status: "paid" });
+    expect((await orderRow(orderId)).cancelledAt).toBeInstanceOf(Date);
+    expect(await stockOf("leather-tote-tan")).toBe(before);
+    expect(await fulfilOrder(deps(), orderId)).toMatchObject({ ok: false, message: "This order is being cancelled." });
   });
 });

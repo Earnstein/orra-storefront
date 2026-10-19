@@ -133,7 +133,10 @@ export function createStripeProvider({ client, webhookSecret }: { client: Stripe
         }
       }
       if (intent?.status === "requires_capture") await client.paymentIntents.cancel(intent.id);
-      else if (intent?.status === "succeeded" && !refundedInFull(intent)) await client.refunds.create({ payment_intent: intent.id }, { idempotencyKey: `undo/${reference}` });
+      // No fixed idempotency key: Stripe would replay a failed refund's error for 24 hours, so a retry
+      // couldn't succeed. A refund already made reads as refunded in full and isn't repeated, and a
+      // second refund at the same moment is refused by Stripe (it can't exceed the payment).
+      else if (intent?.status === "succeeded" && !refundedInFull(intent)) await client.refunds.create({ payment_intent: intent.id });
     },
 
     async parseWebhook(rawBody, headers): Promise<PaymentEvent | null> {

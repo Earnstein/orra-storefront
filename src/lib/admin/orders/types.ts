@@ -31,6 +31,8 @@ type AdminOrderBase = {
   refunded: boolean;
   /** The owner's cancel is in progress (the refund is being made). */
   cancelling: boolean;
+  /** A cancel started over 10 minutes ago and didn't finish: the refund may be made, so only a cancel can follow. */
+  cancelCutOff: boolean;
   /** Placed signed in, rather than as a guest. */
   account: boolean;
   subtotal: number;

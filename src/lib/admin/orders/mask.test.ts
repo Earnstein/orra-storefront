@@ -28,6 +28,7 @@ describe("masking", () => {
       cancelledAt: null,
       refunded: false,
       cancelling: false,
+      cancelCutOff: false,
       account: false,
       subtotal: 1000,
       currency: "USD",

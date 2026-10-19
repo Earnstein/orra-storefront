@@ -214,7 +214,7 @@ describe("undo", () => {
     vi.spyOn(client.checkout.sessions, "retrieve").mockResolvedValue(session({ status: "complete", payment_intent: intent("succeeded") }));
     const refund = vi.spyOn(client.refunds, "create").mockResolvedValue({} as Stripe.Response<Stripe.Refund>);
     await provider.undo("cs_test_1");
-    expect(refund).toHaveBeenCalledWith({ payment_intent: "pi_1" }, { idempotencyKey: "undo/cs_test_1" });
+    expect(refund).toHaveBeenCalledWith({ payment_intent: "pi_1" });
   });
 
   it("doesn't refund a payment already refunded in full", async () => {

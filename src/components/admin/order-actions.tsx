@@ -30,6 +30,8 @@ export function OrderActions({ orderId, number, total, canFulfil, canCancel }: {
   const [done, setDone] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const statusRef = useRef<HTMLParagraphElement>(null);
+  const fulfilRef = useRef<HTMLButtonElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
 
   async function run(kind: "fulfil" | "cancel") {
     setBusy(kind);
@@ -38,7 +40,12 @@ export function OrderActions({ orderId, number, total, canFulfil, canCancel }: {
     setBusy(null);
     if (result && !result.ok && result.error === "signed-out") return window.location.assign(signInPath(window.location.pathname));
     // A failed cancel keeps its dialog open, with the reason in it.
-    if (!result?.ok) return setError(result?.message ?? "Something went wrong. Try again.");
+    if (!result?.ok) {
+      setError(result?.message ?? "Something went wrong. Try again.");
+      // The pressed button was disabled while busy, which dropped focus: give it back.
+      requestAnimationFrame(() => (kind === "fulfil" ? fulfilRef : confirmRef).current?.focus());
+      return;
+    }
     setConfirming(false);
     setDone(kind === "fulfil" ? `${number} is fulfilled.` : `${number} is cancelled and refunded.`);
     requestAnimationFrame(() => statusRef.current?.focus());
@@ -52,7 +59,7 @@ export function OrderActions({ orderId, number, total, canFulfil, canCancel }: {
       {(canFulfil || canCancel) && !done && (
         <div className="flex flex-wrap gap-3">
           {canFulfil && (
-            <Button disabled={busy !== null} onClick={() => void run("fulfil")} className="max-sm:w-full">
+            <Button ref={fulfilRef} disabled={busy !== null} onClick={() => void run("fulfil")} className="max-sm:w-full">
               {busy === "fulfil" ? "Fulfilling…" : "Mark as fulfilled"}
             </Button>
           )}
@@ -72,12 +79,13 @@ export function OrderActions({ orderId, number, total, canFulfil, canCancel }: {
                   <AlertDialogDescription>
                     The customer is refunded {formatPrice(total)} and the items go back into stock. No email is sent. This can&apos;t be undone.
                   </AlertDialogDescription>
+                  {/* Always rendered (an alert region that appears from display:none may not be announced). */}
+                  <FormError message={confirming ? error : null} className="mb-0" />
                 </AlertDialogHeader>
-                <FormError message={confirming ? error : null} className="mb-0 empty:hidden" />
                 <AlertDialogFooter>
                   <AlertDialogCancel disabled={busy !== null}>Keep order</AlertDialogCancel>
                   {/* Black like every primary action: red is for errors and sale prices only. */}
-                  <Button disabled={busy !== null} onClick={() => void run("cancel")}>
+                  <Button ref={confirmRef} disabled={busy !== null} onClick={() => void run("cancel")}>
                     {busy === "cancel" ? "Cancelling…" : "Cancel and refund"}
                   </Button>
                 </AlertDialogFooter>

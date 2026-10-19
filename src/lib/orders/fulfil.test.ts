@@ -253,7 +253,7 @@ describe("fulfil", () => {
     lapseAtCapture(reference);
 
     expect(await fulfil(deps, checkoutId)).toEqual({ status: "failed" });
-    expect((await allOrders())[0]?.status).toBe("cancelled");
+    expect((await allOrders())[0]).toMatchObject({ status: "cancelled", cancelledAt: expect.any(Date), refundedAt: null });
     expect(await stockOf("leather-tote-tan")).toBe(held + 2);
     expect(fake.payments.get(reference)).toMatchObject({ settled: 0 });
 
@@ -349,7 +349,7 @@ describe("fulfil", () => {
     const second = await fulfil(deps, refunded.checkoutId);
     if (second.status !== "confirmed") throw new Error(second.status);
     await cancelOrder({ db, provider: fake.provider }, second.order.id);
-    expect(await fulfil(deps, refunded.checkoutId)).toEqual({ status: "failed" });
+    expect(await fulfil(deps, refunded.checkoutId)).toEqual({ status: "refunded", number: second.order.number });
     expect(fake.payments.get(refunded.reference)!.undone).toBe(1);
   });
 });

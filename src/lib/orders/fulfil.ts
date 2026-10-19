@@ -32,7 +32,9 @@ export type FulfilResult =
   | { status: "confirmed"; order: Order }
   | { status: "pending" }
   | { status: "failed" }
-  | { status: "sold-out"; items: string[] };
+  | { status: "sold-out"; items: string[] }
+  /** The owner cancelled the paid order and refunded it (M6's admin). */
+  | { status: "refunded"; number: string };
 
 const PENDING = { status: "pending" } as const;
 const FAILED = { status: "failed" } as const;
@@ -190,7 +192,7 @@ async function finish(deps: FulfilDeps, checkoutId: string): Promise<FulfilResul
   }
   if (order.status === "cancelled") {
     await undoIfAuthorised(deps, order.paymentReference);
-    return FAILED;
+    return order.refundedAt ? { status: "refunded", number: order.number } : FAILED;
   }
   // Fulfilled (sent by the owner) is paid too.
   if (order.status !== "paid" && order.status !== "fulfilled") throw new CaptureUnsettled(order.number, null);

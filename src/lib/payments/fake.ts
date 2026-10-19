@@ -57,6 +57,8 @@ export function createFakeProvider() {
     async undo(reference) {
       const payment = get(reference);
       if (payment.undoFails) throw new Error("fake: undo failed");
+      // Like Stripe: a payment already cancelled, refunded or expired has nothing left to undo.
+      if (payment.status === "failed" || payment.status === "expired") return;
       payment.undone += 1;
       payment.status = payment.status === "pending" ? "expired" : "failed";
     },

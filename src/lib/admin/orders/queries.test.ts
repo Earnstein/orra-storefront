@@ -89,6 +89,8 @@ describe("getAdminOrder", () => {
   it("reports a cancel in progress and answers null for an unknown number", async () => {
     await db.update(orders).set({ cancelledAt: new Date() }).where(eq(orders.id, placed[0]!.orderId));
     expect(await getAdminOrder(db, 10001, { masked: false })).toMatchObject({ status: "paid", cancelling: true, cancelledAt: null });
+    await db.update(orders).set({ cancelledAt: new Date(Date.now() - 11 * 60_000) }).where(eq(orders.id, placed[0]!.orderId));
+    expect(await getAdminOrder(db, 10001, { masked: false })).toMatchObject({ status: "paid", cancelling: false, cancelCutOff: true });
     await db.update(orders).set({ cancelledAt: null }).where(eq(orders.id, placed[0]!.orderId));
     expect(await getAdminOrder(db, 99999, { masked: false })).toBeNull();
   });

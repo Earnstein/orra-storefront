@@ -16,11 +16,10 @@ const formatTime = (iso: string) => `${timeFormat.format(new Date(iso))} UTC`;
  */
 export function AdminOrderView({ order, canFulfil, canCancel, back }: { order: AdminOrder; canFulfil: boolean; canCancel: boolean; back: React.ReactNode }) {
   const actionable = order.status === "paid" && !order.cancelling;
-  const history = [
-    { label: "Placed", at: order.createdAt },
-    order.fulfilledAt && { label: "Fulfilled", at: order.fulfilledAt },
-    order.cancelledAt && { label: order.refunded ? "Cancelled and refunded" : "Cancelled (the payment wasn't taken)", at: order.cancelledAt },
-  ].filter((event): event is { label: string; at: string } => Boolean(event));
+  const history: { label: string; at: string | null }[] = [{ label: "Placed", at: order.createdAt }];
+  if (order.fulfilledAt) history.push({ label: "Fulfilled", at: order.fulfilledAt });
+  // Orders cancelled before the times were recorded (M5) have none.
+  if (order.status === "cancelled") history.push({ label: order.refunded ? "Cancelled and refunded" : "Cancelled (the payment wasn't taken)", at: order.cancelledAt });
 
   return (
     <AdminPage title={`Order ${order.number}`} action={back}>
@@ -32,10 +31,11 @@ export function AdminOrderView({ order, canFulfil, canCancel, back }: { order: A
               <OrderStatusBadge status={order.status} />
             </div>
             {order.status === "pending_capture" && <p className="text-body text-muted-foreground">The payment is still being taken.</p>}
-            {order.status === "paid" && order.cancelling && <p className="text-body text-muted-foreground">This order is being cancelled. Reload in a minute.</p>}
+            {order.cancelling && <p className="text-body text-muted-foreground">This order is being cancelled. Reload the page shortly to see the outcome.</p>}
+            {order.cancelCutOff && <p className="text-body text-muted-foreground">A cancel of this order didn&apos;t finish, so the refund may already be made. Cancel it again to complete it.</p>}
             {/* Mounted whenever the role can act, so its outcome message survives the refresh that removes the buttons. */}
             {(canFulfil || canCancel) && (
-              <OrderActions orderId={order.id} number={order.number} total={order.subtotal} canFulfil={canFulfil && actionable} canCancel={canCancel && actionable} />
+              <OrderActions orderId={order.id} number={order.number} total={order.subtotal} canFulfil={canFulfil && actionable && !order.cancelCutOff} canCancel={canCancel && actionable} />
             )}
           </div>
 
@@ -84,7 +84,8 @@ export function AdminOrderView({ order, canFulfil, canCancel, back }: { order: A
                 <ol className="flex flex-col gap-1">
                   {history.map((event) => (
                     <li key={event.label}>
-                      {event.label} <span className="text-muted-foreground">· {formatTime(event.at)}</span>
+                      {event.label}
+                      {event.at && <span className="text-muted-foreground"> · {formatTime(event.at)}</span>}
                     </li>
                   ))}
                 </ol>
