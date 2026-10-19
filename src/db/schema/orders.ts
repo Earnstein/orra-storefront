@@ -11,10 +11,11 @@ export const orderNumberSeq = pgSequence("order_number_seq", { startWith: 10001 
 /**
  * - `pending_capture`: the order is recorded and the money is authorised, not yet taken;
  * - `paid`: taken;
- * - `cancelled`: taking it failed, so the stock went back and the authorisation was cancelled.
- * M6 adds `fulfilled` (shipped).
+ * - `fulfilled`: paid and sent (M6's admin);
+ * - `cancelled`: taking it failed (the authorisation was cancelled), or the owner cancelled a paid
+ *   order (refunded, `refunded_at`); either way the stock went back.
  */
-export const orderStatus = pgEnum("order_status", ["pending_capture", "paid", "cancelled"]);
+export const orderStatus = pgEnum("order_status", ["pending_capture", "paid", "cancelled", "fulfilled"]);
 
 export type OrderShipping = {
   name: string;
@@ -57,9 +58,22 @@ export const orders = pgTable(
     guestKeyHash: text(),
     emailAttemptedAt: timestamp({ withTimezone: true }),
     emailSentAt: timestamp({ withTimezone: true }),
+    fulfilledAt: timestamp({ withTimezone: true }),
+    /**
+     * When it was cancelled. While the order is still `paid` it's the owner's cancel in progress
+     * (the refund is being made): a fulfil waits for it, and a claim older than 10 minutes lapses.
+     */
+    cancelledAt: timestamp({ withTimezone: true }),
+    /** Set when a cancel gave the money back (a paid order); a capture that failed took nothing. */
+    refundedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index().on(t.userId, t.createdAt.desc()), check("orders_subtotal_nonnegative", sql`${t.subtotal} >= 0`)],
+  (t) => [
+    index().on(t.userId, t.createdAt.desc()),
+    // The admin's list: every order, newest first.
+    index().on(t.createdAt.desc()),
+    check("orders_subtotal_nonnegative", sql`${t.subtotal} >= 0`),
+  ],
 );
 
 /** A bought line, as it was at purchase (the product may change or go later). */

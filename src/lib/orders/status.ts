@@ -7,6 +7,8 @@ export function orderStatusLabel(status: OrderStatus): string {
       return "Processing";
     case "paid":
       return "Confirmed";
+    case "fulfilled":
+      return "Fulfilled";
     case "cancelled":
       return "Cancelled";
   }

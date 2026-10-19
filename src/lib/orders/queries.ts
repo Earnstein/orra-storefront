@@ -9,7 +9,7 @@ import { rowsOf } from "@/lib/bag/queries";
 import { guestKeyMatches } from "./guest-key";
 import { formatOrderNumber } from "./number";
 
-export type OrderStatus = "pending_capture" | "paid" | "cancelled";
+export type OrderStatus = "pending_capture" | "paid" | "fulfilled" | "cancelled";
 
 export type OrderItem = { productId: number | null; name: string; unitPrice: number; quantity: number; image: ProductImage | null };
 
@@ -27,6 +27,11 @@ export type Order = {
   paymentReference: string;
   paymentSummary: string | null;
   createdAt: Date;
+  fulfilledAt: Date | null;
+  /** Only meaningful once `status` is `cancelled` (while `paid` it marks a cancel in progress). */
+  cancelledAt: Date | null;
+  /** Set when the cancel refunded a paid order. */
+  refundedAt: Date | null;
   items: OrderItem[];
 };
 
@@ -43,6 +48,9 @@ type OrderRow = {
   payment_reference: string;
   payment_summary: string | null;
   created_at: string | Date;
+  fulfilled_at: string | Date | null;
+  cancelled_at: string | Date | null;
+  refunded_at: string | Date | null;
 };
 
 type ItemRow = { product_id: number | null; name: string; unit_price: number; quantity: number; image: ProductImage | string | null };
@@ -50,10 +58,14 @@ type ItemRow = { product_id: number | null; name: string; unit_price: number; qu
 /** JSON columns come back parsed from PGlite and as text from some drivers. */
 const json = <T>(value: T | string | null): T | null => (typeof value === "string" ? (JSON.parse(value) as T) : value);
 
-async function readOrder(db: SeedDatabase, where: ReturnType<typeof sql>): Promise<Order | null> {
+const dateOrNull = (value: string | Date | null) => (value === null ? null : new Date(value));
+
+/** One order with its items, found by a condition on `orders`. */
+export async function readOrder(db: SeedDatabase, where: ReturnType<typeof sql>): Promise<Order | null> {
   const [row] = rowsOf<OrderRow>(
     await db.execute(sql`
-      select id, number, checkout_id, user_id, email, status, subtotal, currency, shipping, payment_reference, payment_summary, created_at
+      select id, number, checkout_id, user_id, email, status, subtotal, currency, shipping, payment_reference, payment_summary, created_at,
+        fulfilled_at, cancelled_at, refunded_at
       from orders where ${where}`),
   );
   if (!row) return null;
@@ -71,6 +83,9 @@ async function readOrder(db: SeedDatabase, where: ReturnType<typeof sql>): Promi
     paymentReference: row.payment_reference,
     paymentSummary: row.payment_summary,
     createdAt: new Date(row.created_at),
+    fulfilledAt: dateOrNull(row.fulfilled_at),
+    cancelledAt: dateOrNull(row.cancelled_at),
+    refundedAt: dateOrNull(row.refunded_at),
     items: items.map((item) => ({
       productId: item.product_id === null ? null : Number(item.product_id),
       name: item.name,

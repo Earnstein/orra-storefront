@@ -36,7 +36,11 @@ export function OrderPage({ order, now, back }: { order: Order; now: Date; back?
         <p className="text-body">
           Placed on {placedFormat.format(order.createdAt)} · {orderStatusLabel(order.status)}
         </p>
-        {order.status === "cancelled" && <p className="text-body text-muted-foreground">This order was cancelled and your card was not charged.</p>}
+        {order.status === "cancelled" && (
+          <p className="text-body text-muted-foreground">
+            {order.refundedAt ? "This order was cancelled and refunded to your card." : "This order was cancelled and your card was not charged."}
+          </p>
+        )}
       </header>
 
       <div className="grid items-start gap-block lg:grid-cols-3">

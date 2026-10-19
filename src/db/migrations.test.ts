@@ -137,7 +137,8 @@ describe("M5 migrations", () => {
     const client = createPGlite();
     const tags = migrationTags();
     expect(tags).toContain("0010_orders");
-    await applyMigrations(client, tags);
+    // As 0010 left them (M6's 0013 adds columns after these).
+    await applyMigrations(client, tags.slice(0, tags.indexOf("0010_orders") + 1));
     const columns = async (table: string) =>
       (
         await client.query<{ column_name: string }>(
@@ -183,5 +184,18 @@ describe("M6 migrations", () => {
     );
     expect(rows[0]!.total).toBeGreaterThan(0);
     expect(rows[0]!.archived).toBe(0);
+  });
+
+  it("add the fulfilled status and the fulfilled, cancelled and refunded times", async () => {
+    const client = createPGlite();
+    const tags = migrationTags();
+    expect(tags).toContain("0013_order_fulfilment");
+    await applyMigrations(client, tags);
+    const { rows: statuses } = await client.query<{ status: string }>("select unnest(enum_range(null::order_status))::text as status");
+    expect(statuses.map((row) => row.status)).toEqual(["pending_capture", "paid", "cancelled", "fulfilled"]);
+    const { rows: columns } = await client.query<{ column_name: string }>(
+      "select column_name from information_schema.columns where table_name = 'orders' order by ordinal_position",
+    );
+    expect(columns.map((row) => row.column_name).slice(-3)).toEqual(["fulfilled_at", "cancelled_at", "refunded_at"]);
   });
 });
