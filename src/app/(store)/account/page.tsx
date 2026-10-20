@@ -5,7 +5,8 @@ import { AccountOverview } from "@/components/account/account-overview";
 import { Container } from "@/components/primitives";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/db";
-import { requireUser } from "@/lib/auth/session";
+import { isDemoAdmin } from "@/lib/auth/permissions";
+import { getCurrentSession, requireUser } from "@/lib/auth/session";
 import { countOrdersForUser } from "@/lib/orders/queries";
 import { countSavedItems } from "@/lib/saved/queries";
 
@@ -29,8 +30,10 @@ export default function AccountPage() {
 
 async function Account() {
   const user = await requireUser("/account");
+  // The same request's session read (deduplicated): the role decides what can be changed.
+  const demo = isDemoAdmin((await getCurrentSession())?.role);
   const [savedCount, orderCount] = await Promise.all([countSavedItems(user.id), countOrdersForUser(db, user.id)]);
-  return <AccountOverview user={user} savedCount={savedCount} orderCount={orderCount} />;
+  return <AccountOverview user={user} savedCount={savedCount} orderCount={orderCount} demo={demo} />;
 }
 
 function AccountSkeleton() {

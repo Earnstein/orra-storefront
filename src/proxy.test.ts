@@ -26,6 +26,13 @@ describe("proxy", () => {
     expect(getRedirectUrl(proxy(request("/admin/products")))).toBe("https://orra.test/sign-in?returnTo=%2Fadmin%2Fproducts");
   });
 
+  it("sends a signed-out visitor at the admin's front door to Try the admin, and lets that page through", () => {
+    expect(getRedirectUrl(proxy(request("/admin")))).toBe("https://orra.test/admin/try");
+    expect(proxy(request("/admin/try")).headers.get("x-middleware-next")).toBe("1");
+    // Signed in, /admin is the admin (or the not-found page for shoppers).
+    expect(proxy(request("/admin", { cookie: "better-auth.session_token=abc" })).headers.get("x-middleware-next")).toBe("1");
+  });
+
   it("lets server actions through, so they answer signed-out themselves", () => {
     const response = proxy(request("/account", { method: "POST" }));
     expect(response.headers.get("x-middleware-next")).toBe("1");

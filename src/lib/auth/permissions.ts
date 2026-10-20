@@ -42,6 +42,11 @@ export function roleCan(role: string | null | undefined, permission: Permission)
   return splitRoles(role).some((name) => Object.hasOwn(roles, name) && roles[name as keyof typeof roles].authorize(permission).success);
 }
 
+/** Whether the roles include the demo admin's: the shared public account, whose own details can't be changed. */
+export function isDemoAdmin(role: string | null | undefined): boolean {
+  return splitRoles(role).includes("demo-admin");
+}
+
 function splitRoles(role: string | null | undefined): string[] {
   // Exactly as the admin plugin splits them (no trimming), so our checks and its endpoints agree.
   return (role ?? "").split(",").filter(Boolean);

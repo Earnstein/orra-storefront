@@ -1,8 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 import { products as seedProducts } from "../src/db/seed/catalog";
-import { signUpAsAdmin } from "./admin";
+import { restoreSeed, showsSoon, signUpAsAdmin } from "./admin";
 import { AUTH_TIMEOUT, deleteTestUser, type TestUser } from "./auth";
 import { testDatabase } from "./db";
 import { gotoHydrated, hydrated } from "./hydration";
@@ -55,23 +55,6 @@ const PRODUCTS = {
   mobile: { edit: "leather-biker-jacket", archive: "barrel-bag-burgundy", held: "top-handle-bag-teal" },
 } as const;
 const productsFor = (project: string) => PRODUCTS[project as keyof typeof PRODUCTS];
-
-/**
- * Loads `url` until `shown` appears: after an admin save the first visit to a prerendered page can
- * still get its previous render while it re-renders, so the change shows from a following visit.
- */
-async function showsSoon(page: Page, url: string, shown: () => Locator) {
-  await expect(async () => {
-    // A fresh query each time, so the browser's own HTTP cache can't answer (Next ignores it).
-    await page.goto(`${url}${url.includes("?") ? "&" : "?"}e2e=${Date.now()}`, { waitUntil: "domcontentloaded" });
-    await expect(shown()).toBeVisible({ timeout: 1_000 });
-  }).toPass({ timeout: 15_000 });
-}
-
-async function restoreSeed(slug: string) {
-  const seed = seedProducts.find((product) => product.slug === slug)!;
-  await testDatabase()!`UPDATE products SET name = ${seed.name}, price = ${seed.price}, stock = ${seed.stock}, archived_at = NULL WHERE slug = ${slug}`;
-}
 
 test("@writes editing a product's name and price shows on the store at once", async ({ page }, info) => {
   const slug = productsFor(info.project.name).edit;

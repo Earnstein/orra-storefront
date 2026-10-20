@@ -5,7 +5,8 @@ import { signInPath } from "@/lib/auth/return-to";
 
 /**
  * Marks guest order pages (`/orders/…?key=…`) private and uncacheable. Then, for account and
- * admin pages: sends visitors without a session cookie to sign in before anything renders.
+ * admin pages: sends visitors without a session cookie to sign in before anything renders (the
+ * admin's front door, `/admin`, to "Try the admin" at `/admin/try`, which needs no session).
  * A convenience only: it checks that the cookie exists, not that the session is valid, so pages
  * and server actions still check the session themselves (src/lib/auth/session.ts). Requests
  * other than GET/HEAD (server actions post to the page's URL) pass through, so an action answers
@@ -21,7 +22,11 @@ export function proxy(request: NextRequest) {
     return response;
   }
   if (request.method !== "GET" && request.method !== "HEAD") return NextResponse.next();
+  // "Try the admin" is for visitors without an admin session.
+  if (path === "/admin/try") return NextResponse.next();
   if (getSessionCookie(request)) return NextResponse.next();
+  // Signed out, the admin's front door offers the demo (and the owner's sign-in).
+  if (path === "/admin") return NextResponse.redirect(new URL("/admin/try", request.url));
   const { pathname, search } = request.nextUrl;
   return NextResponse.redirect(new URL(signInPath(`${pathname}${search}`), request.url));
 }

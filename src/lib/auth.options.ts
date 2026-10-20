@@ -5,6 +5,7 @@ import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
 
 import { PASSWORD_MAX, PASSWORD_MIN } from "@/lib/auth/password";
+import { demoAdmin } from "@/lib/auth/demo-plugin";
 import { ac, roles } from "@/lib/auth/permissions";
 import type { Email } from "@/lib/email/send";
 import { resetPasswordEmail } from "@/lib/email/templates";
@@ -74,6 +75,9 @@ export const authOptions = {
     // Roles (src/lib/auth/permissions.ts). Only the owner counts as an admin to the plugin's own
     // user and session endpoints; the demo admin's role grants none of them.
     admin({ ac, roles, adminRoles: ["admin"], defaultRole: "user" }),
+    // "Try the admin": the server-only demo sign-in, and guards that keep the shared demo account
+    // from being renamed, given a password or having its sessions ended (src/lib/auth/demo-plugin.ts).
+    demoAdmin(),
     // nextCookies must stay last so Server Actions can set cookies.
     nextCookies(),
   ],

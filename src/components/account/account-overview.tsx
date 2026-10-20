@@ -9,7 +9,7 @@ import { ProfileForm } from "@/components/account/profile-form";
 import type { CurrentUser } from "@/lib/auth/session";
 
 /** The signed-in account page: a greeting, the saved items and orders summaries, then each section. */
-export function AccountOverview({ user, savedCount, orderCount }: { user: CurrentUser; savedCount: number; orderCount: number }) {
+export function AccountOverview({ user, savedCount, orderCount, demo = false }: { user: CurrentUser; savedCount: number; orderCount: number; demo?: boolean }) {
   return (
     <div className="flex flex-col gap-section">
       <header className="flex flex-col gap-3">
@@ -36,20 +36,31 @@ export function AccountOverview({ user, savedCount, orderCount }: { user: Curren
         </Link>
       </div>
 
-      <div>
-        <AccountSection id="profile-heading" title="Profile" description="Your name as it appears on your account and in the menu.">
-          <ProfileForm name={user.name} email={user.email} />
+      {demo ? (
+        <AccountSection id="demo-heading" title="Demo account" description="Shared by everyone trying the admin.">
+          <div className="flex flex-col items-start gap-4 text-body">
+            <p>This account&apos;s name, sign-in and devices can&apos;t be changed. It signs out by itself 2 hours after you started the demo, and its changes reset nightly.</p>
+            <Link href="/admin/products" className="link eyebrow">
+              Back to the admin
+            </Link>
+          </div>
         </AccountSection>
-        <AccountSection id="password-heading" title="Password" description="Use at least 8 characters. Changing it signs your other devices out unless you untick the box.">
-          <PasswordForm />
-        </AccountSection>
-        <AccountSection id="devices-heading" title="Signed-in devices" description="Where your account is signed in. Sign out anything you don't recognise.">
-          <DevicesList />
-        </AccountSection>
-        <AccountSection id="delete-heading" title="Delete account" description="Permanently remove your account. You can create a new one at any time.">
-          <DeleteAccount />
-        </AccountSection>
-      </div>
+      ) : (
+        <div>
+          <AccountSection id="profile-heading" title="Profile" description="Your name as it appears on your account and in the menu.">
+            <ProfileForm name={user.name} email={user.email} />
+          </AccountSection>
+          <AccountSection id="password-heading" title="Password" description="Use at least 8 characters. Changing it signs your other devices out unless you untick the box.">
+            <PasswordForm />
+          </AccountSection>
+          <AccountSection id="devices-heading" title="Signed-in devices" description="Where your account is signed in. Sign out anything you don't recognise.">
+            <DevicesList />
+          </AccountSection>
+          <AccountSection id="delete-heading" title="Delete account" description="Permanently remove your account. You can create a new one at any time.">
+            <DeleteAccount />
+          </AccountSection>
+        </div>
+      )}
     </div>
   );
 }
