@@ -9,12 +9,18 @@ import { cookiesFrom, createTestAuth } from "@/test/auth";
 // issueSignedToken records the scope it was asked for.
 const request = vi.hoisted(() => ({ auth: undefined as unknown, headers: new Headers(), env: {} as Record<string, string | undefined> }));
 const issued = vi.hoisted(() => [] as unknown[]);
+const testDb = vi.hoisted(() => ({ db: undefined as unknown }));
 vi.mock("@/lib/auth", () => ({
   get auth() {
     return request.auth;
   },
 }));
 vi.mock("next/headers", () => ({ headers: async () => request.headers }));
+vi.mock("@/db", () => ({
+  get db() {
+    return testDb.db;
+  },
+}));
 vi.mock("@/lib/env", () => ({
   serverEnv: () => request.env,
   uploadsConfigured: (env: { BLOB_STORE_ID?: string; BLOB_WEBHOOK_PUBLIC_KEY?: string }) => Boolean(env.BLOB_STORE_ID && env.BLOB_WEBHOOK_PUBLIC_KEY),
@@ -45,6 +51,7 @@ let next = 0;
 beforeAll(async () => {
   t = await createTestAuth();
   request.auth = t.auth;
+  testDb.db = t.db;
 });
 
 beforeEach(() => {
@@ -61,10 +68,11 @@ async function signInAs(role: string) {
   request.headers = cookiesFrom(headers);
 }
 
-const presign = (pathname: string, multipart = false) =>
+const presign = (pathname: string, multipart = false, ip?: string) =>
   POST(
     new Request("http://localhost:3000/api/admin/uploads", {
       method: "POST",
+      headers: ip ? { "x-forwarded-for": ip } : {},
       body: JSON.stringify({ type: "blob.generate-presigned-url", payload: { pathname, multipart, clientPayload: null } }),
     }),
   );
@@ -102,5 +110,17 @@ describe("POST /api/admin/uploads", () => {
     await signInAs("admin");
     request.env = {};
     expect((await presign("products/a.jpg")).status).toBe(503);
+  });
+
+  it("on Vercel, caps the demo admin's uploads per network per day; the owner has no cap", async () => {
+    const { DEMO_DAILY_LIMITS } = await import("@/lib/admin/demo");
+    request.env = { ...request.env, VERCEL_ENV: "production" };
+    await signInAs("demo-admin");
+    for (let i = 0; i < DEMO_DAILY_LIMITS.upload; i++) expect((await presign(`products/p${i}.jpg`, false, "198.51.100.9")).status).toBe(200);
+    const refused = await presign("products/one-more.jpg", false, "198.51.100.9");
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toEqual({ error: "The demo allows 30 photo uploads a day. Try again tomorrow." });
+    await signInAs("admin");
+    expect((await presign("products/owner.jpg", false, "198.51.100.9")).status).toBe(200);
   });
 });

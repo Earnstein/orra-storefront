@@ -1,9 +1,13 @@
 import { issueSignedToken } from "@vercel/blob";
 import { handleUploadPresigned, type HandleUploadPresignedBody } from "@vercel/blob/client";
 
+import { db } from "@/db";
+import { allowDemoWrite, DEMO_DAILY_LIMITS } from "@/lib/admin/demo";
 import { adminCheck } from "@/lib/admin/session";
+import { isDemoAdmin } from "@/lib/auth/permissions";
 import { isUploadPathname, UPLOAD_MAX_BYTES, UPLOAD_TYPES } from "@/lib/admin/products/uploads";
 import { serverEnv, uploadsConfigured } from "@/lib/env";
+import { clientIp, rateLimitsOn } from "@/lib/rate-limit";
 
 const PRIVATE = { "Cache-Control": "private, no-store" };
 
@@ -27,6 +31,11 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "Invalid request." }, { status: 400, headers: PRIVATE });
   }
   if (body?.type !== "blob.generate-presigned-url") return Response.json({ error: "Invalid request." }, { status: 400, headers: PRIVATE });
+  // The public demo admin: a daily cap per network, so the Blob store can't be filled.
+  const ip = clientIp(request.headers);
+  if (isDemoAdmin(admin.role) && rateLimitsOn(env) && ip && !(await allowDemoWrite(db, "upload", ip))) {
+    return Response.json({ error: `The demo allows ${DEMO_DAILY_LIMITS.upload} photo uploads a day. Try again tomorrow.` }, { status: 429, headers: PRIVATE });
+  }
 
   try {
     const result = await handleUploadPresigned({

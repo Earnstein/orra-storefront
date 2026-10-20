@@ -1,12 +1,16 @@
 "use server";
 
 import { updateTag } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 
 import { db } from "@/db";
-import { adminForAction } from "@/lib/admin/session";
+import { allowDemoWrite, DEMO_DAILY_LIMITS } from "@/lib/admin/demo";
+import { adminForAction, type AdminUser } from "@/lib/admin/session";
+import { isDemoAdmin } from "@/lib/auth/permissions";
 import type { Permission } from "@/lib/auth/permissions";
 import { serverEnv } from "@/lib/env";
+import { clientIp, rateLimitsOn } from "@/lib/rate-limit";
 import { createProduct, setArchived, updateProduct } from "./mutations";
 import { productInput, type ProductField, type ProductInput, type ProductResult } from "./schema";
 import { blobStoreHost, isAllowedPhoto } from "./uploads";
@@ -22,11 +26,11 @@ const OUT_OF_DATE = { ok: false, error: "invalid", message: "This form is out of
 const id = z.number().int().positive();
 const extras = z.object({ id: id.optional(), expectedStock: z.number().int().min(0).optional() });
 
-async function guarded<T>(permission: Permission, run: () => Promise<ProductResult<T>>): Promise<ProductResult<T>> {
+async function guarded<T>(permission: Permission, run: (admin: AdminUser) => Promise<ProductResult<T>>): Promise<ProductResult<T>> {
   const check = await adminForAction(permission);
   if (!check.ok) return check;
   try {
-    const result = await run();
+    const result = await run(check.admin);
     if (result.ok) updateTag("catalog");
     return result;
   } catch (error) {
@@ -40,7 +44,7 @@ export async function saveProduct(
   input: ProductInput & { id?: number; expectedStock?: number },
 ): Promise<ProductResult<{ id: number; slug: string }>> {
   const editing = input?.id !== undefined;
-  return guarded({ product: [editing ? "update" : "create"] }, async () => {
+  return guarded({ product: [editing ? "update" : "create"] }, async (admin) => {
     const meta = extras.safeParse({ id: input?.id, expectedStock: input?.expectedStock });
     if (!meta.success) return OUT_OF_DATE;
     const parsed = productInput.safeParse(input);
@@ -52,7 +56,10 @@ export async function saveProduct(
     if (!parsed.data.images.every((image) => isAllowedPhoto(image.src, storeHost))) {
       return { ok: false, error: "invalid", field: "images", message: "Use an uploaded photo or an images.unsplash.com address." };
     }
-    if (meta.data.id === undefined) return createProduct(db, parsed.data);
+    if (meta.data.id === undefined) {
+      if (!(await demoMayCreate(admin))) return { ok: false, error: "invalid", message: `The demo allows ${DEMO_DAILY_LIMITS.create} new products a day. Try again tomorrow.` };
+      return createProduct(db, parsed.data);
+    }
     if (meta.data.expectedStock === undefined) return OUT_OF_DATE;
     return updateProduct(db, meta.data.id, parsed.data, meta.data.expectedStock);
   });
@@ -66,6 +73,13 @@ export async function archiveProduct(productId: number): Promise<ProductResult<n
 /** Puts an archived product back on the storefront. */
 export async function restoreProduct(productId: number): Promise<ProductResult<null>> {
   return guarded({ product: ["archive"] }, async () => toNull(id.safeParse(productId).success ? await setArchived(db, productId, false) : NOT_FOUND));
+}
+
+/** The public demo admin's new products are capped per network per day (on Vercel); the owner's never are. */
+async function demoMayCreate(admin: AdminUser): Promise<boolean> {
+  if (!isDemoAdmin(admin.role) || !rateLimitsOn(serverEnv())) return true;
+  const ip = clientIp(await headers());
+  return !ip || (await allowDemoWrite(db, "create", ip));
 }
 
 const NOT_FOUND = { ok: false, error: "not-found", message: "This product no longer exists." } as const;

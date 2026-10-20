@@ -6,7 +6,8 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { nameSchema } from "@/lib/auth/schemas";
 import { endOtherSessions, endSession } from "@/lib/account/devices";
-import { getCurrentSession, getCurrentUser } from "@/lib/auth/session";
+import { isDemoAdmin } from "@/lib/auth/permissions";
+import { getCurrentSession } from "@/lib/auth/session";
 
 /**
  * What every account action returns: data, or a typed reason the form can show inline. Actions
@@ -19,11 +20,15 @@ export type ActionResult<T = void> =
 
 const SIGNED_OUT = { ok: false, error: "signed-out", message: "You've been signed out." } as const;
 const FAILED = { ok: false, error: "failed", message: "Something went wrong. Try again." } as const;
+// The shared demo admin is signed in by many visitors at once: none may rename it or sign the others out.
+const DEMO_ACCOUNT = { ok: false, error: "invalid", message: "The demo account can't be changed." } as const;
 const INVALID_DEVICE = { ok: false, error: "invalid", message: "That device is already signed out." } as const;
 
 /** Renames the signed-in user. Better Auth refreshes the session cookie, so the header follows. */
 export async function updateName(name: string): Promise<ActionResult<{ name: string }>> {
-  if (!(await getCurrentUser())) return SIGNED_OUT;
+  const current = await getCurrentSession();
+  if (!current) return SIGNED_OUT;
+  if (isDemoAdmin(current.role)) return DEMO_ACCOUNT;
   const parsed = nameSchema.safeParse(name);
   if (!parsed.success) return { ok: false, error: "invalid", message: parsed.error.issues[0].message };
   try {
@@ -40,6 +45,7 @@ export async function updateName(name: string): Promise<ActionResult<{ name: str
 export async function signOutDevice(sessionId: string): Promise<ActionResult> {
   const current = await getCurrentSession();
   if (!current) return SIGNED_OUT;
+  if (isDemoAdmin(current.role)) return DEMO_ACCOUNT;
   if (typeof sessionId !== "string" || sessionId === current.sessionId) return INVALID_DEVICE;
   try {
     if (!(await endSession(current.user.id, sessionId))) return INVALID_DEVICE;
@@ -54,6 +60,7 @@ export async function signOutDevice(sessionId: string): Promise<ActionResult> {
 export async function signOutOtherDevices(): Promise<ActionResult> {
   const current = await getCurrentSession();
   if (!current) return SIGNED_OUT;
+  if (isDemoAdmin(current.role)) return DEMO_ACCOUNT;
   try {
     await endOtherSessions(current.user.id, current.sessionId);
   } catch (error) {

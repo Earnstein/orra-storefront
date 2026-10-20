@@ -12,7 +12,8 @@ vi.mock("@/lib/auth", () => ({
 }));
 vi.mock("next/headers", () => ({ headers: async () => request.headers }));
 
-const { updateName } = await import("@/lib/account/actions");
+const { signOutDevice, signOutOtherDevices, updateName } = await import("@/lib/account/actions");
+const { ensureDemoAdmin } = await import("@/lib/admin/demo");
 
 type TestAuth = Awaited<ReturnType<typeof createTestAuth>>;
 let t: TestAuth;
@@ -61,5 +62,17 @@ describe("updateName", () => {
     await t.auth.api.revokeSession({ body: { token }, headers: cookies });
     request.headers = cookies;
     expect(await updateName("Grace")).toMatchObject({ ok: false, error: "signed-out" });
+  });
+});
+
+describe("the shared demo account", () => {
+  it("can't be renamed or have its other devices signed out (other demo visitors)", async () => {
+    const { id } = await ensureDemoAdmin(t.db);
+    const { headers } = await t.auth.api.signInAsDemoAdmin({ body: { userId: id }, headers: new Headers(), returnHeaders: true });
+    request.headers = cookiesFrom(headers);
+    const refused = { ok: false, error: "invalid", message: "The demo account can't be changed." };
+    expect(await updateName("Mallory")).toEqual(refused);
+    expect(await signOutOtherDevices()).toEqual(refused);
+    expect(await signOutDevice("another-session")).toEqual(refused);
   });
 });
