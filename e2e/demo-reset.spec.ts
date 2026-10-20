@@ -28,7 +28,8 @@ test("@writes the demo reset puts an edited product back to the seed", async ({ 
   expect((await request.get("/api/cron/demo-reset")).status()).toBe(401);
   const reset = await request.get("/api/cron/demo-reset", { headers: { authorization: `Bearer ${process.env.E2E_CRON_SECRET}` } });
   expect(reset.status()).toBe(200);
-  expect(await reset.json()).toMatchObject({ restoredProducts: seedProducts.length });
+  // Photos are production's alone, so locally every step runs.
+  expect(await reset.json()).toMatchObject({ restoredProducts: seedProducts.length, failedSteps: [] });
 
   await showsSoon(page, `/products/${SLUG}`, () => page.getByRole("heading", { level: 1, name: seed.name }));
 });

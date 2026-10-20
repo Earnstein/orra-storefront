@@ -12,8 +12,13 @@ import { releaseExpiredHolds } from "@/lib/checkout/holds";
 export const DEMO_DATA_DAYS = 30;
 /** Photos uploaded more recently than this are kept: the product they're for may not be saved yet. */
 const PHOTO_GRACE_MS = 60 * 60_000;
-/** Unsent confirmation emails retried per night (newest first); the M7 domain is what fixes delivery. */
+/**
+ * Unsent confirmation emails retried per night (newest first), for orders of the last 2 days only:
+ * until M7's domain, Resend's test sender delivers to the owner alone, so a shopper's email fails
+ * for good, and a confirmation weeks late is worse than none.
+ */
 const EMAILS_PER_RUN = 25;
+const EMAIL_RETRY_DAYS = 2;
 
 export type ResetDeps = {
   db: SeedDatabase;
@@ -39,13 +44,24 @@ export type ResetSummary = {
   failedSteps: string[];
 };
 
+/** A photo's identity: host and path (a saved address may carry a query or differ in case of host). */
+function photoKey(url: string): string {
+  try {
+    const { host, pathname } = new URL(url);
+    return `${host.toLowerCase()}${pathname}`;
+  } catch {
+    return url;
+  }
+}
+
 const count = async (db: SeedDatabase, query: ReturnType<typeof sql>) => Number(rowsOf<{ n: number }>(await db.execute(query))[0]?.n ?? 0);
 
 /**
  * Puts the public demo back to its seed every night (the spec's steps, in order). Each step is one
  * statement or one idempotent call, so a step cut off is finished by the next run; a step that
  * throws is logged and listed in `failedSteps`, and the steps after it still run. Accounts,
- * sessions and roles are never touched; saved items and bag lines go only with a deleted product.
+ * sessions and roles are never touched; saved items and bag lines go with a deleted product, and
+ * bags untouched for 30 days (none an open checkout is paying from) go whole.
  */
 export async function resetDemo(deps: ResetDeps): Promise<ResetSummary> {
   const { db } = deps;
@@ -90,7 +106,14 @@ export async function resetDemo(deps: ResetDeps): Promise<ResetSummary> {
           and not exists (select 1 from orders o where o.checkout_id = c.id)
         returning 1) select count(*)::int as n from gone`,
     );
-    summary.deletedCarts = await count(db, sql`with gone as (delete from carts where updated_at < ${cutoff} returning 1) select count(*)::int as n from gone`);
+    // Not one an open checkout is paying from: its success page and bag still need it.
+    summary.deletedCarts = await count(
+      db,
+      sql`with gone as (
+        delete from carts c where c.updated_at < ${cutoff}
+          and not exists (select 1 from checkouts k where k.cart_id = c.id and k.status = 'open')
+        returning 1) select count(*)::int as n from gone`,
+    );
   });
 
   // 3. The seed's catalogue: content, stock (less open holds) and on sale again.
@@ -122,9 +145,9 @@ export async function resetDemo(deps: ResetDeps): Promise<ResetSummary> {
         await db.execute(sql`
           select image ->> 'src' as src from products p, jsonb_array_elements(p.images) as image
           union select image ->> 'src' from order_items where image is not null`),
-      ).map((row) => row.src),
+      ).map((row) => photoKey(row.src)),
     );
-    const unused = uploaded.map((image) => image.url).filter((url) => !inUse.has(url));
+    const unused = uploaded.map((image) => image.url).filter((url) => !inUse.has(photoKey(url)));
     if (unused.length === 0) return;
     await deps.deleteImages(unused);
     summary.deletedImages = unused.length;
@@ -135,6 +158,7 @@ export async function resetDemo(deps: ResetDeps): Promise<ResetSummary> {
     const unsent = rowsOf<{ id: string }>(
       await db.execute(sql`
         select id from orders where status in ('paid', 'fulfilled') and email_sent_at is null
+          and created_at > ${new Date(now.getTime() - EMAIL_RETRY_DAYS * 24 * 60 * 60_000)}
         order by created_at desc limit ${EMAILS_PER_RUN}`),
     ).map((row) => row.id);
     if (unsent.length === 0) return;

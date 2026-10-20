@@ -55,9 +55,26 @@ describe("GET /api/cron/demo-reset", () => {
     expect(revalidateTag).not.toHaveBeenCalled();
   });
 
-  it("answers 503 while no secret is configured", async () => {
+  it("answers 503 while no secret, or too short a one, is configured, and says so in the log", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     state.env = { ...state.env, CRON_SECRET: undefined };
     expect((await call(`Bearer ${SECRET}`)).status).toBe(503);
+    state.env = { ...state.env, CRON_SECRET: "short" };
+    expect((await call("Bearer short")).status).toBe(503);
+    expect(logged).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses, outside production, to reset production's database", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubEnv("PRODUCTION_DB_HOST", "ep-prod.example.test");
+    try {
+      await db.update(products).set({ name: "Edited in the demo" }).where(eq(products.slug, "leather-tote-tan"));
+      state.env = { ...state.env, VERCEL_ENV: "preview", DATABASE_URL: "postgresql://app@ep-prod-pooler.example.test/orra" };
+      expect((await call(`Bearer ${SECRET}`)).status).toBe(409);
+      expect(await tote()).toBe("Edited in the demo");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("with the secret, resets the demo, answers its summary and expires the cached catalogue", async () => {
@@ -72,8 +89,14 @@ describe("GET /api/cron/demo-reset", () => {
     expect(blob.list).not.toHaveBeenCalled();
   });
 
-  it("lists and deletes unused uploads under products/ once Blob is connected", async () => {
-    state.env = { ...state.env, BLOB_STORE_ID: "store_abc123", BLOB_WEBHOOK_PUBLIC_KEY: "public-key" };
+  it("leaves photos alone outside production: one Blob store can serve every environment", async () => {
+    state.env = { ...state.env, VERCEL_ENV: "preview", VERCEL_URL: "orra-preview.vercel.app", BLOB_STORE_ID: "store_abc123", BLOB_WEBHOOK_PUBLIC_KEY: "public-key" };
+    expect((await call(`Bearer ${SECRET}`)).status).toBe(200);
+    expect(blob.list).not.toHaveBeenCalled();
+  });
+
+  it("on production, lists and deletes unused uploads under products/ once Blob is connected", async () => {
+    state.env = { ...state.env, VERCEL_ENV: "production", BLOB_STORE_ID: "store_abc123", BLOB_WEBHOOK_PUBLIC_KEY: "public-key" };
     const old = new Date(Date.now() - 2 * 24 * 60 * 60_000);
     blob.list
       .mockResolvedValueOnce({ blobs: [{ url: "https://abc123.public.blob.vercel-storage.com/products/a.jpg", uploadedAt: old }], hasMore: true, cursor: "next" })

@@ -30,9 +30,9 @@ const serverSchema = z
     // Verifies webhooks; without it every webhook is refused.
     STRIPE_WEBHOOK_SECRET: optional(z.string()),
     // The nightly demo reset (/api/cron/demo-reset) accepts only `Authorization: Bearer <it>`, which
-    // Vercel Cron sends; without it the route answers 503. Optional, so a missing value can't stop
-    // the site from starting.
-    CRON_SECRET: optional(z.string().min(16)),
+    // Vercel Cron sends; unset or under 16 characters, the route answers 503 (and logs why). Not
+    // validated here, so a missing or short value can't stop the site from starting.
+    CRON_SECRET: optional(z.string()),
   })
   .superRefine((env, ctx) => {
     if (env.VERCEL_ENV !== "preview" && !env.BETTER_AUTH_URL) {

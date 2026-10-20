@@ -107,6 +107,13 @@ describe("resetDemo", () => {
     expect(await db.select().from(carts).where(eq(carts.id, recentCart))).toHaveLength(1);
   });
 
+  it("keeps an old cart while an open checkout is paying from it", async () => {
+    const { cartId } = await openHold("leather-tote-tan", 1);
+    await db.update(carts).set({ updatedAt: daysAgo(31) }).where(eq(carts.id, cartId));
+    await resetDemo(deps());
+    expect(await db.select().from(carts).where(eq(carts.id, cartId))).toHaveLength(1);
+  });
+
   it("puts edited seed products back as the seed has them, archived ones included", async () => {
     await db.update(products).set({ name: "Vandalised", price: 50, stock: 0, archivedAt: new Date() }).where(eq(products.slug, "leather-tote-tan"));
     const summary = await resetDemo(deps());
@@ -120,6 +127,15 @@ describe("resetDemo", () => {
     await db.update(products).set({ stock: 0 }).where(eq(products.slug, slug));
     await resetDemo(deps());
     expect((await product(slug))!.stock).toBe(seed(slug).stock - 2);
+  });
+
+  it("leaves the stock at exactly the seed's once that hold is released", async () => {
+    const slug = "leather-tote-tan";
+    const { checkoutId } = await openHold(slug, 2);
+    await resetDemo(deps());
+    const { releaseHold } = await import("@/lib/checkout/holds");
+    expect(await releaseHold(db, checkoutId)).toBe(true);
+    expect((await product(slug))!.stock).toBe(seed(slug).stock);
   });
 
   it("deletes products made in the demo, and archives one a recent checkout still holds", async () => {
@@ -145,7 +161,11 @@ describe("resetDemo", () => {
     await openHold("demo-photo-held", 1);
     const order = await placeOrder(db, fake, { "double-monk-shoe": 1 });
     await db.update(orderItems).set({ image: { src: onOrder, alt: "Bought" } }).where(eq(orderItems.orderId, order.orderId));
+    const withQuery = `${BLOB}/with-query-e5.jpg`;
+    await adminProduct("demo-photo-query", `${withQuery}?v=2`);
+    await openHold("demo-photo-query", 1);
     images = [
+      { url: withQuery, uploadedAt: daysAgo(2) },
       { url: onProduct, uploadedAt: daysAgo(2) },
       { url: onOrder, uploadedAt: daysAgo(2) },
       { url: unused, uploadedAt: daysAgo(2) },
@@ -158,10 +178,13 @@ describe("resetDemo", () => {
     expect(summary.deletedImages).toBe(1);
   });
 
-  it("sends confirmation emails that never went out, for paid and fulfilled orders only", async () => {
+  it("sends confirmation emails that never went out, for paid and fulfilled orders of the last 2 days only", async () => {
     const unsent = await placeOrder(db, fake, { "leather-tote-tan": 1 });
     const sent = await placeOrder(db, fake, { "double-monk-shoe": 1 });
     const cancelled = await placeOrder(db, fake, { "round-sunglasses": 1 });
+    // Older than 2 days: its shopper's address is past saving until M7's domain.
+    const stale = await placeOrder(db, fake, { "floral-pump": 1 });
+    await db.update(orders).set({ createdAt: daysAgo(3) }).where(eq(orders.id, stale.orderId));
     await db.update(orders).set({ emailSentAt: new Date() }).where(eq(orders.id, sent.orderId));
     await db.update(orders).set({ status: "cancelled" }).where(eq(orders.id, cancelled.orderId));
 
