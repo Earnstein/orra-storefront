@@ -5,6 +5,7 @@ import { findCart } from "@/lib/bag/cart";
 import { readBag } from "@/lib/bag/queries";
 import { writeBagCookies } from "@/lib/bag/request";
 import { serverEnv } from "@/lib/env";
+import { clientIp, rateLimitsOn } from "@/lib/rate-limit";
 
 const PRIVATE = { "Cache-Control": "private, no-store" };
 
@@ -21,8 +22,8 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ ok: false, error: "forbidden", message: "Wrong origin." }, { status: 403, headers: PRIVATE });
   }
   const env = serverEnv();
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
-  if ((env.VERCEL_ENV === "production" || env.VERCEL_ENV === "preview") && ip && !(await allowDemoSignIn(db, ip))) {
+  const ip = clientIp(request.headers);
+  if (rateLimitsOn(env) && ip && !(await allowDemoSignIn(db, ip))) {
     return Response.json(
       { ok: false, error: "rate-limited", message: "Too many demo sign-ins from your network. Try again in 10 minutes." },
       { status: 429, headers: PRIVATE },

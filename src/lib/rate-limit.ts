@@ -24,3 +24,13 @@ export async function withinLimit(db: SeedDatabase, key: string, { max, windowMs
   );
   return Number(row?.count) <= max;
 }
+
+/** The client's address as Vercel reports it (it overwrites X-Forwarded-For; the first entry is the client). */
+export function clientIp(headers: Headers): string | null {
+  return headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+}
+
+/** Our own limits count only on Vercel (production and previews), as Better Auth's do: local runs and CI share one IP. */
+export function rateLimitsOn(env: { VERCEL_ENV?: string }): boolean {
+  return env.VERCEL_ENV === "production" || env.VERCEL_ENV === "preview";
+}

@@ -1,11 +1,20 @@
-import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { account, session as sessions, user as users } from "@/db/schema";
 import type { SeedDatabase } from "@/db/seed";
 import { DEMO_SESSION_SECONDS } from "@/lib/auth/demo-plugin";
 import { cookiesFrom, createTestAuth } from "@/test/auth";
 import { allowDemoSignIn, DEMO_ADMIN_EMAIL, DEMO_SIGN_INS_PER_WINDOW, DEMO_WINDOW_MS, ensureDemoAdmin } from "./demo";
+
+// getCurrentSession (the server's session check) runs against the test instance.
+const request = vi.hoisted(() => ({ auth: undefined as unknown, headers: new Headers() }));
+vi.mock("@/lib/auth", () => ({
+  get auth() {
+    return request.auth;
+  },
+}));
+vi.mock("next/headers", () => ({ headers: async () => request.headers }));
 
 let t: Awaited<ReturnType<typeof createTestAuth>>;
 let db: SeedDatabase;
@@ -14,6 +23,7 @@ let next = 0;
 beforeAll(async () => {
   t = await createTestAuth();
   db = t.db;
+  request.auth = t.auth;
 });
 
 async function signedIn(role = "user") {
@@ -41,6 +51,19 @@ describe("ensureDemoAdmin", () => {
     expect(rows[0]!.role).toBe("demo-admin");
     // No credential: nobody can sign in to it with a password, or delete it (which needs one).
     expect(await db.select().from(account).where(eq(account.userId, a.id))).toEqual([]);
+  });
+
+  it("takes back an account someone registered at the demo address: no password, no sessions, the demo's name", async () => {
+    const fresh = await createTestAuth();
+    const email = "taken@example.test";
+    const { user } = await fresh.auth.api.signUpEmail({ body: { name: "Mallory", email, password: "correct-horse" } });
+    await fresh.db.update(users).set({ email: DEMO_ADMIN_EMAIL }).where(eq(users.id, user.id));
+    const { id } = await ensureDemoAdmin(fresh.db);
+    expect(id).toBe(user.id);
+    expect((await fresh.db.select().from(users).where(eq(users.id, id)))[0]).toMatchObject({ name: "Demo admin", role: "demo-admin" });
+    expect(await fresh.db.select().from(account).where(eq(account.userId, id))).toEqual([]);
+    expect(await fresh.db.select().from(sessions).where(eq(sessions.userId, id))).toEqual([]);
+    await expect(fresh.auth.api.signInEmail({ body: { email: DEMO_ADMIN_EMAIL, password: "correct-horse" } })).rejects.toMatchObject({ statusCode: 401 });
   });
 
   it("puts the demo role back if it was changed", async () => {
@@ -76,14 +99,38 @@ describe("signing in as the demo admin", () => {
     expect(setCookies.some((line) => line.startsWith("better-auth.dont_remember="))).toBe(true);
   });
 
-  it("is never extended by use (Better Auth refreshes a remembered session to 30 days)", async () => {
+  it("is never extended by use while the browser sends its dont_remember cookie", async () => {
     const { cookies } = await demoSignIn();
     const first = await t.auth.api.getSession({ headers: cookies, query: { disableCookieCache: true } });
-    // Make it old enough that a remembered session would be refreshed.
-    await db.execute(sql`update session set created_at = now() - interval '1 day 1 hour' where token = ${first!.session.token}`);
+    // A 2-hour session is always past Better Auth's refresh point (30 days less a day); it's skipped
+    // only because the session isn't remembered.
     await t.auth.api.getSession({ headers: cookies, query: { disableCookieCache: true } });
     const [row] = await db.select({ expiresAt: sessions.expiresAt }).from(sessions).where(eq(sessions.token, first!.session.token));
     expect(row!.expiresAt.getTime()).toBe(new Date(first!.session.expiresAt).getTime());
+  });
+
+  it("ends 2 hours after sign-in on the server, even without that cookie (which Better Auth would let extend it)", async () => {
+    const { getCurrentSession } = await import("@/lib/auth/session");
+    const { cookies } = await demoSignIn();
+    const withoutDontRemember = new Headers({ cookie: cookies.get("cookie")!.split("; ").filter((pair) => !pair.startsWith("better-auth.dont_remember=")).join("; ") });
+    const token = (await t.auth.api.getSession({ headers: cookies, query: { disableCookieCache: true } }))!.session.token;
+
+    request.headers = withoutDontRemember;
+    expect((await getCurrentSession())?.role).toBe("demo-admin");
+    // Better Auth's session times are timestamps without a zone, written from JS dates (UTC).
+    await db.update(sessions).set({ createdAt: new Date(Date.now() - (2 * 60 + 1) * 60_000) }).where(eq(sessions.token, token));
+    // A new request: getCurrentSession is deduplicated per request (React's cache), so load it afresh.
+    vi.resetModules();
+    const later = (await import("@/lib/auth/session")).getCurrentSession;
+    expect(await later()).toBeNull();
+    // Deleted, so Better Auth's own reads (the header's) see it signed out too.
+    expect(await db.select().from(sessions).where(eq(sessions.token, token))).toEqual([]);
+  });
+
+  it("can be started again from a demo session", async () => {
+    const first = await demoSignIn();
+    const again = await demoSignIn(first.cookies);
+    expect((await t.auth.api.getSession({ headers: again.cookies, query: { disableCookieCache: true } }))?.user.email).toBe(DEMO_ADMIN_EMAIL);
   });
 
   it("ends the visitor's own session first", async () => {
@@ -103,16 +150,32 @@ describe("signing in as the demo admin", () => {
 });
 
 describe("the shared demo account can't be changed or locked from a demo session", () => {
-  it("refuses renaming, password and session endpoints for the demo admin", async () => {
+  it("refuses the demo session every Better Auth endpoint but reading and ending its own session and signing in", async () => {
     const { cookies } = await demoSignIn();
     const other = await demoSignIn();
-    const refused = (call: Promise<unknown>) => expect(call).rejects.toMatchObject({ statusCode: 403 });
-    await refused(t.auth.api.updateUser({ body: { name: "Someone else" }, headers: cookies }));
-    await refused(t.auth.api.changePassword({ body: { currentPassword: "x".repeat(8), newPassword: "y".repeat(8) }, headers: cookies }));
-    await refused(t.auth.api.revokeOtherSessions({ headers: cookies }));
-    await refused(t.auth.api.revokeSessions({ headers: cookies }));
-    await refused(t.auth.api.listSessions({ headers: cookies }));
-    // The other demo visitor is still signed in.
+    const allowed = new Set(["/get-session", "/sign-out", "/sign-in/email", "/sign-up/email", "/request-password-reset", "/reset-password", "/reset-password/:token", "/ok", "/error"]);
+    const endpoints = Object.values(t.auth.api as Record<string, { path?: string; options?: { method?: string | string[]; metadata?: { SERVER_ONLY?: boolean } } }>).filter(
+      (endpoint) => endpoint.path && !endpoint.options?.metadata?.SERVER_ONLY,
+    );
+    expect(endpoints.length).toBeGreaterThan(30);
+    const refusedPaths: string[] = [];
+    for (const endpoint of endpoints) {
+      if (allowed.has(endpoint.path!)) continue;
+      const method = [endpoint.options?.method ?? "GET"].flat()[0]!;
+      const methodName = method === "*" ? "POST" : method;
+      const url = `http://localhost:3000/api/auth${endpoint.path!.replace(/:[a-zA-Z]+/g, "x")}`;
+      const response = await t.auth.handler(
+        new Request(url, {
+          method: methodName,
+          headers: { ...Object.fromEntries(cookies), "content-type": "application/json", origin: "http://localhost:3000" },
+          // A password, so endpoints that ask for one (delete-user) reach the demo check.
+          body: methodName === "GET" ? undefined : JSON.stringify({ password: "correct-horse" }),
+        }),
+      );
+      if (response.status !== 403) refusedPaths.push(`${methodName} ${endpoint.path} → ${response.status}`);
+    }
+    expect(refusedPaths).toEqual([]);
+    // Nothing ended the other demo visitor's session.
     expect((await t.auth.api.getSession({ headers: other.cookies, query: { disableCookieCache: true } }))?.user.email).toBe(DEMO_ADMIN_EMAIL);
   });
 

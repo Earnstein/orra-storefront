@@ -5,10 +5,13 @@ import { z } from "zod";
 
 import { db } from "@/db";
 import { withTransaction } from "@/db/tx";
+import { isDemoAdmin } from "@/lib/auth/permissions";
 import { emailSchema } from "@/lib/auth/schemas";
+import { getCurrentSession } from "@/lib/auth/session";
 import { readCartRef } from "@/lib/bag/request";
 import { authBaseUrl, serverEnv, trustedAuthOrigins, type ServerEnv } from "@/lib/env";
 import { paymentProvider } from "@/lib/payments";
+import { clientIp, rateLimitsOn } from "@/lib/rate-limit";
 import { startCheckoutWith, type StartResult } from "./start";
 
 const startSchema = z.object({ email: emailSchema });
@@ -36,18 +39,22 @@ export async function startCheckout(input: { email: string }): Promise<CheckoutS
   const parsed = startSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid", reason: "email", message: parsed.error.issues[0]?.message ?? "Enter a valid email address." };
 
+  // The shared demo admin can't buy: its orders (with the address typed in) would be readable by
+  // every later demo visitor, and its one bag is everyone's.
+  if (isDemoAdmin((await getCurrentSession())?.role)) {
+    return { ok: false, error: "invalid", reason: "unavailable", message: "Checkout isn't part of the admin demo. Sign out of the demo to shop as yourself." };
+  }
   const env = serverEnv();
   const cart = await readCartRef();
   const requestHeaders = await headers();
-  // The client's address, as Better Auth reads it: Vercel puts it first.
-  const ip = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+  const ip = clientIp(requestHeaders);
   try {
     const result = await startCheckoutWith(
       {
         db,
         transact: withTransaction,
         provider: paymentProvider,
-        rateLimit: env.VERCEL_ENV === "production" || env.VERCEL_ENV === "preview",
+        rateLimit: rateLimitsOn(env),
         baseUrl: returnOrigin(requestHeaders.get("origin"), env),
       },
       { cart, email: parsed.data.email, ip },

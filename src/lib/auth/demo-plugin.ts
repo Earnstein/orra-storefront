@@ -11,27 +11,23 @@ import { isDemoAdmin } from "./permissions";
 /** A demo sign-in lasts 2 hours, however much it's used (the default session is 30 days). */
 export const DEMO_SESSION_SECONDS = 2 * 60 * 60;
 
+/** Whether a demo sign-in made at `createdAt` has run its 2 hours (checked on the server, see getCurrentSession). */
+export function demoSessionOver(createdAt: Date | string, now = Date.now()): boolean {
+  return now - new Date(createdAt).getTime() >= DEMO_SESSION_SECONDS * 1000;
+}
+
 /** `.invalid` can never receive mail (RFC 2606); the demo account's address lives there. */
 const RESERVED_EMAIL = /\.invalid$/i;
 
 /**
- * Endpoints that would change, lock or watch the shared account: renaming it, setting a password,
- * listing or ending its sessions (one visitor signing every other visitor out). The demo role is
- * refused them; everyone else passes untouched.
+ * The only Better Auth endpoints a demo session may call over HTTP: reading and ending its own
+ * session, and signing into (or up for) another account. Everything else (renaming the shared
+ * account, setting a password, listing or ending its sessions, which would sign every other demo
+ * visitor out, the dashboard plugin's event logs with other visitors' addresses, and whatever a
+ * future plugin adds) is refused to the demo role. An allow list, so a new endpoint is closed until
+ * it's added here. Server-only endpoints (no path) are called by our own code and pass.
  */
-const SHARED_ACCOUNT_PATHS = new Set([
-  "/update-user",
-  "/change-email",
-  "/change-password",
-  "/set-password",
-  "/delete-user",
-  "/list-sessions",
-  "/revoke-session",
-  "/revoke-sessions",
-  "/revoke-other-sessions",
-  "/link-social",
-  "/unlink-account",
-]);
+const DEMO_ALLOWED_PATHS = new Set(["/get-session", "/sign-out", "/sign-in/email", "/sign-up/email", "/request-password-reset", "/reset-password", "/reset-password/:token", "/ok", "/error"]);
 
 export function demoAdmin() {
   return {
@@ -65,7 +61,7 @@ export function demoAdmin() {
           }),
         },
         {
-          matcher: (ctx) => SHARED_ACCOUNT_PATHS.has(ctx.path ?? ""),
+          matcher: (ctx) => Boolean(ctx.path) && !DEMO_ALLOWED_PATHS.has(ctx.path!),
           handler: createAuthMiddleware(async (ctx) => {
             const session = await getSessionFromCtx(ctx);
             if (session && isDemoAdmin((session.user as { role?: string | null }).role)) {

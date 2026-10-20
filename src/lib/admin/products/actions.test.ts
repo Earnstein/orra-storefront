@@ -25,7 +25,8 @@ vi.mock("@/db", () => ({
 }));
 vi.mock("next/headers", () => ({ headers: async () => request.headers }));
 // Our Blob store is "abc123" (its host comes from the store id).
-vi.mock("@/lib/env", () => ({ serverEnv: () => ({ BLOB_STORE_ID: "store_abc123" }) }));
+const env = vi.hoisted(() => ({ BLOB_STORE_ID: "store_abc123", VERCEL_ENV: undefined as string | undefined }));
+vi.mock("@/lib/env", () => ({ serverEnv: () => env }));
 const updateTag = vi.hoisted(() => vi.fn());
 vi.mock("next/cache", () => ({ updateTag, cacheTag: () => {}, cacheLife: () => {} }));
 
@@ -46,6 +47,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   request.headers = new Headers();
+  env.VERCEL_ENV = undefined;
   updateTag.mockClear();
 });
 
@@ -199,5 +201,28 @@ describe("heldUnits", () => {
     await addLine(db, cart.id, plain.slug, 2);
     await createHold(db, { cartId: cart.id, userId: null, email: "a@example.test", expiresAt: new Date(Date.now() + 60_000), lines: [{ productId: id, name: "x", unitPrice: 1, quantity: 2 }] });
     expect(await heldUnits(db, id)).toBe(2);
+  });
+});
+
+describe("the public demo's new products", () => {
+  it("are capped per network per day on Vercel; edits and the owner aren't", async () => {
+    const { DEMO_DAILY_LIMITS } = await import("@/lib/admin/demo");
+    env.VERCEL_ENV = "production";
+    await signInAs("demo-admin");
+    request.headers.set("x-forwarded-for", "198.51.100.20");
+    const form = asNew(await loaded(plain.slug));
+    for (let i = 0; i < DEMO_DAILY_LIMITS.create; i++) {
+      expect(await saveProduct({ ...form, name: `Demo ${i}`, slug: `demo-cap-${i}` })).toMatchObject({ ok: true });
+    }
+    expect(await saveProduct({ ...form, name: "One more", slug: "demo-cap-more" })).toEqual({
+      ok: false,
+      error: "invalid",
+      message: "The demo allows 20 new products a day. Try again tomorrow.",
+    });
+    // Editing an existing product still works.
+    expect(await saveProduct({ ...(await loaded(plain.slug)), name: "Edited in the demo" })).toMatchObject({ ok: true });
+    await signInAs("admin");
+    request.headers.set("x-forwarded-for", "198.51.100.20");
+    expect(await saveProduct({ ...form, name: "Owner's", slug: "owner-after-cap" })).toMatchObject({ ok: true });
   });
 });
