@@ -22,7 +22,8 @@ export type ConfirmedOrder = {
 export type ConfirmAnswer =
   | { status: "confirmed"; order: ConfirmedOrder; signedIn: boolean }
   | { status: "pending" | "failed" | "received" }
-  | { status: "sold-out"; items: string[] };
+  | { status: "sold-out"; items: string[] }
+  | { status: "refunded"; number: string };
 
 /**
  * The success page's call: fulfils the shopper's own checkout (`fulfil` is safe to repeat, so the

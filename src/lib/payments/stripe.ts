@@ -57,7 +57,7 @@ const BRANDS: Record<string, string> = {
 export function createStripeProvider({ client, webhookSecret }: { client: Stripe; webhookSecret: string | undefined }): PaymentProvider {
   /** The session with its PaymentIntent and payment method, which every later call reads. */
   async function read(reference: string) {
-    const session = await client.checkout.sessions.retrieve(reference, { expand: ["payment_intent.payment_method"] });
+    const session = await client.checkout.sessions.retrieve(reference, { expand: ["payment_intent.payment_method", "payment_intent.latest_charge"] });
     const intent = typeof session.payment_intent === "object" ? session.payment_intent : null;
     return { session, intent };
   }
@@ -133,7 +133,10 @@ export function createStripeProvider({ client, webhookSecret }: { client: Stripe
         }
       }
       if (intent?.status === "requires_capture") await client.paymentIntents.cancel(intent.id);
-      else if (intent?.status === "succeeded") await client.refunds.create({ payment_intent: intent.id }, { idempotencyKey: `undo/${reference}` });
+      // No fixed idempotency key: Stripe would replay a failed refund's error for 24 hours, so a retry
+      // couldn't succeed. A refund already made reads as refunded in full and isn't repeated, and a
+      // second refund at the same moment is refused by Stripe (it can't exceed the payment).
+      else if (intent?.status === "succeeded" && !refundedInFull(intent)) await client.refunds.create({ payment_intent: intent.id });
     },
 
     async parseWebhook(rawBody, headers): Promise<PaymentEvent | null> {
@@ -154,13 +157,18 @@ export function createStripeProvider({ client, webhookSecret }: { client: Stripe
   };
 }
 
+/** Stripe keeps a refunded payment "succeeded"; its charge says whether it was all given back. */
+function refundedInFull(intent: Stripe.PaymentIntent): boolean {
+  return typeof intent.latest_charge === "object" && intent.latest_charge !== null && intent.latest_charge.refunded;
+}
+
 function statusOf(session: Stripe.Checkout.Session, intent: Stripe.PaymentIntent | null): PaymentStatus {
   if (session.status === "expired") return "expired";
   switch (intent?.status) {
     case "requires_capture":
       return "authorised";
     case "succeeded":
-      return "paid";
+      return refundedInFull(intent) ? "failed" : "paid";
     case "canceled":
       return "failed";
     default:

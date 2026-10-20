@@ -32,7 +32,7 @@ export type ShippingAddress = {
  * - `authorised`: the money is reserved, not yet taken (`settle` takes it);
  * - `paid`: taken;
  * - `pending`: not finished (still paying, or processing);
- * - `failed`: the payment was cancelled or can't complete;
+ * - `failed`: the payment was cancelled or can't complete, or was refunded in full;
  * - `expired`: the payment's time ran out.
  */
 export type PaymentStatus = "authorised" | "paid" | "pending" | "failed" | "expired";

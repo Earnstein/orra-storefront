@@ -10,7 +10,8 @@ import { startCheckoutWith } from "@/lib/checkout/start";
 import type { Email, SendOptions } from "@/lib/email/send";
 import { createFakeProvider, type FakeProvider } from "@/lib/payments/fake";
 import { createTestDb } from "@/test/db";
-import { fulfil, type FulfilDeps } from "./fulfil";
+import { cancelOrder, fulfilOrder } from "@/lib/admin/orders/mutations";
+import { fulfil, sendOrderConfirmation, type FulfilDeps } from "./fulfil";
 import { guestKeyMatches, guestOrderKey } from "./guest-key";
 
 let db: SeedDatabase;
@@ -252,7 +253,7 @@ describe("fulfil", () => {
     lapseAtCapture(reference);
 
     expect(await fulfil(deps, checkoutId)).toEqual({ status: "failed" });
-    expect((await allOrders())[0]?.status).toBe("cancelled");
+    expect((await allOrders())[0]).toMatchObject({ status: "cancelled", cancelledAt: expect.any(Date), refundedAt: null });
     expect(await stockOf("leather-tote-tan")).toBe(held + 2);
     expect(fake.payments.get(reference)).toMatchObject({ settled: 0 });
 
@@ -336,6 +337,21 @@ describe("fulfil", () => {
     expect((await allOrders())[0]?.userId).toBeNull();
     expect(await db.select().from(orderItems)).toHaveLength(1);
   });
+
+  it("after the owner fulfils or cancels the order, a repeated call (webhook, success page) neither fails nor refunds again", async () => {
+    const sent = await paidHold({ "leather-tote-tan": 1 });
+    const first = await fulfil(deps, sent.checkoutId);
+    if (first.status !== "confirmed") throw new Error(first.status);
+    await fulfilOrder({ db }, first.order.id);
+    expect(await fulfil(deps, sent.checkoutId)).toMatchObject({ status: "confirmed", order: { status: "fulfilled" } });
+
+    const refunded = await paidHold({ "double-monk-shoe": 1 });
+    const second = await fulfil(deps, refunded.checkoutId);
+    if (second.status !== "confirmed") throw new Error(second.status);
+    await cancelOrder({ db, provider: fake.provider }, second.order.id);
+    expect(await fulfil(deps, refunded.checkoutId)).toEqual({ status: "refunded", number: second.order.number });
+    expect(fake.payments.get(refunded.reference)!.undone).toBe(1);
+  });
 });
 
 describe("the confirmation email", () => {
@@ -353,6 +369,19 @@ describe("the confirmation email", () => {
     expect(email.text).toContain(`https://orra.test/orders/ORR-10001?key=${guestOrderKey(deps.secret, order!.id)}`);
     expect(options).toEqual({ idempotencyKey: `order-confirmation/${order!.id}`, logLink: false });
     expect(order?.emailSentAt).toBeInstanceOf(Date);
+  });
+
+  it("still goes out for an order the owner fulfilled before it was sent", async () => {
+    sendOk = false;
+    const { checkoutId } = await paidHold({ "leather-tote-tan": 1 });
+    await fulfil(deps, checkoutId);
+    await settleDeferred();
+    const [order] = await allOrders();
+    expect(order?.emailSentAt).toBeNull();
+    await fulfilOrder({ db }, order!.id);
+    sendOk = true;
+    await sendOrderConfirmation(deps, order!.id);
+    expect((await allOrders())[0]?.emailSentAt).toBeInstanceOf(Date);
   });
 
   it("links a signed-in shopper's email to the order in their account", async () => {

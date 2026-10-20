@@ -123,7 +123,7 @@ describe("verify", () => {
       summary: "Visa ending 4242",
       shipping: { name: "Ada Lovelace", line1: "1 Main St", line2: null, city: "Brooklyn", state: "NY", postalCode: "11201", country: "US" },
     });
-    expect(retrieve).toHaveBeenCalledWith("cs_test_1", { expand: ["payment_intent.payment_method"] });
+    expect(retrieve).toHaveBeenCalledWith("cs_test_1", { expand: ["payment_intent.payment_method", "payment_intent.latest_charge"] });
   });
 
   it.each([
@@ -142,6 +142,14 @@ describe("verify", () => {
     expect((await provider.verify("cs_test_1")).status).toBe("expired");
     retrieve.mockResolvedValueOnce(session());
     expect(await provider.verify("cs_test_1")).toMatchObject({ status: "pending", amount: 196000, summary: null, shipping: null });
+  });
+
+  it("reads a payment refunded in full as failed (Stripe keeps it succeeded), and a partly refunded one as paid", async () => {
+    const retrieve = vi.spyOn(client.checkout.sessions, "retrieve");
+    retrieve.mockResolvedValueOnce(session({ status: "complete", payment_intent: intent("succeeded", { latest_charge: { id: "ch_1", refunded: true } }) }));
+    expect((await provider.verify("cs_test_1")).status).toBe("failed");
+    retrieve.mockResolvedValueOnce(session({ status: "complete", payment_intent: intent("succeeded", { latest_charge: { id: "ch_1", refunded: false } }) }));
+    expect((await provider.verify("cs_test_1")).status).toBe("paid");
   });
 
   it("names other card brands and Link", async () => {
@@ -206,7 +214,16 @@ describe("undo", () => {
     vi.spyOn(client.checkout.sessions, "retrieve").mockResolvedValue(session({ status: "complete", payment_intent: intent("succeeded") }));
     const refund = vi.spyOn(client.refunds, "create").mockResolvedValue({} as Stripe.Response<Stripe.Refund>);
     await provider.undo("cs_test_1");
-    expect(refund).toHaveBeenCalledWith({ payment_intent: "pi_1" }, { idempotencyKey: "undo/cs_test_1" });
+    expect(refund).toHaveBeenCalledWith({ payment_intent: "pi_1" });
+  });
+
+  it("doesn't refund a payment already refunded in full", async () => {
+    vi.spyOn(client.checkout.sessions, "retrieve").mockResolvedValue(
+      session({ status: "complete", payment_intent: intent("succeeded", { latest_charge: { id: "ch_1", refunded: true } }) }),
+    );
+    const refund = vi.spyOn(client.refunds, "create");
+    await provider.undo("cs_test_1");
+    expect(refund).not.toHaveBeenCalled();
   });
 
   it("does nothing for an expired session or a cancelled payment", async () => {

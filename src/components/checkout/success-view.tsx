@@ -107,6 +107,8 @@ function Confirmation({ checkout }: { checkout: string }) {
       return <Notice title="Your order didn't go through" message={soldOutMessage(answer.items)} backToBag />;
     case "failed":
       return <Notice title="Your order didn't go through" message="Your payment didn't go through. Your card was not charged." backToBag />;
+    case "refunded":
+      return <Notice title={`Order ${answer.number} was cancelled`} message="This order was cancelled and refunded to your card." />;
     case "received":
       return <Received />;
   }

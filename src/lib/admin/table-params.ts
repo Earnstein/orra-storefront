@@ -35,3 +35,25 @@ export function adminProductsPath(params: AdminProductParams): string {
   const query = search.toString();
   return query ? `/api/admin/products?${query}` : "/api/admin/products";
 }
+
+// The admin orders table: newest first, searched by number (or, for the owner, email), filtered by status.
+export const ADMIN_ORDER_STATUSES = ["all", "pending_capture", "paid", "fulfilled", "cancelled"] as const;
+
+export const adminOrderParsers = {
+  q: parseAsString.withDefault(""),
+  status: parseAsStringLiteral(ADMIN_ORDER_STATUSES).withDefault("all"),
+  page: parseAsInteger.withDefault(1),
+};
+
+export type AdminOrderParams = inferParserType<typeof adminOrderParsers>;
+export const loadAdminOrderParams = createLoader(adminOrderParsers);
+
+export function adminOrdersPath(params: AdminOrderParams): string {
+  const search = new URLSearchParams();
+  const q = params.q.trim();
+  if (q) search.set("q", q);
+  if (params.status !== "all") search.set("status", params.status);
+  if (params.page > 1) search.set("page", String(params.page));
+  const query = search.toString();
+  return query ? `/api/admin/orders?${query}` : "/api/admin/orders";
+}

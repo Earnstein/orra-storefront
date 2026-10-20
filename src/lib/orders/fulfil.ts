@@ -32,7 +32,9 @@ export type FulfilResult =
   | { status: "confirmed"; order: Order }
   | { status: "pending" }
   | { status: "failed" }
-  | { status: "sold-out"; items: string[] };
+  | { status: "sold-out"; items: string[] }
+  /** The owner cancelled the paid order and refunded it (M6's admin). */
+  | { status: "refunded"; number: string };
 
 const PENDING = { status: "pending" } as const;
 const FAILED = { status: "failed" } as const;
@@ -190,9 +192,10 @@ async function finish(deps: FulfilDeps, checkoutId: string): Promise<FulfilResul
   }
   if (order.status === "cancelled") {
     await undoIfAuthorised(deps, order.paymentReference);
-    return FAILED;
+    return order.refundedAt ? { status: "refunded", number: order.number } : FAILED;
   }
-  if (order.status !== "paid") throw new CaptureUnsettled(order.number, null);
+  // Fulfilled (sent by the owner) is paid too.
+  if (order.status !== "paid" && order.status !== "fulfilled") throw new CaptureUnsettled(order.number, null);
   const { id } = order;
   deps.defer(() => sendOrderConfirmation(deps, id));
   return { status: "confirmed", order };
@@ -202,7 +205,7 @@ async function finish(deps: FulfilDeps, checkoutId: string): Promise<FulfilResul
 async function cancelOrder(db: SeedDatabase, orderId: string) {
   await db.execute(sql`
     with cancelled as (
-      update orders set status = 'cancelled' where id = ${orderId} and status = 'pending_capture' returning id
+      update orders set status = 'cancelled', cancelled_at = now() where id = ${orderId} and status = 'pending_capture' returning id
     )
     update products p set stock = p.stock + r.quantity
     from (
@@ -256,7 +259,7 @@ export async function sendOrderConfirmation(deps: Pick<FulfilDeps, "db" | "baseU
   const claimed = rowsOf<{ id: string }>(
     await deps.db.execute(sql`
       update orders set email_attempted_at = now()
-      where id = ${orderId} and status = 'paid' and email_sent_at is null
+      where id = ${orderId} and status in ('paid', 'fulfilled') and email_sent_at is null
         and (email_attempted_at is null or email_attempted_at < now() - ${EMAIL_CLAIM})
       returning id`),
   );
