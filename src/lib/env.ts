@@ -29,6 +29,10 @@ const serverSchema = z
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: optional(z.string().regex(/^pk_test_/, { error: "must be a Stripe test-mode publishable key (pk_test_)" })),
     // Verifies webhooks; without it every webhook is refused.
     STRIPE_WEBHOOK_SECRET: optional(z.string()),
+    // The nightly demo reset (/api/cron/demo-reset) accepts only `Authorization: Bearer <it>`, which
+    // Vercel Cron sends; without it the route answers 503. Optional, so a missing value can't stop
+    // the site from starting.
+    CRON_SECRET: optional(z.string().min(16)),
   })
   .superRefine((env, ctx) => {
     if (env.VERCEL_ENV !== "preview" && !env.BETTER_AUTH_URL) {
