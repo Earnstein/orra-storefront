@@ -9,7 +9,9 @@ export type SeedDatabase = PgDatabase<PgQueryResultHKT, typeof schema>;
 
 /**
  * Upserts the initial catalogue (./catalog.ts) by slug: categories, then products. Safe to re-run;
- * it resets those products' content and stock to the seed values and leaves other products alone.
+ * it resets those products' content and stock to the seed values (stock less what open checkouts
+ * hold), puts archived ones back on sale, and leaves other products alone (the nightly demo reset,
+ * src/lib/admin/reset.ts, runs it).
  * Products are given created_at times one minute apart, newest first in seed order, so
  * "New this season" keeps the seed's order.
  * `now` sets the first product's created_at time, including on re-seeding.
@@ -47,7 +49,12 @@ export async function seedCatalog(db: SeedDatabase, now = new Date()): Promise<{
         description: sql`excluded.description`,
         details: sql`excluded.details`,
         images: sql`excluded.images`,
-        stock: sql`excluded.stock`,
+        // Less what open checkouts hold (already out of stock), so releasing them later doesn't push
+        // it above the seed; never below 0. A fresh database has no holds.
+        stock: sql`greatest(excluded.stock - (
+          select coalesce(sum(i.quantity), 0)::int from checkout_items i join checkouts c on c.id = i.checkout_id
+          where c.status = 'open' and i.product_id = ${schema.products.id}), 0)`,
+        archivedAt: sql`null`,
         createdAt: sql`excluded.created_at`,
         updatedAt: sql`now()`,
       },

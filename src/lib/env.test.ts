@@ -66,6 +66,11 @@ describe("parseServerEnv", () => {
     expect(env.VERCEL_ENV).toBeUndefined();
   });
 
+  it("leaves CRON_SECRET optional, and never fails the site over it (the reset route judges it)", () => {
+    expect(parseServerEnv({ ...base, CRON_SECRET: "" }).CRON_SECRET).toBeUndefined();
+    expect(parseServerEnv({ ...base, CRON_SECRET: "short" }).CRON_SECRET).toBe("short");
+  });
+
   it("returns the email settings when set", () => {
     const env = parseServerEnv({ ...base, RESEND_API_KEY: "re_test", EMAIL_OUTBOX_DIR: "/tmp/outbox" });
     expect(env.RESEND_API_KEY).toBe("re_test");
