@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-Next.js 16 (App Router, `src/`, `@/*` → `src/*`) e-commerce app. Storefront UI (homepage, product pages) is built on a Postgres catalogue (products, categories, stock); Better Auth has email + password configured (passwords, sessions, reset email, deletion, rate limits) with sign-in, sign-up, password reset, a header account menu and the account page, plus admin roles and an `/admin` area (M6, in progress: roles, the shell, product and order management, the public demo admin and its nightly reset); the bag lives on the server, checkout holds stock and takes Stripe test payments, and paid holds become orders with a confirmation page, email and order history (M5). Tests: Vitest unit tests and catalogue query tests against PGlite. Package manager is **npm**.
+Next.js 16 (App Router, `src/`, `@/*` → `src/*`) e-commerce app. Storefront UI (homepage, product pages) is built on a Postgres catalogue (products, categories, stock); Better Auth has email + password configured (passwords, sessions, reset email, deletion, rate limits) with sign-in, sign-up, password reset, a header account menu and the account page, plus admin roles and an `/admin` area (M6: roles, the shell, product and order management, the public demo admin and its nightly reset); the bag lives on the server, checkout holds stock and takes Stripe test payments, and paid holds become orders with a confirmation page, email and order history (M5). Tests: Vitest unit tests and catalogue query tests against PGlite. Package manager is **npm**.
 
 ## Commands
 
