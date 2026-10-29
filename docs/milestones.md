@@ -2,6 +2,88 @@
 
 Each milestone is a group of merged pull requests, recorded here with its tag and GitHub Release when the last one merges. Newest first. Process: see "How we ship" in `CLAUDE.md` and the roadmap spec in `docs/superpowers/specs/`.
 
+## v0.7.0 — Store admin · 2026-10-25
+- **Scope:**
+  - **Roles:** Better Auth's admin plugin with our own permissions.
+    - The owner (`admin`) can do everything.
+    - `demo-admin` can manage products and read orders, but not change them.
+    - Every new account is a `user`, and a sign-up can't ask for a role. The owner's role is set once with `npm run admin:grant`.
+  - **The `/admin` area:** its own header with Products and Orders. Every admin page, action and route checks the session and role itself, and a shopper on an admin URL sees the not-found page.
+  - **Products:**
+    - a table with search, filters and sorting (TanStack Table v9, state in the URL);
+    - create, edit, archive and restore (TanStack Form).
+    - Archiving is the soft delete: an archived product leaves the storefront, and a bag line holding one says "No longer available".
+    - Stock is written only if it's still what the form loaded, so a sale during an edit is never overwritten.
+    - Edits show on the storefront at once: `updateTag("catalog")` also purges Vercel's CDN entries tagged `catalog`.
+  - **Photo uploads:** straight from the browser to Vercel Blob, signed with Vercel's rotating OIDC credentials, so there's no long-lived token.
+  - **Orders:**
+    - a table and a detail page;
+    - the owner marks orders fulfilled, or cancels them, which refunds the card and puts the stock back.
+    - A cancel whose refund can't be confirmed with Stripe stays claimed, rather than being reported as done.
+  - **"Try the admin":** a public demo account, opened from a footer link. Its sessions last 2 hours, enforced on the server. It can:
+    - edit products, with daily caps on uploads and new products;
+    - read orders, masked.
+    - It can't reach user or session management, change the shared account or check out.
+  - **The nightly reset** (Vercel Cron, 03:00 UTC):
+    - the seed's products are put back, and products the demo added are deleted, or archived if something still refers to them;
+    - bags, holds and orders older than 30 days are deleted;
+    - uploaded photos nothing uses are removed;
+    - order emails from the last 2 days that never went out are sent again.
+  - **M5's three M6 items are done:** the email retry, `updateTag("catalog")` with the CDN purge, and archiving instead of deleting.
+- **Pull requests:** [#42 M6 Store admin spec and plan](https://github.com/Earnstein/orra-storefront/pull/42) · [#43 Add admin roles and the admin shell](https://github.com/Earnstein/orra-storefront/pull/43) · [#44 Add product management to the admin](https://github.com/Earnstein/orra-storefront/pull/44) · [#45 Upload product photos with Vercel Blob's OIDC credentials](https://github.com/Earnstein/orra-storefront/pull/45) · [#46 Add order management to the admin](https://github.com/Earnstein/orra-storefront/pull/46) · [#47 Add the demo admin](https://github.com/Earnstein/orra-storefront/pull/47) · [#48 Add the nightly demo reset](https://github.com/Earnstein/orra-storefront/pull/48) · [#49 Keep the root error boundary off the storefront's shared components](https://github.com/Earnstein/orra-storefront/pull/49) · [#50 Milestone log](https://github.com/Earnstein/orra-storefront/pull/50)
+- **URL:** https://orra-storefront.vercel.app
+- **Budgets (measured on production; JavaScript and LCP on local builds, as in M3–M5):**
+  - **Admin API server time** (25 requests each; budget 150 ms for a page of 25):
+    - `GET /api/admin/products`: 31–40 ms, median 32 ms.
+    - `GET /api/admin/orders`: 30–42 ms, median 31 ms.
+  - **An edit showing on the storefront** (budget: product page on the next request, listings within a minute): a demo edit showed on its product page 0.9 s after saving, and on its listing 0.8 s after.
+  - **Storefront JavaScript against `v0.6.0`** (budget: no change; encoded bytes):
+    - `/`: 281.6 against 279.1 KB.
+    - Listing and product pages: 320.4 against 317.3 KB.
+    - No admin code reaches the storefront. The remaining 2–3 KB is three more script files and new storefront code (the bag's "No longer available" note).
+    - It first measured 291.7 and 330.5 KB. #43's root error page re-used the storefront's, so Turbopack copied its shared components into a second chunk group. #49 gave the root its own plain error page.
+  - **LCP against `v0.6.0`** (mobile emulation with 4× CPU and 1.6 Mbps / 150 ms, 5 alternating runs each; budget: no worse):
+    - `/`: 3,144 against 3,152 ms (3,220 before #49).
+    - `/collections/women`: 1,088 against 1,092 ms.
+    - `/products/leather-tote-tan`: 3,516 against 3,528 ms (3,584 before #49).
+  - **The reset** (budget: under 60 s): not measured. It ran on schedule and undid the demo edit, but the Hobby plan keeps function logs for an hour only.
+- **Exit check:**
+  - **The exit criterion on production:**
+    - Through "Try the admin", `structured-handbag-brown` was renamed "Structured handbag (demo edit)".
+    - Its product page showed the new name 0.9 s later, and the bags listing 0.8 s later.
+    - The next nightly reset put the name back (checked 2026-10-25).
+    - The reset never touches other accounts, their sessions or their roles; a unit test pins it with an owner account.
+  - **The demo admin's limits on production:** Better Auth's `list-users` answers 403.
+  - **e2e against production** (without `@writes`): 203 passed and 8 skipped.
+    - One test timed out at 5 s (the bag page's "sold out, so it couldn't go back" note); it passed 6 of 6 on a rerun.
+  - **Production setup:**
+    - the owner granted their role, and a real photo upload worked;
+    - `CRON_SECRET` is set (the reset route answers 401 without it);
+    - the CDN purge works: after a save, a listing's API response cached by Vercel answered `REVALIDATED`, and the new price showed on the listing and the product page.
+  - **Reviews:** fresh-context reviews of the roles, products, orders, demo and reset branches. Their important findings are fixed:
+    - the demo role works from an allow list of auth endpoints, and its 2-hour limit is enforced on the server;
+    - the demo account can't check out, and a pre-registered demo address is taken back;
+    - a refund that can't be confirmed is never shown as done;
+    - the reset leaves photos alone outside production (the Blob store is shared), keeps bags with an open hold, and refuses a non-production deployment pointed at the production database.
+- **Carried forward:**
+  - Before v1.0.0: rotate the Neon production database password, and add an email sending domain.
+  - M7 (with email verification): the two guest-order items listed under v0.6.0.
+  - **From M6:**
+    - **The reset's seed step:** a checkout taking stock in the same instant can leave that product's stock off by its hold until the next reset.
+    - **The reset:** doesn't prune `payment_events`.
+    - **The demo account:** visitors share its bag and saved items, since it's one account.
+    - **An ended demo session on `/admin`:** goes to sign in rather than back to "Try the admin".
+    - **The admin tables:** fetch their first page again after the server rendered it.
+    - **The product editor:** keys its details list by position.
+    - **Checkout:** doesn't check a bag's total against Stripe's largest charge before starting.
+    - **The saved-items cap of 200:** counts archived products.
+    - **Admin URLs:** a shopper gets the not-found page with a 200, as on order pages.
+    - **Turbopack chunking:** watch storefront JavaScript after Next upgrades. A module used by both the root layout and the storefront layout is shipped twice.
+  - **Still open from M3–M5:**
+    - keyset pagination and an index-friendly typo match at a much larger catalogue;
+    - not-found pages have no `<title>`;
+    - the saved-items and auth minors listed under v0.5.0.
+
 ## v0.6.0 — Bag & checkout · 2026-10-17
 - **Scope:**
   - **The bag on the server:** Postgres carts with a signed guest cookie, and a count cookie so the header makes no request. Quantities are capped at live stock and 10 per item. A guest's bag merges into the account on sign-in, and pre-M5 browser bags were imported once.
