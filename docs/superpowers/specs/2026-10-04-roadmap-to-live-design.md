@@ -33,7 +33,7 @@
    - filter, sort and page through listings, and search with results that appear as they type;
    - sign up and sign in, and save items;
    - add to bag and pay with a Stripe test card;
-   - see the order confirmation, receive the email and see the order in their account;
+   - see the order confirmation and see the order in their account. Without a domain only the owner's address receives emails, so the confirmation email is proven with the owner's purchase (changed in the [M7 spec](2026-10-30-m7-launch-design.md));
    - open the admin via "Try the admin" and edit a product.
 2. Stock never goes below zero and a unit is never sold twice, including under concurrent checkouts.
 3. Every internal link resolves (no 404s from the header, footer or pages).
@@ -169,7 +169,7 @@ Homepage with hero carousel. Product detail pages with gallery, Add to bag and S
 
 | Module | Delivers |
 |---|---|
-| Production | Custom domain on Vercel, production database, environment variables. A verified Resend sending domain, so any visitor gets their emails. Better Auth Infra base URL moved off the ngrok tunnel to the production URL. |
+| Production | Launched on `orra-storefront.vercel.app` with no custom domain (the user's decision in M7), so emails still come from Resend's test sender. Production database password rotated, environment variables checked, Better Auth Infra base URL moved off the ngrok tunnel to the production URL. |
 | SEO | `sitemap.xml`, `robots.txt`, canonical URLs, Open Graph images for home, listings and products. |
 | Quality gates | axe accessibility checks in Playwright on every page type. Performance budgets checked in CI (Lighthouse): LCP, CLS and JS size on home, listing and product pages. |
 | Monitoring | Error monitoring and basic analytics. |
@@ -189,6 +189,17 @@ Added at the user's request during M5's brainstorming: Stripe first, Paystack on
 | Nigerian delivery | Address fields for Nigeria (state, city, address). |
 
 **Exit:** a test purchase in naira through Paystack's popup creates an order, and a payment after a lapsed, sold-out hold is refunded.
+
+### After launch: emails to visitors (needs a domain)
+
+Moved out of M7 when the user decided to launch without a domain. Each needs a verified sending domain, so that emails reach any visitor, not only the owner.
+
+| Module | Delivers |
+|---|---|
+| Domain | A custom domain on Vercel and a verified Resend sending domain. |
+| Email verification | Verified sign-ups; changing your email with a confirmation. |
+| Guest orders | Guest orders join the account whose verified email placed them. |
+| Order emails | Fulfilment and cancellation emails. |
 
 ## Architecture decisions shared by milestones
 
@@ -266,7 +277,7 @@ Tests are written first (red → green) for every behaviour a plan task introduc
 - **Pagination style and price filter control (M3): settled** in the [M3 spec](2026-10-05-m3-find-design.md): a "Load more" button, and price bands with counts.
 - **Function region (M3): settled.** Neon runs in AWS US East, next to Vercel's default `iad1`, so no change is needed.
 - **Demo reset window (M6): settled** in the [M6 spec](2026-10-18-m6-admin-design.md): 30 days for carts, checkouts and orders.
-- **Monitoring vendor (M7).** Which error-monitoring service; free tier only.
+- **Monitoring vendor (M7): settled** in the [M7 spec](2026-10-30-m7-launch-design.md): Sentry's free plan, reporting from the server (browser errors relayed through our own route, so no Sentry code reaches the browser), and Vercel Web Analytics.
 
 ## Risks
 
