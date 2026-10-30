@@ -31,6 +31,7 @@ Each milestone is a group of merged pull requests, recorded here with its tag an
     - order emails from the last 2 days that never went out are sent again.
   - **M5's three M6 items are done:** the email retry, `updateTag("catalog")` with the CDN purge, and archiving instead of deleting.
 - **Pull requests:** [#42 M6 Store admin spec and plan](https://github.com/Earnstein/orra-storefront/pull/42) · [#43 Add admin roles and the admin shell](https://github.com/Earnstein/orra-storefront/pull/43) · [#44 Add product management to the admin](https://github.com/Earnstein/orra-storefront/pull/44) · [#45 Upload product photos with Vercel Blob's OIDC credentials](https://github.com/Earnstein/orra-storefront/pull/45) · [#46 Add order management to the admin](https://github.com/Earnstein/orra-storefront/pull/46) · [#47 Add the demo admin](https://github.com/Earnstein/orra-storefront/pull/47) · [#48 Add the nightly demo reset](https://github.com/Earnstein/orra-storefront/pull/48) · [#49 Keep the root error boundary off the storefront's shared components](https://github.com/Earnstein/orra-storefront/pull/49) · [#50 Milestone log](https://github.com/Earnstein/orra-storefront/pull/50)
+- **Release:** https://github.com/Earnstein/orra-storefront/releases/tag/v0.7.0
 - **URL:** https://orra-storefront.vercel.app
 - **Budgets (measured on production; JavaScript and LCP on local builds, as in M3–M5):**
   - **Admin API server time** (25 requests each; budget 150 ms for a page of 25):
