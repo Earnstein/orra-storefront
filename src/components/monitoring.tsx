@@ -16,8 +16,11 @@ import { createClientReporter, postClientReport } from "@/lib/monitoring/client-
 export function Monitoring({ analytics }: { analytics: boolean }) {
   useEffect(() => {
     const report = createClientReporter(postClientReport, () => window.location.pathname);
-    const onError = (event: ErrorEvent) => report(event.error ?? event.message, "window");
-    const onRejection = (event: PromiseRejectionEvent) => report(event.reason, "rejection");
+    // Next hands recoverable and root-layout errors to the window too; one with a digest was thrown
+    // on the server, which has reported it already.
+    const fromServer = (thrown: unknown) => typeof thrown === "object" && thrown !== null && "digest" in thrown;
+    const onError = (event: ErrorEvent) => !fromServer(event.error) && report(event.error ?? event.message, "window");
+    const onRejection = (event: PromiseRejectionEvent) => !fromServer(event.reason) && report(event.reason, "rejection");
     const onBoundary = (event: Event) => report((event as CustomEvent<unknown>).detail, "boundary");
     window.addEventListener("error", onError);
     window.addEventListener("unhandledrejection", onRejection);

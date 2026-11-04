@@ -5,7 +5,8 @@
  * `client-report-schema.ts` (Zod alone is about 90 KB of browser JavaScript).
  */
 
-export const CLIENT_REPORT_LIMITS = { name: 100, message: 500, stack: 8000, path: 512, bytes: 16_384 } as const;
+/** Field lengths in characters; `bytes` fits them all even as 4-byte UTF-8, plus the JSON around them. */
+export const CLIENT_REPORT_LIMITS = { name: 100, message: 500, stack: 8000, path: 512, bytes: 40_000 } as const;
 
 /** The error boundaries' window event: they import nothing (the root one may only import React). */
 export const BOUNDARY_ERROR_EVENT = "orra:error";

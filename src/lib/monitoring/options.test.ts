@@ -12,13 +12,13 @@ describe("monitoringOptions", () => {
     expect(monitoringOptions({ SENTRY_DSN: "not a dsn" })).toBeNull();
   });
 
-  it("collects nothing optional, traces nothing, and scrubs every event", () => {
+  it("collects nothing optional, traces nothing, captures logged errors and scrubs every event", () => {
     const options = monitoringOptions({ SENTRY_DSN: ` ${DSN} `, VERCEL_ENV: "production", VERCEL_GIT_COMMIT_SHA: "abc123" });
     expect(options).toMatchObject({
       dsn: DSN,
       environment: "production",
       release: "abc123",
-      tracesSampleRate: 0,
+      tracePropagationTargets: [],
       dataCollection: {
         userInfo: false,
         cookies: false,
@@ -35,6 +35,9 @@ describe("monitoringOptions", () => {
     });
     expect(options?.beforeSend).toBeTypeOf("function");
     expect(options?.beforeBreadcrumb).toBeTypeOf("function");
+    expect(options).not.toHaveProperty("tracesSampleRate");
+    const integrations = (options?.integrations as (defaults: { name: string }[]) => { name: string }[])([]);
+    expect(integrations.map((integration) => integration.name)).toEqual(["CaptureConsole"]);
   });
 
   it("names local runs as such", () => {

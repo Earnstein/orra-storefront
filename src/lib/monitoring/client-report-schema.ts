@@ -11,3 +11,11 @@ export const clientReportSchema = z.object({
   path: z.string().max(CLIENT_REPORT_LIMITS.path).regex(/^\/(?!\/)/),
   source: z.enum(["window", "rejection", "boundary"]),
 }) satisfies z.ZodType<ClientReport>;
+
+const DAY = 24 * 60 * 60_000;
+/**
+ * The route's limits on Vercel, per address and for everyone, per day: enough to see a broken
+ * page, but at most about 3,000 a month, so browser reports (rotating addresses included) can't
+ * use up the free plan's 5,000 errors that server errors share.
+ */
+export const CLIENT_ERROR_LIMITS = { perAddress: { max: 20, windowMs: DAY }, overall: { max: 100, windowMs: DAY } };

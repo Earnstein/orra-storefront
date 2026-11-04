@@ -35,21 +35,27 @@ export function monitoringOn(): boolean {
 }
 
 /**
- * A browser error relayed by POST /api/client-errors. Its stack becomes frames (file, line,
- * column) where the server's parser reads it (Chrome's format); Firefox's and Safari's stay text.
- * Names stay minified: browser source maps aren't uploaded, since Sentry would inject an ID into
- * every browser chunk to match them. `beforeSend` scrubs it like any other event.
+ * A browser error relayed by POST /api/client-errors from a page on `origin`. Its stack becomes
+ * frames (file, line, column) where the server's parser reads it (Chrome's format) and only frames
+ * from our own origin are kept: a posted stack naming a server file would otherwise make Sentry
+ * read that file's lines into the event. Firefox's and Safari's stacks stay text. Names stay
+ * minified (browser source maps aren't uploaded). The event's request and transaction are the
+ * page, not the relay route, and `beforeSend` scrubs it like any other event.
  */
-export function reportClientError(report: ClientReport): void {
+export function reportClientError(report: ClientReport, origin: string): void {
   if (!Sentry.isInitialized()) return;
-  const frames = report.stack ? Sentry.defaultStackParser(report.stack) : [];
-  Sentry.captureEvent({
-    level: "error",
-    platform: "javascript",
-    exception: { values: [{ type: report.name, value: report.message, ...(frames.length > 0 && { stacktrace: { frames } }) }] },
-    request: { url: scrubUrl(report.path).split("?")[0] },
-    tags: { runtime: "browser", source: report.source },
-    ...(frames.length === 0 && report.stack && { extra: { stack: report.stack } }),
+  const frames = report.stack ? Sentry.defaultStackParser(report.stack).filter((frame) => frame.filename?.startsWith(`${origin}/`)) : [];
+  const path = scrubUrl(report.path).split(/[?#]/)[0]!;
+  Sentry.withScope((scope) => {
+    scope.setSDKProcessingMetadata({ normalizedRequest: { url: origin + path, method: "GET" } });
+    scope.setTransactionName(path);
+    scope.captureEvent({
+      level: "error",
+      platform: "javascript",
+      exception: { values: [{ type: report.name, value: report.message, ...(frames.length > 0 && { stacktrace: { frames } }) }] },
+      tags: { runtime: "browser", source: report.source },
+      ...(frames.length === 0 && report.stack && { extra: { stack: report.stack } }),
+    });
   });
   flushAfterResponse();
 }
