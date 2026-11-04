@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { resetDemo } from "@/lib/admin/reset";
 import { sendEmail } from "@/lib/email/send";
 import { authBaseUrl, serverEnv, uploadsConfigured, type ServerEnv } from "@/lib/env";
+import { reportMessage } from "@/lib/monitoring/report";
 import { sendOrderConfirmation } from "@/lib/orders/fulfil";
 import { databaseTarget } from "../../../../../scripts/db-target";
 
@@ -74,5 +75,7 @@ export async function GET(request: Request): Promise<Response> {
   // Every cached catalogue read (and, on Vercel, the CDN's copies tagged `catalog`) is stale now.
   revalidateTag("catalog", { expire: 0 });
   console.log("demo reset", JSON.stringify(summary));
+  // Vercel keeps Hobby's logs for an hour, so a broken step would otherwise go unseen.
+  if (summary.failedSteps.length > 0) reportMessage("Demo reset had failed steps", { failedSteps: summary.failedSteps });
   return Response.json(summary, { headers: PRIVATE });
 }

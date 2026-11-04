@@ -1,3 +1,4 @@
+import { withSentryConfig } from "@sentry/nextjs/config";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -25,4 +26,21 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Sentry (M7) reports from the server only, so nothing of it may reach browser bundles: no
+// build-time instrumentation, no route manifest, and source maps (uploaded only when
+// SENTRY_AUTH_TOKEN is set, then deleted) taken from the server build alone. Its other
+// auto-instrumentation options are webpack-only; builds here use Turbopack.
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  telemetry: false,
+  buildTimeInstrumentation: false,
+  routeManifestInjection: false,
+  sourcemaps: {
+    disable: !process.env.SENTRY_AUTH_TOKEN,
+    assets: [".next/server/**"],
+    deleteSourcemapsAfterUpload: true,
+  },
+});
