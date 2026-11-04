@@ -32,7 +32,8 @@ export function scrubText(text: string): string {
   return text.replace(EMAIL, "[email]").replace(RESET_PATH, "$1[token]").replace(LINK_IN_TEXT, (link) => scrubUrl(link));
 }
 
-const NOISE = [/^AbortError$/, /ResizeObserver loop/, /^Load failed$/, /^Failed to fetch$/, /^NetworkError when attempting to fetch resource\.?$/];
+// Cross-origin script errors arrive as "Script error." with nothing to act on.
+const NOISE = [/^AbortError$/, /ResizeObserver loop/, /^Script error\.?$/, /^Load failed$/, /^Failed to fetch$/, /^NetworkError when attempting to fetch resource\.?$/];
 const EXTENSION_FRAME = /^(chrome|moz|safari(-web)?)-extension:/;
 
 function isNoise(event: ErrorEvent): boolean {

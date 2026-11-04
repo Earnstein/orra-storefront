@@ -12,6 +12,9 @@ import { useEffect } from "react";
 export default function RootError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => {
     console.error(error);
+    // To monitoring through <Monitoring />, by name so this file imports nothing (see BOUNDARY_ERROR_EVENT).
+    // A digest means the error was thrown on the server, which has reported it already.
+    if (!error.digest) window.dispatchEvent(new CustomEvent("orra:error", { detail: error }));
   }, [error]);
 
   return (
