@@ -14,6 +14,9 @@ import { Button } from "@/components/ui/button";
 export default function AdminError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => {
     console.error(error);
+    // To monitoring through <Monitoring />, by name so this file imports nothing (see BOUNDARY_ERROR_EVENT).
+    // A digest means the error was thrown on the server, which has reported it already.
+    if (!error.digest) window.dispatchEvent(new CustomEvent("orra:error", { detail: error }));
   }, [error]);
 
   return (

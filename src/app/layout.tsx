@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { Monitoring } from "@/components/monitoring";
 import { Providers } from "@/components/providers";
 import { site } from "@/lib/site";
 
@@ -35,6 +36,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {/* Each area brings its own header and <main id="main">: the storefront in (store)/layout.tsx, the admin in admin/layout.tsx. */}
           {children}
         </Providers>
+        {/* Browser errors to Sentry through our own route; Vercel Web Analytics on Vercel only (VERCEL is set in its builds). */}
+        <Monitoring analytics={process.env.VERCEL === "1"} />
       </body>
     </html>
   );

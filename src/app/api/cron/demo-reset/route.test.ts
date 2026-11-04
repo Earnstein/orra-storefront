@@ -21,6 +21,8 @@ const revalidateTag = vi.hoisted(() => vi.fn());
 vi.mock("next/cache", () => ({ revalidateTag, cacheTag: () => {}, cacheLife: () => {} }));
 const blob = vi.hoisted(() => ({ list: vi.fn(), del: vi.fn() }));
 vi.mock("@vercel/blob", () => blob);
+const reportMessage = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/monitoring/report", () => ({ reportMessage }));
 
 const { GET } = await import("./route");
 let db: SeedDatabase;
@@ -37,6 +39,7 @@ beforeEach(() => {
   revalidateTag.mockClear();
   blob.list.mockReset();
   blob.del.mockReset();
+  reportMessage.mockClear();
   vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
@@ -87,6 +90,16 @@ describe("GET /api/cron/demo-reset", () => {
     expect(revalidateTag).toHaveBeenCalledWith("catalog", { expire: 0 });
     // Uploads aren't configured here, so Blob isn't asked.
     expect(blob.list).not.toHaveBeenCalled();
+    expect(reportMessage).not.toHaveBeenCalled();
+  });
+
+  it("reports a run with failed steps to monitoring, so a broken reset is seen without reading logs", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    state.env = { ...state.env, VERCEL_ENV: "production", BLOB_STORE_ID: "store_abc123", BLOB_WEBHOOK_PUBLIC_KEY: "public-key" };
+    blob.list.mockRejectedValueOnce(new Error("Blob is down"));
+    const body = (await (await call(`Bearer ${SECRET}`)).json()) as { failedSteps: string[] };
+    expect(body.failedSteps).toHaveLength(1);
+    expect(reportMessage).toHaveBeenCalledWith("Demo reset had failed steps", { failedSteps: body.failedSteps });
   });
 
   it("leaves photos alone outside production: one Blob store can serve every environment", async () => {
